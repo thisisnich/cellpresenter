@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the console window",
-  "windows": ["console"],
+  "description": "Permissions for the console and display windows",
+  "windows": ["console", "display"],
   "permissions": ["core:default"]
 }
