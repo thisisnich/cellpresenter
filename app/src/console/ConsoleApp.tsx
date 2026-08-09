@@ -2,10 +2,14 @@ import { useCallback, useState } from "react";
 import { api } from "../lib/api";
 import { useLiveState } from "../lib/useLiveState";
 import type { LiveState } from "../lib/ws";
+import { LyricSlide } from "../display/LyricSlide";
+import { Stage } from "../display/Stage";
+import { ASPECT_OPTIONS, PreviewFrame, type Aspect } from "./PreviewFrame";
 
 export default function ConsoleApp() {
   const { state, patch, status } = useLiveState();
   const [error, setError] = useState<string | null>(null);
+  const [previewAspect, setPreviewAspect] = useState<Aspect>(ASPECT_OPTIONS[0]);
 
   const run = useCallback(
     async (fn: () => Promise<LiveState>) => {
@@ -21,23 +25,46 @@ export default function ConsoleApp() {
 
   const connected = status === "open";
   const active = state?.slides[state.slide_index] ?? "";
+  const textScale = state?.text_scale ?? 1;
 
   return (
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 px-5 py-3">
+      <header className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">CellPresenter Console</h1>
           <p className="text-xs text-slate-500">M1 spike — live state over /ws</p>
         </div>
-        <span
-          className={
-            connected
-              ? "rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400"
-              : "rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400"
-          }
-        >
-          {connected ? "connected" : status}
-        </span>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">Preview</span>
+            <div className="flex overflow-hidden rounded-lg border border-slate-800">
+              {ASPECT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.label}
+                  onClick={() => setPreviewAspect(opt)}
+                  className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                    previewAspect.label === opt.label
+                      ? "bg-indigo-600 text-white"
+                      : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <span
+            className={
+              connected
+                ? "rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400"
+                : "rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400"
+            }
+          >
+            {connected ? "connected" : status}
+          </span>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1">
@@ -64,23 +91,24 @@ export default function ConsoleApp() {
           </ul>
         </aside>
 
-        <main className="flex min-w-0 flex-1 items-center justify-center p-8">
-          <div className="flex aspect-video w-full max-w-3xl items-center justify-center rounded-xl bg-black shadow-2xl">
-            {state && state.visible ? (
-              <p className="px-12 text-center text-3xl font-bold text-white md:text-4xl">
-                {active}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-600">
-                {state ? "display blacked out" : "waiting for state…"}
-              </p>
-            )}
-          </div>
+        {/* WYSIWYG preview: locked to the selected aspect, same Stage as displays. */}
+        <main className="relative min-w-0 flex-1">
+          {state && (
+            <PreviewFrame aspect={previewAspect}>
+              <Stage>
+                {state.visible ? (
+                  <LyricSlide text={active} textScale={textScale} />
+                ) : (
+                  <p className="text-sm text-slate-500">display blacked out</p>
+                )}
+              </Stage>
+            </PreviewFrame>
+          )}
         </main>
       </div>
 
       <footer className="flex items-center justify-between gap-4 border-t border-slate-800 px-5 py-3">
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <button onClick={() => run(api.livePrev)} className="btn">
             ← Prev
           </button>
@@ -91,6 +119,21 @@ export default function ConsoleApp() {
             {state?.visible ? "Black out" : "Show"}
           </button>
         </div>
+
+        <label className="flex items-center gap-3 text-sm text-slate-400">
+          Text size
+          <input
+            type="range"
+            min={0.6}
+            max={1.6}
+            step={0.05}
+            value={textScale}
+            onChange={(e) => run(() => api.liveTextScale(Number(e.target.value)))}
+            className="w-40 accent-indigo-600"
+          />
+          <span className="w-12 tabular-nums">{Math.round(textScale * 100)}%</span>
+        </label>
+
         {error && <p className="truncate text-sm text-rose-400">{error}</p>}
         <p className="hidden shrink-0 text-xs text-slate-500 lg:block">
           display: http://{location.host}/?view=display

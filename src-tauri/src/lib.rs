@@ -5,6 +5,7 @@ use axum::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
         State,
     },
+    http::header::{HeaderValue, CACHE_CONTROL},
     response::Response,
     routing::{get, post},
     Json, Router,
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::broadcast;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 pub const DEFAULT_PORT: u16 = 9100;
 const DEV_WEBVIEW_URL: &str = "http://localhost:5173";
@@ -27,6 +29,9 @@ pub struct LiveState {
     pub slides: Vec<String>,
     /// Black-out toggle: display clients render nothing when false.
     pub visible: bool,
+    /// Operator's proportional lyric-size control (0.5–2.0). Part of the
+    /// shared live state so every display scales identically.
+    pub text_scale: f64,
 }
 
 impl Default for LiveState {
@@ -40,6 +45,7 @@ impl Default for LiveState {
                 "Verse 2 — 'Twas grace that taught my heart to fear…".into(),
             ],
             visible: true,
+            text_scale: 1.0,
         }
     }
 }
@@ -133,6 +139,23 @@ async fn live_toggle_visible(State(s): State<ServerState>) -> Json<LiveState> {
     Json(state)
 }
 
+#[derive(Deserialize)]
+struct TextScaleArgs {
+    scale: f64,
+}
+
+async fn live_text_scale(
+    State(s): State<ServerState>,
+    Json(args): Json<TextScaleArgs>,
+) -> Json<LiveState> {
+    let mut live = s.live.write().unwrap();
+    live.text_scale = args.scale.clamp(0.5, 2.0);
+    let state = live.clone();
+    drop(live);
+    publish(&s, state.clone());
+    Json(state)
+}
+
 // ---------- WebSocket ----------
 
 async fn ws_handler(ws: WebSocketUpgrade, State(s): State<ServerState>) -> Response {
@@ -179,10 +202,11 @@ async fn send(socket: &mut WebSocket, msg: &WsMsg) -> Result<(), axum::Error> {
 // ---------- router ----------
 
 fn router(state: ServerState) -> Router {
-    // In dev the SPA is served by Vite (proxying /api and /ws to us); this
-    // static mount is what LAN clients hit in the packaged app. Note: the
-    // release bundle must embed dist/ (M4 packaging), cwd-relative is dev-only.
-    let spa = ServeDir::new("../dist").not_found_service(ServeFile::new("../dist/index.html"));
+    // In dev the SPA is served by Vite (which proxies /api and /ws to us).
+    // This fallback serves the built SPA to clients hitting axum directly —
+    // the phone on the LAN, and the packaged app in release. Vite emits
+    // absolute /assets/* paths, so the SPA must live at the root, not /app.
+    let spa = ServeDir::new("../dist").fallback(ServeFile::new("../dist/index.html"));
     Router::new()
         .route("/api/health", get(health))
         .route("/api/live/state", get(live_state))
@@ -190,8 +214,16 @@ fn router(state: ServerState) -> Router {
         .route("/api/live/prev", post(live_prev))
         .route("/api/live/go-to", post(live_go_to))
         .route("/api/live/toggle-visible", post(live_toggle_visible))
+        .route("/api/live/text-scale", post(live_text_scale))
         .route("/ws", get(ws_handler))
-        .nest_service("/app", spa)
+        .fallback_service(spa)
+        // Vite content-hashes its assets, so the HTML shell must never be
+        // cached — mobile browsers otherwise serve a stale bundle whose fixed
+        // text sizes wrap differently on small screens.
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            HeaderValue::from_static("no-cache"),
+        ))
         .with_state(state)
 }
 
@@ -223,7 +255,7 @@ fn app_url(path_and_query: &str) -> WebviewUrl {
     let base = if cfg!(debug_assertions) {
         DEV_WEBVIEW_URL.to_string()
     } else {
-        format!("http://127.0.0.1:{DEFAULT_PORT}/app/index.html")
+        format!("http://127.0.0.1:{DEFAULT_PORT}")
     };
     WebviewUrl::External(format!("{base}{path_and_query}").parse().expect("valid webview url"))
 }

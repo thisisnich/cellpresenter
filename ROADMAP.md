@@ -134,6 +134,10 @@ Keyboard shortcuts, undo, layout-persistence robustness, exports (JSON/PDF), aut
 
 M2 and M3 are bigger but purely additive once the spine holds. Do **not** start SQLite, chord parsing, or Dockview layout before M1 — they don't change whether the architecture works, and you'll be testing the hard thing (the live loop) last instead of first.
 
+## Known issues (KIV — deferred)
+
+- **Cross-device line wrapping (M1).** The Stage (1920×1080 canvas, uniform fit-scale) guarantees *proportional* text size on every screen, but auto-wrapping is still font-metric-dependent: a client that lays out with a fallback font (or engine-specific rasterization — WebKitGTK vs Chrome mobile vs Firefox) can break lines earlier at the same ratio. Verified on small screens. **Proper fix (M3, with the data model): never auto-wrap — store slides as explicit lines and size the font to fit the longest line** (what ProPresenter/EasyWorship do). Mitigations so far: bundled Inter + font-readiness gate before first paint + `Cache-Control: no-cache`.
+
 ## Decisions to lock before M0
 
 - **Dev base URL:** Vite dev server + proxy for `/api`, `/ws`, `/media`, `/native`; native windows target Vite in dev, axum in prod

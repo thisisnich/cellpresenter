@@ -32,4 +32,9 @@ export const api = {
     }),
   liveToggleVisible: () =>
     request<LiveState>("/api/live/toggle-visible", { method: "POST" }),
+  liveTextScale: (scale: number) =>
+    request<LiveState>("/api/live/text-scale", {
+      method: "POST",
+      body: JSON.stringify({ scale }),
+    }),
 };

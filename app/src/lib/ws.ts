@@ -11,6 +11,7 @@ export interface LiveState {
   slide_index: number;
   slides: string[];
   visible: boolean;
+  text_scale: number;
 }
 
 export type WsMsg =
