@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 /// One slide of the song currently on air.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct Slide {
     /// Section name as written in the song ("Verse 1", "Chorus", …).
     pub section: String,
@@ -10,10 +12,18 @@ pub struct Slide {
 }
 
 /// Live presentation state. The server owns it; every client renders from it.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
 pub struct LiveState {
-    /// Title of the song on air. The song library replaces this demo content
-    /// with a pointer to a stored song (R1 step 4).
+    /// Changes every time the server starts, so clients know to reset.
+    pub session: String,
+    /// Increases with every change in a session; clients drop anything older
+    /// than what they already show.
+    #[ts(type = "number")]
+    pub version: u64,
+    /// Library song on air, if any.
+    pub song_id: Option<String>,
+    /// Title of the song on air.
     pub title: String,
     pub slides: Vec<Slide>,
     /// Index of the currently shown slide within `slides`.
@@ -27,8 +37,9 @@ pub struct LiveState {
 
 /// Every change to live state, from any client. Local buttons, the phone
 /// remote and (later) the cloud live room all send these same messages.
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
 pub enum Command {
     Next,
     Prev,
@@ -41,56 +52,30 @@ pub enum Command {
 pub const TEXT_SCALE_MIN: f64 = 0.5;
 pub const TEXT_SCALE_MAX: f64 = 2.0;
 
-fn slide(section: &str, text: &str) -> Slide {
-    Slide {
-        section: section.into(),
-        text: text.into(),
-    }
-}
-
-impl Default for LiveState {
-    fn default() -> Self {
-        // "It Is Well with My Soul", Horatio Spafford (1873), public domain.
-        let chorus = "It is well with my soul,\nIt is well, it is well with my soul.";
+impl LiveState {
+    pub fn new(session: String) -> Self {
         Self {
-            title: "It Is Well".into(),
-            slides: vec![
-                slide(
-                    "Verse 1",
-                    "When peace like a river attendeth my way,\nWhen sorrows like sea billows roll;",
-                ),
-                slide(
-                    "Verse 1",
-                    "Whatever my lot, Thou hast taught me to say,\nIt is well, it is well with my soul.",
-                ),
-                slide("Chorus", chorus),
-                slide(
-                    "Verse 2",
-                    "Though Satan should buffet, though trials should come,\nLet this blest assurance control,",
-                ),
-                slide(
-                    "Verse 2",
-                    "That Christ has regarded my helpless estate,\nAnd hath shed His own blood for my soul.",
-                ),
-                slide("Chorus", chorus),
-                slide(
-                    "Verse 3",
-                    "My sin, oh, the bliss of this glorious thought!\nMy sin, not in part but the whole,",
-                ),
-                slide(
-                    "Verse 3",
-                    "Is nailed to the cross, and I bear it no more,\nPraise the Lord, praise the Lord, O my soul!",
-                ),
-                slide("Chorus", chorus),
-            ],
-            slide_index: 0,
+            session,
             visible: true,
             text_scale: 1.0,
+            ..Self::default()
         }
     }
-}
 
-impl LiveState {
+    /// Put a song on air, starting at `slide_index` (clamped to the song).
+    pub fn show_song(
+        &mut self,
+        song_id: String,
+        title: String,
+        slides: Vec<Slide>,
+        slide_index: usize,
+    ) {
+        self.slide_index = slide_index.min(slides.len().saturating_sub(1));
+        self.song_id = Some(song_id);
+        self.title = title;
+        self.slides = slides;
+    }
+
     /// Apply one command. Invalid input (out-of-range index, NaN scale) is
     /// ignored rather than rejected, so a stale client can never wedge state.
     pub fn apply(&mut self, command: Command) {
@@ -125,8 +110,20 @@ impl LiveState {
 mod tests {
     use super::*;
 
+    fn fixture() -> LiveState {
+        let mut s = LiveState::new("test".into());
+        let slides = (1..=4)
+            .map(|i| Slide {
+                section: format!("Verse {i}"),
+                text: format!("line {i}"),
+            })
+            .collect();
+        s.show_song("song".into(), "Song".into(), slides, 0);
+        s
+    }
+
     fn applied(commands: &[Command]) -> LiveState {
-        let mut s = LiveState::default();
+        let mut s = fixture();
         for c in commands {
             s.apply(c.clone());
         }
@@ -135,7 +132,7 @@ mod tests {
 
     #[test]
     fn next_and_prev_wrap_both_ways() {
-        let n = LiveState::default().slides.len();
+        let n = fixture().slides.len();
         assert_eq!(applied(&[Command::Prev]).slide_index, n - 1);
         assert_eq!(applied(&[Command::Prev, Command::Next]).slide_index, 0);
         assert_eq!(applied(&[Command::Next, Command::Next]).slide_index, 2);
@@ -143,10 +140,7 @@ mod tests {
 
     #[test]
     fn stepping_an_empty_song_is_a_noop() {
-        let mut s = LiveState {
-            slides: vec![],
-            ..LiveState::default()
-        };
+        let mut s = LiveState::new("test".into());
         s.apply(Command::Next);
         assert_eq!(s.slide_index, 0);
     }
@@ -175,6 +169,17 @@ mod tests {
             Command::SetTextScale { scale: f64::NAN },
         ]);
         assert_eq!(s.text_scale, TEXT_SCALE_MIN);
+    }
+
+    #[test]
+    fn show_song_clamps_the_start_slide() {
+        let mut s = fixture();
+        let slides = s.slides.clone();
+        s.show_song("b".into(), "B".into(), slides, 99);
+        assert_eq!(s.slide_index, 3);
+        assert_eq!(s.song_id.as_deref(), Some("b"));
+        s.show_song("c".into(), "C".into(), vec![], 5);
+        assert_eq!(s.slide_index, 0);
     }
 
     #[test]

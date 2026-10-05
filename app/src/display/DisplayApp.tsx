@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { LiveCommand } from "../lib/api";
 import { t } from "../i18n";
+import { api } from "../lib/api";
+import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
 import { LyricSlide } from "./LyricSlide";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
@@ -8,6 +11,11 @@ import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 // over /ws, so this view is byte-for-byte identical on a phone or projector.
 export default function DisplayApp() {
   const { state, status } = useLiveState();
+  // The projector window on this machine responds to a clicker aimed at it.
+  // Displays on other devices only watch.
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  const send = useCallback((command: LiveCommand) => api.liveCommand(command).catch(() => undefined), []);
+  useTransportKeys(send, local);
   const active = state?.slides[state.slide_index]?.text ?? "";
   const shown = state?.visible ?? false;
   const textScale = state?.text_scale ?? 1;

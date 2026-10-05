@@ -1,0 +1,4 @@
+# `cargo test` writes the TypeScript versions of shared types (ts-rs) here,
+# so the web app imports them instead of re-declaring them by hand.
+[env]
+TS_RS_EXPORT_DIR = { value = "../app/src/generated", relative = true }

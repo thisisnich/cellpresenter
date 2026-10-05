@@ -4,48 +4,71 @@ use std::sync::{Arc, RwLock};
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
-        State,
+        ConnectInfo, Path, Request, State,
     },
     http::{header, StatusCode, Uri},
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
-use tauri::{AssetResolver, Wry};
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
+use ts_rs::TS;
+use uuid::Uuid;
 
+use crate::auth::{Denied, PinGuard};
+use crate::db::Db;
 use crate::live::{Command, LiveState};
+use crate::song::{Song, SongInput, SongSummary};
 
 /// Preferred port. The Vite dev proxy targets it, so dev builds use it only.
 pub const DEFAULT_PORT: u16 = 9100;
 /// Release builds try this many ports from DEFAULT_PORT before asking the OS.
 const PORT_ATTEMPTS: u16 = 10;
+/// Header a phone or another computer sends the control PIN in.
+pub const PIN_HEADER: &str = "x-cp-pin";
 
 /// Messages pushed over /ws. A client gets one `snapshot` on connect, then
 /// `update`s as state changes.
-#[derive(Clone, Serialize)]
+#[derive(Clone, Serialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[ts(export)]
 pub enum WsMsg {
     Snapshot { state: LiveState },
     Update { state: LiveState },
 }
 
+/// A file of the web app, as found by the asset lookup.
+pub struct WebAsset {
+    pub bytes: Vec<u8>,
+    pub mime_type: String,
+}
+
+/// Finds web-app files by path. In the app this is Tauri's bundled assets;
+/// tests pass a stub.
+pub type AssetLookup = Arc<dyn Fn(&str) -> Option<WebAsset> + Send + Sync>;
+
 #[derive(Clone)]
 pub struct ServerState {
     live: Arc<RwLock<LiveState>>,
     tx: broadcast::Sender<WsMsg>,
-    assets: Arc<AssetResolver<Wry>>,
+    assets: AssetLookup,
+    db: Db,
+    pins: Arc<PinGuard>,
 }
 
 impl ServerState {
-    pub fn new(assets: AssetResolver<Wry>) -> Self {
+    pub fn new(assets: AssetLookup, db: Db, pins: PinGuard) -> Self {
         let (tx, _) = broadcast::channel(64);
+        let session = Uuid::new_v4().simple().to_string();
         Self {
-            live: Arc::new(RwLock::new(LiveState::default())),
+            live: Arc::new(RwLock::new(LiveState::new(session))),
             tx,
-            assets: Arc::new(assets),
+            assets,
+            db,
+            pins: Arc::new(pins),
         }
     }
 
@@ -53,11 +76,12 @@ impl ServerState {
         self.live.read().unwrap().clone()
     }
 
-    /// Apply one change to the live state and broadcast the result.
+    /// Apply one change to the live state, bump its version and broadcast it.
     fn mutate(&self, change: impl FnOnce(&mut LiveState)) -> LiveState {
         let state = {
             let mut live = self.live.write().unwrap();
             change(&mut live);
+            live.version += 1;
             live.clone()
         };
         let _ = self.tx.send(WsMsg::Update {
@@ -102,6 +126,76 @@ pub async fn bind() -> Result<TcpListener, String> {
     })
 }
 
+// ---------- errors ----------
+
+/// An API failure: a status code plus a short machine-readable reason.
+struct ApiError(StatusCode, &'static str);
+
+#[derive(Serialize)]
+struct ErrorBody {
+    error: &'static str,
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        (self.0, Json(ErrorBody { error: self.1 })).into_response()
+    }
+}
+
+impl From<sqlx::Error> for ApiError {
+    fn from(e: sqlx::Error) -> Self {
+        eprintln!("cellpresenter: database error: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "database_error")
+    }
+}
+
+type ApiResult<T> = Result<Json<T>, ApiError>;
+
+const NOT_FOUND: ApiError = ApiError(StatusCode::NOT_FOUND, "not_found");
+
+// ---------- control access ----------
+
+/// Lets a request through if it comes from this machine or carries the PIN.
+async fn require_control(
+    State(s): State<ServerState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let supplied = request
+        .headers()
+        .get(PIN_HEADER)
+        .and_then(|v| v.to_str().ok());
+    match s.pins.check(peer.ip(), supplied) {
+        Ok(()) => next.run(request).await,
+        Err(Denied::PinRequired) => {
+            ApiError(StatusCode::UNAUTHORIZED, "pin_required").into_response()
+        }
+        Err(Denied::TooManyAttempts) => {
+            ApiError(StatusCode::TOO_MANY_REQUESTS, "too_many_attempts").into_response()
+        }
+    }
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct PinInfo {
+    pub pin: String,
+}
+
+/// The PIN, for showing in the console. Only this machine may ask.
+async fn pin(
+    State(s): State<ServerState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> ApiResult<PinInfo> {
+    if !PinGuard::is_local(peer.ip()) {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    Ok(Json(PinInfo {
+        pin: s.pins.pin().to_string(),
+    }))
+}
+
 // ---------- REST ----------
 
 #[derive(Serialize)]
@@ -128,6 +222,79 @@ async fn live_command(
     Json(command): Json<Command>,
 ) -> Json<LiveState> {
     Json(s.mutate(|l| l.apply(command)))
+}
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct ShowSong {
+    pub song_id: String,
+    #[serde(default)]
+    pub slide_index: usize,
+}
+
+/// Put a library song on air.
+async fn live_show_song(
+    State(s): State<ServerState>,
+    Json(args): Json<ShowSong>,
+) -> ApiResult<LiveState> {
+    let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
+    let slides = song.live_slides();
+    Ok(Json(s.mutate(|l| {
+        l.show_song(song.id, song.title, slides, args.slide_index)
+    })))
+}
+
+async fn list_songs(State(s): State<ServerState>) -> ApiResult<Vec<SongSummary>> {
+    Ok(Json(s.db.list_songs().await?))
+}
+
+async fn get_song(State(s): State<ServerState>, Path(id): Path<String>) -> ApiResult<Song> {
+    Ok(Json(s.db.get_song(&id).await?.ok_or(NOT_FOUND)?))
+}
+
+fn validate(input: &SongInput) -> Result<(), ApiError> {
+    if input.title.trim().is_empty() {
+        return Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, "title_required"));
+    }
+    Ok(())
+}
+
+async fn create_song(
+    State(s): State<ServerState>,
+    Json(input): Json<SongInput>,
+) -> Result<(StatusCode, Json<Song>), ApiError> {
+    validate(&input)?;
+    Ok((StatusCode::CREATED, Json(s.db.create_song(&input).await?)))
+}
+
+async fn update_song(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+    Json(input): Json<SongInput>,
+) -> ApiResult<Song> {
+    validate(&input)?;
+    let song = s.db.update_song(&id, &input).await?.ok_or(NOT_FOUND)?;
+    // If this song is on air, show the edit straight away.
+    if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
+        let slides = song.live_slides();
+        let (song_id, title) = (song.id.clone(), song.title.clone());
+        s.mutate(|l| {
+            let index = l.slide_index;
+            l.show_song(song_id, title, slides, index);
+        });
+    }
+    Ok(Json(song))
+}
+
+async fn delete_song(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if s.db.delete_song(&id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(NOT_FOUND)
+    }
 }
 
 // ---------- WebSocket ----------
@@ -184,17 +351,16 @@ async fn send(socket: &mut WebSocket, msg: &WsMsg) -> Result<(), axum::Error> {
 
 // ---------- SPA ----------
 
-/// Serve the web app from the assets Tauri bundled into the binary (in dev,
-/// Tauri reads them from `dist/` instead). Unknown paths get index.html so
-/// client-side routes like /display work on a hard refresh.
+/// Serve the web app. Unknown paths get index.html so client-side routes like
+/// /display work on a hard refresh.
 async fn spa(State(s): State<ServerState>, uri: Uri) -> Response {
     let path = uri.path();
     let is_hashed_asset = path.starts_with("/assets/");
     // The bundled lookup already falls back to index.html; the dev lookup
     // reads files straight from dist/ and doesn't, so fall back here too.
-    let found = s.assets.get(path.to_string()).or_else(|| {
+    let found = (s.assets)(path).or_else(|| {
         (!is_hashed_asset)
-            .then(|| s.assets.get("index.html".to_string()))
+            .then(|| (s.assets)("index.html"))
             .flatten()
     });
     let Some(asset) = found else {
@@ -209,7 +375,7 @@ async fn spa(State(s): State<ServerState>, uri: Uri) -> Response {
     };
     // A missing hashed asset falls back to index.html; report it as missing
     // instead so a stale page fails loudly rather than parsing HTML as JS.
-    if is_hashed_asset && asset.mime_type().starts_with("text/html") {
+    if is_hashed_asset && asset.mime_type.starts_with("text/html") {
         return StatusCode::NOT_FOUND.into_response();
     }
     // Vite content-hashes everything under /assets, so those can be cached
@@ -222,7 +388,7 @@ async fn spa(State(s): State<ServerState>, uri: Uri) -> Response {
     };
     (
         [
-            (header::CONTENT_TYPE, asset.mime_type().to_string()),
+            (header::CONTENT_TYPE, asset.mime_type),
             (header::CACHE_CONTROL, cache.to_string()),
         ],
         asset.bytes,
@@ -232,11 +398,28 @@ async fn spa(State(s): State<ServerState>, uri: Uri) -> Response {
 
 // ---------- router ----------
 
+/// Serve with `into_make_service_with_connect_info::<SocketAddr>()`: control
+/// routes look at the caller's address.
 pub fn router(state: ServerState) -> Router {
+    let control = Router::new()
+        .route("/live/command", post(live_command))
+        .route("/live/show-song", post(live_show_song))
+        .route("/songs", post(create_song))
+        .route(
+            "/songs/{id}",
+            axum::routing::put(update_song).delete(delete_song),
+        )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_control,
+        ));
     let api = Router::new()
         .route("/health", get(health))
+        .route("/pin", get(pin))
         .route("/live/state", get(live_state))
-        .route("/live/command", post(live_command))
+        .route("/songs", get(list_songs))
+        .route("/songs/{id}", get(get_song))
+        .merge(control)
         .fallback(|| async { StatusCode::NOT_FOUND });
     Router::new()
         .nest("/api", api)
@@ -248,6 +431,46 @@ pub fn router(state: ServerState) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::seed::seed_if_empty;
+    use axum::body::{to_bytes, Body};
+    use axum::extract::connect_info::MockConnectInfo;
+    use axum::http::Request as HttpRequest;
+    use tower::ServiceExt;
+
+    const LOCAL: &str = "127.0.0.1:50000";
+    const PHONE: &str = "192.168.1.23:50000";
+
+    async fn app(peer: &str) -> (Router, ServerState) {
+        let db = Db::in_memory().await.unwrap();
+        seed_if_empty(&db).await.unwrap();
+        let state = ServerState::new(Arc::new(|_| None), db, PinGuard::new("4321".into()));
+        let router =
+            router(state.clone()).layer(MockConnectInfo(peer.parse::<SocketAddr>().unwrap()));
+        (router, state)
+    }
+
+    async fn call(
+        router: &Router,
+        method: &str,
+        uri: &str,
+        body: Option<&str>,
+        pin: Option<&str>,
+    ) -> (StatusCode, String) {
+        let mut req = HttpRequest::builder().method(method).uri(uri);
+        if body.is_some() {
+            req = req.header(header::CONTENT_TYPE, "application/json");
+        }
+        if let Some(pin) = pin {
+            req = req.header(PIN_HEADER, pin);
+        }
+        let req = req
+            .body(Body::from(body.unwrap_or("").to_string()))
+            .unwrap();
+        let res = router.clone().oneshot(req).await.unwrap();
+        let status = res.status();
+        let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
 
     #[test]
     fn strict_mode_only_tries_default_port() {
@@ -260,5 +483,154 @@ mod tests {
         assert_eq!(ports.first(), Some(&DEFAULT_PORT));
         assert_eq!(ports.len(), PORT_ATTEMPTS as usize + 1);
         assert_eq!(ports.last(), Some(&0));
+    }
+
+    #[tokio::test]
+    async fn phones_can_read_but_need_the_pin_to_control() {
+        let (router, _) = app(PHONE).await;
+        assert_eq!(
+            call(&router, "GET", "/api/songs", None, None).await.0,
+            StatusCode::OK
+        );
+        let next = Some(r#"{"type":"next"}"#);
+        assert_eq!(
+            call(&router, "POST", "/api/live/command", next, None)
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            call(&router, "POST", "/api/live/command", next, Some("0000"))
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            call(&router, "POST", "/api/live/command", next, Some("4321"))
+                .await
+                .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router, "GET", "/api/pin", None, None).await.0,
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn this_machine_controls_freely_and_can_read_the_pin() {
+        let (router, _) = app(LOCAL).await;
+        let (status, body) = call(&router, "GET", "/api/pin", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("4321"));
+        let next = Some(r#"{"type":"next"}"#);
+        assert_eq!(
+            call(&router, "POST", "/api/live/command", next, None)
+                .await
+                .0,
+            StatusCode::OK
+        );
+    }
+
+    #[tokio::test]
+    async fn show_song_puts_a_library_song_on_air_and_bumps_the_version() {
+        let (router, state) = app(LOCAL).await;
+        let songs = state.db.list_songs().await.unwrap();
+        let well = songs.iter().find(|s| s.title == "It Is Well").unwrap();
+        let before = state.snapshot().version;
+
+        let body = format!(r#"{{"song_id":"{}","slide_index":2}}"#, well.id);
+        let (status, _) = call(&router, "POST", "/api/live/show-song", Some(&body), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let live = state.snapshot();
+        assert_eq!(live.title, "It Is Well");
+        assert_eq!(live.slide_index, 2);
+        assert_eq!(live.slides.len(), 9);
+        assert_eq!(live.version, before + 1);
+
+        let missing = Some(r#"{"song_id":"nope"}"#);
+        assert_eq!(
+            call(&router, "POST", "/api/live/show-song", missing, None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+    }
+
+    #[tokio::test]
+    async fn editing_the_song_on_air_updates_live_state() {
+        let (router, state) = app(LOCAL).await;
+        let id = state.db.list_songs().await.unwrap()[0].id.clone();
+        call(
+            &router,
+            "POST",
+            "/api/live/show-song",
+            Some(&format!(r#"{{"song_id":"{id}"}}"#)),
+            None,
+        )
+        .await;
+
+        let edit = r#"{"title":"Renamed","sections":[{"name":"Verse 1","slides":[{"lines":[{"text":"New line"}]}]}]}"#;
+        let (status, _) = call(
+            &router,
+            "PUT",
+            &format!("/api/songs/{id}"),
+            Some(edit),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let live = state.snapshot();
+        assert_eq!(live.title, "Renamed");
+        assert_eq!(live.slides[0].text, "New line");
+    }
+
+    #[tokio::test]
+    async fn song_crud_validates_and_soft_deletes() {
+        let (router, _) = app(LOCAL).await;
+        let blank = Some(r#"{"title":"  ","sections":[]}"#);
+        assert_eq!(
+            call(&router, "POST", "/api/songs", blank, None).await.0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+
+        let (status, body) = call(
+            &router,
+            "POST",
+            "/api/songs",
+            Some(r#"{"title":"New","sections":[]}"#),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED);
+        let song: Song = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            call(
+                &router,
+                "DELETE",
+                &format!("/api/songs/{}", song.id),
+                None,
+                None
+            )
+            .await
+            .0,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(
+            call(
+                &router,
+                "GET",
+                &format!("/api/songs/{}", song.id),
+                None,
+                None
+            )
+            .await
+            .0,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            call(&router, "GET", "/api/nothing", None, None).await.0,
+            StatusCode::NOT_FOUND
+        );
     }
 }

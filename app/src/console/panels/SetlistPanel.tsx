@@ -7,7 +7,8 @@ export function SetlistPanel() {
   return (
     <div className="flex h-full flex-col gap-1 overflow-y-auto bg-cp-panel p-3 font-ui text-[13px] text-cp-text">
       <span className="cp-label mb-1.5">{t("setlist.tonight")}</span>
-      {state && (
+      {!state?.song_id && <p className="m-0 px-2 text-cp-muted">{t("setlist.nothingOnAir")}</p>}
+      {state?.song_id && (
         <button
           type="button"
           aria-current="true"

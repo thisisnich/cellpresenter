@@ -10,6 +10,8 @@ interface LiveContextValue {
   /** Last command error, cleared by the next successful command. */
   error: string | null;
   send: (command: LiveCommand) => Promise<void>;
+  /** Put a library song on air. */
+  showSong: (songId: string, slideIndex?: number) => Promise<void>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -20,10 +22,10 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const { state, patch, status } = useLiveState();
   const [error, setError] = useState<string | null>(null);
 
-  const send = useCallback(
-    async (command: LiveCommand) => {
+  const run = useCallback(
+    async (call: () => Promise<LiveState>) => {
       try {
-        patch(await api.liveCommand(command));
+        patch(await call());
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
@@ -31,8 +33,16 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     },
     [patch],
   );
+  const send = useCallback((command: LiveCommand) => run(() => api.liveCommand(command)), [run]);
+  const showSong = useCallback(
+    (songId: string, slideIndex = 0) => run(() => api.showSong({ song_id: songId, slide_index: slideIndex })),
+    [run],
+  );
 
-  const value = useMemo(() => ({ state, status, error, send }), [state, status, error, send]);
+  const value = useMemo(
+    () => ({ state, status, error, send, showSong }),
+    [state, status, error, send, showSong],
+  );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
 

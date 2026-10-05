@@ -3,6 +3,7 @@ import "dockview-react/dist/styles/dockview.css";
 import { useMemo } from "react";
 import type { Theme } from "../theme/tokens";
 import { restoreLayout, saveLayout } from "./layout";
+import { LibraryPanel } from "./panels/LibraryPanel";
 import { OutputPanel } from "./panels/OutputPanel";
 import { PlaceholderPanel } from "./panels/PlaceholderPanel";
 import { SetlistPanel } from "./panels/SetlistPanel";
@@ -10,6 +11,7 @@ import { SlidesPanel } from "./panels/SlidesPanel";
 
 const components = {
   setlist: SetlistPanel,
+  library: LibraryPanel,
   slides: SlidesPanel,
   output: OutputPanel,
   placeholder: PlaceholderPanel,

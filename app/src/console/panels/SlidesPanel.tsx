@@ -10,6 +10,13 @@ const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
 export function SlidesPanel() {
   const { state, send } = useLive();
   if (!state) return null;
+  if (state.slides.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center bg-cp-panel p-6 font-ui text-[13px] text-cp-muted">
+        <p className="m-0">{t("slides.empty")}</p>
+      </div>
+    );
+  }
   const next = nextIndex(state);
   const arrangement = arrangementOf(state.slides.map((s) => s.section));
 

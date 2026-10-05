@@ -48,3 +48,6 @@ jobs:
         working-directory: src-tauri
       - run: cargo test
         working-directory: src-tauri
+      # cargo test regenerates the TypeScript types; they must be committed.
+      - name: Generated TypeScript types are up to date
+        run: git diff --exit-code -- app/src/generated

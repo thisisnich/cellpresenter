@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
+import { api } from "../lib/api";
 import { ROUTES } from "../lib/routes";
 import { useLive } from "./LiveContext";
 
@@ -24,6 +25,13 @@ export function Header({ onResetLayout }: { onResetLayout: () => void }) {
   const clock = useClock();
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const displayUrl = `${location.protocol}//${location.host}${ROUTES.display}`;
+  const [pin, setPin] = useState<string | null>(null);
+  useEffect(() => {
+    api
+      .pin()
+      .then((info) => setPin(info.pin))
+      .catch(() => setPin(null)); // Only the laptop running the app may see it.
+  }, []);
 
   const copyLink = async () => {
     try {
@@ -61,6 +69,14 @@ export function Header({ onResetLayout }: { onResetLayout: () => void }) {
         </button>
       </div>
       <div className="flex items-center gap-4 text-cp-muted">
+        {pin && (
+          <span title={t("header.remotePinHelp")} className="inline-flex items-center gap-1.5">
+            {t("header.remotePin")}
+            <span className="rounded-cp-sm border-cp bg-cp-bg px-1.5 py-0.5 font-mono text-[13px] tracking-widest text-cp-text">
+              {pin}
+            </span>
+          </span>
+        )}
         <span className="font-mono text-[15px] text-cp-text tabular-nums">{clock}</span>
         <span className="inline-flex items-center gap-1.5">
           <span className={`size-[7px] rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} />

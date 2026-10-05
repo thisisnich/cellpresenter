@@ -1,11 +1,21 @@
+mod auth;
+mod db;
 mod live;
+mod seed;
 mod server;
+mod song;
 
-use tauri::{AppHandle, WebviewUrl, WebviewWindowBuilder};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-use server::ServerState;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+
+use auth::PinGuard;
+use db::Db;
+use server::{ServerState, WebAsset};
 
 const DEV_WEBVIEW_URL: &str = "http://localhost:5173";
+const LIBRARY_FILE: &str = "library.db";
 
 // ---------- webview windows ----------
 
@@ -33,22 +43,52 @@ fn open_windows(app: &AppHandle, port: u16) -> tauri::Result<()> {
     Ok(())
 }
 
+/// Open the song library in the app's data folder, adding starter songs to a
+/// brand-new library.
+async fn open_library(app: &AppHandle) -> Result<Db, String> {
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("no app data folder: {e}"))?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("can't create {}: {e}", dir.display()))?;
+    let path = dir.join(LIBRARY_FILE);
+    let db = Db::open(&path)
+        .await
+        .map_err(|e| format!("can't open the song library at {}: {e}", path.display()))?;
+    seed::seed_if_empty(&db)
+        .await
+        .map_err(|e| format!("can't add starter songs: {e}"))?;
+    println!("cellpresenter song library: {}", path.display());
+    Ok(db)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let handle = app.handle().clone();
-            // Bind before any window opens, so windows never load a server
-            // that isn't there and a busy port is reported instead of hidden.
-            let listener = tauri::async_runtime::block_on(server::bind()).map_err(|msg| {
+            let report = |msg: String| {
                 eprintln!("cellpresenter: {msg}");
                 msg
-            })?;
+            };
+            let db = tauri::async_runtime::block_on(open_library(&handle)).map_err(report)?;
+            // Bind before any window opens, so windows never load a server
+            // that isn't there and a busy port is reported instead of hidden.
+            let listener = tauri::async_runtime::block_on(server::bind()).map_err(report)?;
             let port = listener.local_addr()?.port();
             println!("cellpresenter embedded server: http://0.0.0.0:{port}");
 
-            let state = ServerState::new(handle.asset_resolver());
+            let resolver = handle.asset_resolver();
+            let assets = Arc::new(move |path: &str| {
+                resolver.get(path.to_string()).map(|a| WebAsset {
+                    mime_type: a.mime_type().to_string(),
+                    bytes: a.bytes,
+                })
+            });
+            let pins = PinGuard::random();
+            let state = ServerState::new(assets, db, pins);
             tauri::async_runtime::spawn(async move {
-                if let Err(e) = axum::serve(listener, server::router(state)).await {
+                let app = server::router(state).into_make_service_with_connect_info::<SocketAddr>();
+                if let Err(e) = axum::serve(listener, app).await {
                     eprintln!("cellpresenter: embedded server stopped: {e}");
                 }
             });

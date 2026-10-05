@@ -1,0 +1,604 @@
+//! SQLite song library. All writes stamp `updated_at`; deletes are soft.
+
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
+use sqlx::{FromRow, Sqlite, Transaction};
+use uuid::Uuid;
+
+use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSlide, SongSummary};
+
+pub type DbResult<T> = Result<T, sqlx::Error>;
+
+pub fn new_id() -> String {
+    Uuid::now_v7().to_string()
+}
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+fn decode_err(e: serde_json::Error) -> sqlx::Error {
+    sqlx::Error::Decode(Box::new(e))
+}
+
+/// A client-supplied id is used only if it looks sane; otherwise we mint one.
+fn usable_id(id: &Option<String>) -> Option<&str> {
+    id.as_deref().filter(|s| {
+        !s.is_empty() && s.len() <= 64 && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    })
+}
+
+#[derive(Clone)]
+pub struct Db {
+    pool: SqlitePool,
+    library_id: String,
+}
+
+#[derive(FromRow)]
+struct SongRow {
+    id: String,
+    title: String,
+    artist: Option<String>,
+    song_key: Option<String>,
+    capo: i64,
+    ccli_number: Option<String>,
+    copyright: Option<String>,
+    arrangement: Option<String>,
+    updated_at: i64,
+}
+
+#[derive(FromRow)]
+struct SectionRow {
+    id: String,
+    name: String,
+}
+
+#[derive(FromRow)]
+struct SlideRow {
+    id: String,
+    section_id: String,
+    lines: String,
+}
+
+impl Db {
+    /// Open (creating if needed) the library database file and migrate it.
+    pub async fn open(path: &Path) -> DbResult<Self> {
+        let options = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal)
+            .foreign_keys(true);
+        let pool = SqlitePoolOptions::new()
+            .max_connections(4)
+            .connect_with(options)
+            .await?;
+        Self::init(pool).await
+    }
+
+    /// A private in-memory database, for tests.
+    #[cfg(test)]
+    pub async fn in_memory() -> DbResult<Self> {
+        let options = <SqliteConnectOptions as std::str::FromStr>::from_str("sqlite::memory:")?
+            .foreign_keys(true);
+        // One connection: each in-memory connection is its own database.
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(options)
+            .await?;
+        Self::init(pool).await
+    }
+
+    async fn init(pool: SqlitePool) -> DbResult<Self> {
+        sqlx::migrate!("./migrations").run(&pool).await?;
+        let library_id = Self::ensure_library(&pool).await?;
+        Ok(Self { pool, library_id })
+    }
+
+    async fn ensure_library(pool: &SqlitePool) -> DbResult<String> {
+        let existing: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM libraries WHERE deleted_at IS NULL ORDER BY created_at LIMIT 1",
+        )
+        .fetch_optional(pool)
+        .await?;
+        if let Some((id,)) = existing {
+            return Ok(id);
+        }
+        let id = new_id();
+        let now = now_ms();
+        sqlx::query("INSERT INTO libraries (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
+            .bind(&id)
+            .bind("My library")
+            .bind(now)
+            .bind(now)
+            .execute(pool)
+            .await?;
+        Ok(id)
+    }
+
+    /// True if this library has never had a song (deleted ones count, so
+    /// deleting every seed song doesn't bring them back).
+    pub async fn is_empty(&self) -> DbResult<bool> {
+        let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM songs WHERE library_id = ?")
+            .bind(&self.library_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(count == 0)
+    }
+
+    pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {
+        let rows: Vec<SongRow> = sqlx::query_as(
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
+             FROM songs WHERE library_id = ? AND deleted_at IS NULL
+             ORDER BY title COLLATE NOCASE",
+        )
+        .bind(&self.library_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| SongSummary {
+                id: r.id,
+                title: r.title,
+                artist: r.artist,
+                key: r.song_key,
+                updated_at: r.updated_at,
+            })
+            .collect())
+    }
+
+    pub async fn get_song(&self, id: &str) -> DbResult<Option<Song>> {
+        let row: Option<SongRow> = sqlx::query_as(
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
+             FROM songs WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .bind(&self.library_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+
+        let sections: Vec<SectionRow> = sqlx::query_as(
+            "SELECT id, name FROM sections WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?;
+        let slide_rows: Vec<SlideRow> = sqlx::query_as(
+            "SELECT id, section_id, lines FROM slides WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut slides_by_section: HashMap<String, Vec<SongSlide>> = HashMap::new();
+        for s in slide_rows {
+            let lines: Vec<LyricLine> = serde_json::from_str(&s.lines).map_err(decode_err)?;
+            slides_by_section
+                .entry(s.section_id)
+                .or_default()
+                .push(SongSlide { id: s.id, lines });
+        }
+        let arrangement = row
+            .arrangement
+            .as_deref()
+            .map(serde_json::from_str::<Vec<String>>)
+            .transpose()
+            .map_err(decode_err)?;
+
+        Ok(Some(Song {
+            id: row.id,
+            title: row.title,
+            artist: row.artist,
+            key: row.song_key,
+            capo: row.capo.clamp(0, 11) as u8,
+            ccli_number: row.ccli_number,
+            copyright: row.copyright,
+            arrangement,
+            sections: sections
+                .into_iter()
+                .map(|s| SongSection {
+                    slides: slides_by_section.remove(&s.id).unwrap_or_default(),
+                    id: s.id,
+                    name: s.name,
+                })
+                .collect(),
+            updated_at: row.updated_at,
+        }))
+    }
+
+    pub async fn create_song(&self, input: &SongInput) -> DbResult<Song> {
+        let id = new_id();
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO songs (id, library_id, title, artist, song_key, capo, ccli_number, copyright, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&self.library_id)
+        .bind(input.title.trim())
+        .bind(&input.artist)
+        .bind(&input.key)
+        .bind(i64::from(input.capo.min(11)))
+        .bind(&input.ccli_number)
+        .bind(&input.copyright)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        self.write_children(&mut tx, &id, input, now).await?;
+        tx.commit().await?;
+        Ok(self.get_song(&id).await?.expect("song just created"))
+    }
+
+    /// Replace a song's fields, sections and slides. Rows whose ids are sent
+    /// again are updated in place; rows left out are soft-deleted.
+    pub async fn update_song(&self, id: &str, input: &SongInput) -> DbResult<Option<Song>> {
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE songs SET title = ?, artist = ?, song_key = ?, capo = ?, ccli_number = ?, copyright = ?, updated_at = ?
+             WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(input.title.trim())
+        .bind(&input.artist)
+        .bind(&input.key)
+        .bind(i64::from(input.capo.min(11)))
+        .bind(&input.ccli_number)
+        .bind(&input.copyright)
+        .bind(now)
+        .bind(id)
+        .bind(&self.library_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if updated == 0 {
+            return Ok(None);
+        }
+        self.write_children(&mut tx, id, input, now).await?;
+        tx.commit().await?;
+        self.get_song(id).await
+    }
+
+    pub async fn delete_song(&self, id: &str) -> DbResult<bool> {
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        let deleted = sqlx::query(
+            "UPDATE songs SET deleted_at = ?, updated_at = ? WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(id)
+        .bind(&self.library_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if deleted > 0 {
+            sqlx::query("UPDATE sections SET deleted_at = ?, updated_at = ? WHERE song_id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+            sqlx::query("UPDATE slides SET deleted_at = ?, updated_at = ? WHERE song_id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(deleted > 0)
+    }
+
+    /// Upsert sections and slides for a song, soft-delete the ones not sent,
+    /// and store the arrangement (dropping ids that don't name a section).
+    async fn write_children(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        song_id: &str,
+        input: &SongInput,
+        now: i64,
+    ) -> DbResult<()> {
+        let own_sections: HashSet<String> =
+            sqlx::query_as::<_, (String,)>("SELECT id FROM sections WHERE song_id = ?")
+                .bind(song_id)
+                .fetch_all(&mut **tx)
+                .await?
+                .into_iter()
+                .map(|(id,)| id)
+                .collect();
+        let own_slides: HashSet<String> =
+            sqlx::query_as::<_, (String,)>("SELECT id FROM slides WHERE song_id = ?")
+                .bind(song_id)
+                .fetch_all(&mut **tx)
+                .await?
+                .into_iter()
+                .map(|(id,)| id)
+                .collect();
+
+        let mut kept_sections = HashSet::new();
+        let mut kept_slides = HashSet::new();
+        // Client id → stored id, for translating the arrangement.
+        let mut section_ids: HashMap<String, String> = HashMap::new();
+
+        for (position, section) in input.sections.iter().enumerate() {
+            let section_id = self
+                .claim_id(tx, &section.id, &own_sections, "sections")
+                .await?;
+            if own_sections.contains(&section_id) {
+                sqlx::query("UPDATE sections SET name = ?, position = ?, updated_at = ?, deleted_at = NULL WHERE id = ?")
+                    .bind(section.name.trim())
+                    .bind(position as i64)
+                    .bind(now)
+                    .bind(&section_id)
+                    .execute(&mut **tx)
+                    .await?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO sections (id, library_id, song_id, name, position, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(&section_id)
+                .bind(&self.library_id)
+                .bind(song_id)
+                .bind(section.name.trim())
+                .bind(position as i64)
+                .bind(now)
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+            }
+            if let Some(client_id) = &section.id {
+                section_ids.insert(client_id.clone(), section_id.clone());
+            }
+            self.write_slides(
+                tx,
+                song_id,
+                &section_id,
+                section,
+                &own_slides,
+                &mut kept_slides,
+                now,
+            )
+            .await?;
+            kept_sections.insert(section_id);
+        }
+
+        for id in own_sections.difference(&kept_sections) {
+            sqlx::query("UPDATE sections SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        for id in own_slides.difference(&kept_slides) {
+            sqlx::query("UPDATE slides SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut **tx)
+                .await?;
+        }
+
+        let arrangement = input
+            .arrangement
+            .as_ref()
+            .map(|order| {
+                order
+                    .iter()
+                    .filter_map(|id| section_ids.get(id).or(kept_sections.get(id)).cloned())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|order| !order.is_empty())
+            .map(|order| serde_json::to_string(&order))
+            .transpose()
+            .map_err(decode_err)?;
+        sqlx::query("UPDATE songs SET arrangement = ? WHERE id = ?")
+            .bind(arrangement)
+            .bind(song_id)
+            .execute(&mut **tx)
+            .await?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn write_slides(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        song_id: &str,
+        section_id: &str,
+        section: &SectionInput,
+        own_slides: &HashSet<String>,
+        kept_slides: &mut HashSet<String>,
+        now: i64,
+    ) -> DbResult<()> {
+        for (position, slide) in section.slides.iter().enumerate() {
+            let slide_id = self.claim_id(tx, &slide.id, own_slides, "slides").await?;
+            let lines = serde_json::to_string(&slide.lines).map_err(decode_err)?;
+            if own_slides.contains(&slide_id) {
+                sqlx::query(
+                    "UPDATE slides SET section_id = ?, position = ?, lines = ?, updated_at = ?, deleted_at = NULL WHERE id = ?",
+                )
+                .bind(section_id)
+                .bind(position as i64)
+                .bind(&lines)
+                .bind(now)
+                .bind(&slide_id)
+                .execute(&mut **tx)
+                .await?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO slides (id, library_id, song_id, section_id, position, lines, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(&slide_id)
+                .bind(&self.library_id)
+                .bind(song_id)
+                .bind(section_id)
+                .bind(position as i64)
+                .bind(&lines)
+                .bind(now)
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+            }
+            kept_slides.insert(slide_id);
+        }
+        Ok(())
+    }
+
+    /// The id to store a row under: the client's id if it is this song's own
+    /// or unused anywhere, otherwise a fresh one (never hijack another song's row).
+    async fn claim_id(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        requested: &Option<String>,
+        own: &HashSet<String>,
+        table: &'static str,
+    ) -> DbResult<String> {
+        let Some(id) = usable_id(requested) else {
+            return Ok(new_id());
+        };
+        if own.contains(id) {
+            return Ok(id.to_string());
+        }
+        let taken: Option<(i64,)> = match table {
+            "sections" => sqlx::query_as("SELECT 1 FROM sections WHERE id = ?"),
+            _ => sqlx::query_as("SELECT 1 FROM slides WHERE id = ?"),
+        }
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?;
+        Ok(if taken.is_some() {
+            new_id()
+        } else {
+            id.to_string()
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::song::SlideInput;
+
+    fn input(title: &str, sections: &[(&str, Option<&str>, &[&str])]) -> SongInput {
+        SongInput {
+            title: title.into(),
+            artist: None,
+            key: Some("C".into()),
+            capo: 0,
+            ccli_number: None,
+            copyright: None,
+            arrangement: None,
+            sections: sections
+                .iter()
+                .map(|(name, id, lines)| SectionInput {
+                    id: id.map(String::from),
+                    name: (*name).into(),
+                    slides: vec![SlideInput {
+                        id: None,
+                        lines: lines
+                            .iter()
+                            .map(|t| LyricLine {
+                                text: (*t).into(),
+                                chords: vec![],
+                            })
+                            .collect(),
+                    }],
+                })
+                .collect(),
+        }
+    }
+
+    #[tokio::test]
+    async fn create_and_read_back_a_song() {
+        let db = Db::in_memory().await.unwrap();
+        assert!(db.is_empty().await.unwrap());
+        let song = db
+            .create_song(&input(
+                "Amazing Grace",
+                &[("Verse 1", None, &["Amazing grace", "How sweet"])],
+            ))
+            .await
+            .unwrap();
+        assert_eq!(song.title, "Amazing Grace");
+        assert_eq!(song.sections[0].slides[0].lines[1].text, "How sweet");
+        assert_eq!(db.list_songs().await.unwrap().len(), 1);
+        assert!(!db.is_empty().await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn update_keeps_ids_it_was_sent_and_soft_deletes_the_rest() {
+        let db = Db::in_memory().await.unwrap();
+        let song = db
+            .create_song(&input(
+                "S",
+                &[("Verse 1", None, &["a"]), ("Chorus", None, &["b"])],
+            ))
+            .await
+            .unwrap();
+        let verse_id = song.sections[0].id.clone();
+
+        let mut next = input("S2", &[("Verse 1 (new)", Some(&verse_id), &["a2"])]);
+        next.arrangement = Some(vec![verse_id.clone(), verse_id.clone(), "missing".into()]);
+        let updated = db.update_song(&song.id, &next).await.unwrap().unwrap();
+
+        assert_eq!(updated.title, "S2");
+        assert_eq!(updated.sections.len(), 1);
+        assert_eq!(updated.sections[0].id, verse_id);
+        assert_eq!(updated.sections[0].name, "Verse 1 (new)");
+        assert_eq!(updated.arrangement, Some(vec![verse_id.clone(), verse_id]));
+        assert!(updated.updated_at >= song.updated_at);
+    }
+
+    #[tokio::test]
+    async fn a_client_cannot_steal_another_songs_section() {
+        let db = Db::in_memory().await.unwrap();
+        let a = db
+            .create_song(&input("A", &[("V", None, &["a"])]))
+            .await
+            .unwrap();
+        let stolen = a.sections[0].id.clone();
+        let b = db
+            .create_song(&input("B", &[("V", Some(&stolen), &["b"])]))
+            .await
+            .unwrap();
+        assert_ne!(b.sections[0].id, stolen);
+        let a_again = db.get_song(&a.id).await.unwrap().unwrap();
+        assert_eq!(a_again.sections[0].slides[0].lines[0].text, "a");
+    }
+
+    #[tokio::test]
+    async fn delete_hides_the_song_but_keeps_the_library_non_empty() {
+        let db = Db::in_memory().await.unwrap();
+        let song = db
+            .create_song(&input("S", &[("V", None, &["a"])]))
+            .await
+            .unwrap();
+        assert!(db.delete_song(&song.id).await.unwrap());
+        assert!(!db.delete_song(&song.id).await.unwrap());
+        assert!(db.get_song(&song.id).await.unwrap().is_none());
+        assert!(db.list_songs().await.unwrap().is_empty());
+        assert!(!db.is_empty().await.unwrap());
+        assert!(db
+            .update_song(&song.id, &input("X", &[]))
+            .await
+            .unwrap()
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn ids_are_uuid_v7() {
+        let id = new_id();
+        assert_eq!(Uuid::parse_str(&id).unwrap().get_version_num(), 7);
+    }
+}
