@@ -23,6 +23,10 @@ pub struct LiveState {
     pub version: u64,
     /// Library song on air, if any.
     pub song_id: Option<String>,
+    /// The setlist being run, and which of its items is on air. Next on an
+    /// item's last slide moves to the following item.
+    pub setlist_id: Option<String>,
+    pub item_id: Option<String>,
     /// Title of the song on air.
     pub title: String,
     pub slides: Vec<Slide>,
@@ -43,10 +47,20 @@ pub struct LiveState {
 pub enum Command {
     Next,
     Prev,
-    GoTo { index: usize },
+    /// Jump to the next / previous setlist item (handled by the server,
+    /// which knows the setlist).
+    NextItem,
+    PrevItem,
+    GoTo {
+        index: usize,
+    },
     ToggleVisible,
-    SetVisible { visible: bool },
-    SetTextScale { scale: f64 },
+    SetVisible {
+        visible: bool,
+    },
+    SetTextScale {
+        scale: f64,
+    },
 }
 
 pub const TEXT_SCALE_MIN: f64 = 0.5;
@@ -62,16 +76,17 @@ impl LiveState {
         }
     }
 
-    /// Put a song on air, starting at `slide_index` (clamped to the song).
-    pub fn show_song(
+    /// Put slides on air, starting at `slide_index` (clamped). `song_id` is
+    /// the library song they come from, if any (announcements have none).
+    pub fn show(
         &mut self,
-        song_id: String,
+        song_id: Option<String>,
         title: String,
         slides: Vec<Slide>,
         slide_index: usize,
     ) {
         self.slide_index = slide_index.min(slides.len().saturating_sub(1));
-        self.song_id = Some(song_id);
+        self.song_id = song_id;
         self.title = title;
         self.slides = slides;
     }
@@ -82,6 +97,7 @@ impl LiveState {
         match command {
             Command::Next => self.step(1),
             Command::Prev => self.step(-1),
+            Command::NextItem | Command::PrevItem => {}
             Command::GoTo { index } => {
                 if index < self.slides.len() {
                     self.slide_index = index;
@@ -97,12 +113,21 @@ impl LiveState {
         }
     }
 
-    /// Move by `delta` slides, wrapping at both ends.
+    /// Move by `delta` slides, stopping at the first and last slide (the
+    /// projector should never jump from the end back to the start).
     fn step(&mut self, delta: isize) {
-        let n = self.slides.len();
+        let n = self.slides.len() as isize;
         if n > 0 {
-            self.slide_index = (self.slide_index as isize + delta).rem_euclid(n as isize) as usize;
+            self.slide_index = (self.slide_index as isize + delta).clamp(0, n - 1) as usize;
         }
+    }
+
+    pub fn at_last_slide(&self) -> bool {
+        self.slide_index + 1 >= self.slides.len()
+    }
+
+    pub fn at_first_slide(&self) -> bool {
+        self.slide_index == 0
     }
 }
 
@@ -118,7 +143,7 @@ mod tests {
                 text: format!("line {i}"),
             })
             .collect();
-        s.show_song("song".into(), "Song".into(), slides, 0);
+        s.show(Some("song".into()), "Song".into(), slides, 0);
         s
     }
 
@@ -131,11 +156,17 @@ mod tests {
     }
 
     #[test]
-    fn next_and_prev_wrap_both_ways() {
+    fn next_and_prev_stop_at_the_ends() {
         let n = fixture().slides.len();
-        assert_eq!(applied(&[Command::Prev]).slide_index, n - 1);
-        assert_eq!(applied(&[Command::Prev, Command::Next]).slide_index, 0);
+        assert_eq!(applied(&[Command::Prev]).slide_index, 0);
         assert_eq!(applied(&[Command::Next, Command::Next]).slide_index, 2);
+        let mut s = fixture();
+        for _ in 0..10 {
+            s.apply(Command::Next);
+        }
+        assert_eq!(s.slide_index, n - 1);
+        assert!(s.at_last_slide());
+        assert!(fixture().at_first_slide());
     }
 
     #[test]
@@ -175,10 +206,10 @@ mod tests {
     fn show_song_clamps_the_start_slide() {
         let mut s = fixture();
         let slides = s.slides.clone();
-        s.show_song("b".into(), "B".into(), slides, 99);
+        s.show(Some("b".into()), "B".into(), slides, 99);
         assert_eq!(s.slide_index, 3);
         assert_eq!(s.song_id.as_deref(), Some("b"));
-        s.show_song("c".into(), "C".into(), vec![], 5);
+        s.show(Some("c".into()), "C".into(), vec![], 5);
         assert_eq!(s.slide_index, 0);
     }
 

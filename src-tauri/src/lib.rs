@@ -4,6 +4,7 @@ mod live;
 mod network;
 mod seed;
 mod server;
+mod setlist;
 mod song;
 
 use std::net::SocketAddr;

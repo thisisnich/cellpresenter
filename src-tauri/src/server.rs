@@ -19,9 +19,10 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
-use crate::db::Db;
-use crate::live::{Command, LiveState};
+use crate::db::{Db, DbResult};
+use crate::live::{Command, LiveState, Slide};
 use crate::network::{self, NetworkInfo};
+use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
 
 /// Preferred port. The Vite dev proxy targets it, so dev builds use it only.
@@ -103,6 +104,10 @@ const LIVE_STATE_KEY: &str = "live";
 #[derive(Serialize, Deserialize)]
 struct SavedLive {
     song_id: Option<String>,
+    #[serde(default)]
+    setlist_id: Option<String>,
+    #[serde(default)]
+    item_id: Option<String>,
     slide_index: usize,
     visible: bool,
     text_scale: f64,
@@ -116,14 +121,26 @@ impl ServerState {
             _ => None,
         };
         let Some(saved) = saved else { return };
-        let song = match &saved.song_id {
-            Some(id) => self.db.get_song(id).await.ok().flatten(),
-            None => None,
+        let mut restored = false;
+        if let (Some(setlist_id), Some(item_id)) = (&saved.setlist_id, &saved.item_id) {
+            if let Ok(Some(setlist)) = self.db.get_setlist(setlist_id).await {
+                if let Some(index) = setlist.items.iter().position(|i| i.id() == item_id) {
+                    restored = matches!(
+                        self.show_setlist_item(&setlist, index, SlideAt::Index(saved.slide_index))
+                            .await,
+                        Ok(Some(_))
+                    );
+                }
+            }
+        }
+        let song = match (&saved.song_id, restored) {
+            (Some(id), false) => self.db.get_song(id).await.ok().flatten(),
+            _ => None,
         };
         self.mutate(|l| {
             if let Some(song) = song {
                 let slides = song.live_slides();
-                l.show_song(song.id, song.title, slides, saved.slide_index);
+                l.show(Some(song.id), song.title, slides, saved.slide_index);
             }
             l.visible = saved.visible;
             l.apply(Command::SetTextScale {
@@ -147,6 +164,8 @@ impl ServerState {
                 let live = state.snapshot();
                 let saved = SavedLive {
                     song_id: live.song_id,
+                    setlist_id: live.setlist_id,
+                    item_id: live.item_id,
                     slide_index: live.slide_index,
                     visible: live.visible,
                     text_scale: live.text_scale,
@@ -157,6 +176,88 @@ impl ServerState {
                 }
             }
         })
+    }
+}
+
+// ---------- setlist items on air ----------
+
+/// Where to start in an item's slides.
+#[derive(Clone, Copy)]
+enum SlideAt {
+    Index(usize),
+    Last,
+}
+
+impl ServerState {
+    /// The slides an item shows, or None if its song is gone.
+    async fn item_content(
+        &self,
+        item: &SetlistItem,
+    ) -> DbResult<Option<(Option<String>, String, Vec<Slide>)>> {
+        Ok(match item {
+            SetlistItem::Song { song_id, .. } => self.db.get_song(song_id).await?.map(|song| {
+                let slides = song.live_slides();
+                (Some(song.id), song.title, slides)
+            }),
+            SetlistItem::Announcement { title, text, .. } => {
+                Some((None, title.clone(), announcement_slides(title, text)))
+            }
+        })
+    }
+
+    /// Put item `index` of `setlist` on air. None if it can't be shown.
+    async fn show_setlist_item(
+        &self,
+        setlist: &Setlist,
+        index: usize,
+        at: SlideAt,
+    ) -> DbResult<Option<LiveState>> {
+        let Some(item) = setlist.items.get(index) else {
+            return Ok(None);
+        };
+        let Some((song_id, title, slides)) = self.item_content(item).await? else {
+            return Ok(None);
+        };
+        let slide_index = match at {
+            SlideAt::Index(i) => i,
+            SlideAt::Last => slides.len().saturating_sub(1),
+        };
+        let (setlist_id, item_id) = (setlist.id.clone(), item.id().to_string());
+        Ok(Some(self.mutate(|l| {
+            l.show(song_id, title, slides, slide_index);
+            l.setlist_id = Some(setlist_id);
+            l.item_id = Some(item_id);
+        })))
+    }
+
+    /// Move to the next (`dir` = 1) or previous (-1) item of the setlist on
+    /// air, skipping items that can't be shown. None at either end.
+    async fn step_item(
+        &self,
+        live: &LiveState,
+        dir: isize,
+        at: SlideAt,
+    ) -> DbResult<Option<LiveState>> {
+        let (Some(setlist_id), Some(item_id)) = (&live.setlist_id, &live.item_id) else {
+            return Ok(None);
+        };
+        let Some(setlist) = self.db.get_setlist(setlist_id).await? else {
+            return Ok(None);
+        };
+        let Some(pos) = setlist.items.iter().position(|i| i.id() == item_id) else {
+            return Ok(None);
+        };
+        let mut target = pos as isize + dir;
+        while target >= 0 && (target as usize) < setlist.items.len() {
+            if let Some(state) = self
+                .show_setlist_item(&setlist, target as usize, at)
+                .await?
+            {
+                return Ok(Some(state));
+            }
+            target += dir;
+        }
+        Ok(None)
     }
 }
 
@@ -294,11 +395,55 @@ async fn live_state(State(s): State<ServerState>) -> Json<LiveState> {
 
 /// Apply one live command and return the new state. Every client — console,
 /// phone remote, later the cloud live room — changes live state this way.
+///
+/// While a setlist is on air, Next on an item's last slide moves on to the
+/// next item and Prev on its first slide goes back to the previous item's
+/// last slide, so a whole night runs from one button.
 async fn live_command(
     State(s): State<ServerState>,
     Json(command): Json<Command>,
-) -> Json<LiveState> {
-    Json(s.mutate(|l| l.apply(command)))
+) -> ApiResult<LiveState> {
+    let live = s.snapshot();
+    let crossing = match command {
+        Command::Next if live.at_last_slide() => Some((1, SlideAt::Index(0))),
+        Command::Prev if live.at_first_slide() => Some((-1, SlideAt::Last)),
+        Command::NextItem => Some((1, SlideAt::Index(0))),
+        Command::PrevItem => Some((-1, SlideAt::Index(0))),
+        _ => None,
+    };
+    if let Some((dir, at)) = crossing {
+        if let Some(state) = s.step_item(&live, dir, at).await? {
+            return Ok(Json(state));
+        }
+    }
+    Ok(Json(s.mutate(|l| l.apply(command))))
+}
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct ShowItem {
+    pub setlist_id: String,
+    pub item_id: String,
+    #[serde(default)]
+    pub slide_index: usize,
+}
+
+/// Put a setlist item on air.
+async fn live_show_item(
+    State(s): State<ServerState>,
+    Json(args): Json<ShowItem>,
+) -> ApiResult<LiveState> {
+    let setlist = s.db.get_setlist(&args.setlist_id).await?.ok_or(NOT_FOUND)?;
+    let index = setlist
+        .items
+        .iter()
+        .position(|i| i.id() == args.item_id)
+        .ok_or(NOT_FOUND)?;
+    let state = s
+        .show_setlist_item(&setlist, index, SlideAt::Index(args.slide_index))
+        .await?
+        .ok_or(ApiError(StatusCode::CONFLICT, "song_missing"))?;
+    Ok(Json(state))
 }
 
 #[derive(Deserialize, TS)]
@@ -317,7 +462,9 @@ async fn live_show_song(
     let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
     let slides = song.live_slides();
     Ok(Json(s.mutate(|l| {
-        l.show_song(song.id, song.title, slides, args.slide_index)
+        l.show(Some(song.id), song.title, slides, args.slide_index);
+        l.setlist_id = None;
+        l.item_id = None;
     })))
 }
 
@@ -357,7 +504,7 @@ async fn update_song(
         let (song_id, title) = (song.id.clone(), song.title.clone());
         s.mutate(|l| {
             let index = l.slide_index;
-            l.show_song(song_id, title, slides, index);
+            l.show(Some(song_id), title, slides, index);
         });
     }
     Ok(Json(song))
@@ -368,6 +515,66 @@ async fn delete_song(
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
     if s.db.delete_song(&id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(NOT_FOUND)
+    }
+}
+
+async fn list_setlists(State(s): State<ServerState>) -> ApiResult<Vec<SetlistSummary>> {
+    Ok(Json(s.db.list_setlists().await?))
+}
+
+async fn get_setlist(State(s): State<ServerState>, Path(id): Path<String>) -> ApiResult<Setlist> {
+    Ok(Json(s.db.get_setlist(&id).await?.ok_or(NOT_FOUND)?))
+}
+
+fn validate_setlist(input: &SetlistInput) -> Result<(), ApiError> {
+    if input.name.trim().is_empty() {
+        return Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, "name_required"));
+    }
+    Ok(())
+}
+
+async fn create_setlist(
+    State(s): State<ServerState>,
+    Json(input): Json<SetlistInput>,
+) -> Result<(StatusCode, Json<Setlist>), ApiError> {
+    validate_setlist(&input)?;
+    Ok((
+        StatusCode::CREATED,
+        Json(s.db.create_setlist(&input).await?),
+    ))
+}
+
+async fn update_setlist(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+    Json(input): Json<SetlistInput>,
+) -> ApiResult<Setlist> {
+    validate_setlist(&input)?;
+    let setlist = s.db.update_setlist(&id, &input).await?.ok_or(NOT_FOUND)?;
+    // If an item of this setlist is on air (say an announcement just edited),
+    // show the new version in place.
+    let live = s.snapshot();
+    if live.setlist_id.as_deref() == Some(id.as_str()) {
+        if let Some(index) = setlist
+            .items
+            .iter()
+            .position(|i| Some(i.id()) == live.item_id.as_deref())
+        {
+            s.show_setlist_item(&setlist, index, SlideAt::Index(live.slide_index))
+                .await?;
+        }
+    }
+    Ok(Json(setlist))
+}
+
+async fn delete_setlist(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if s.db.delete_setlist(&id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(NOT_FOUND)
@@ -481,6 +688,12 @@ pub fn router(state: ServerState) -> Router {
     let control = Router::new()
         .route("/live/command", post(live_command))
         .route("/live/show-song", post(live_show_song))
+        .route("/live/show-item", post(live_show_item))
+        .route("/setlists", post(create_setlist))
+        .route(
+            "/setlists/{id}",
+            axum::routing::put(update_setlist).delete(delete_setlist),
+        )
         .route("/songs", post(create_song))
         .route(
             "/songs/{id}",
@@ -497,6 +710,8 @@ pub fn router(state: ServerState) -> Router {
         .route("/live/state", get(live_state))
         .route("/songs", get(list_songs))
         .route("/songs/{id}", get(get_song))
+        .route("/setlists", get(list_setlists))
+        .route("/setlists/{id}", get(get_setlist))
         .merge(control)
         .fallback(|| async { StatusCode::NOT_FOUND });
     Router::new()
@@ -707,6 +922,156 @@ mod tests {
         assert_eq!(live.slide_index, 2);
         assert!(!live.visible);
         assert_ne!(live.session, first.snapshot().session);
+    }
+
+    #[tokio::test]
+    async fn next_runs_through_a_whole_setlist_and_survives_a_restart() {
+        let (router, state) = app(LOCAL).await;
+        state.spawn_persistence();
+        let songs = state.db.list_songs().await.unwrap();
+        let grace = songs.iter().find(|s| s.title == "Amazing Grace").unwrap(); // 8 slides
+        let holy = songs
+            .iter()
+            .find(|s| s.title == "Holy, Holy, Holy")
+            .unwrap();
+        let body = format!(
+            r#"{{"name":"Friday","items":[
+                {{"kind":"song","song_id":"{}"}},
+                {{"kind":"announcement","title":"Potluck","text":"Potluck next Friday"}},
+                {{"kind":"song","song_id":"{}"}}]}}"#,
+            grace.id, holy.id
+        );
+        let (status, body) = call(&router, "POST", "/api/setlists", Some(&body), None).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let setlist: Setlist = serde_json::from_str(&body).unwrap();
+        let first = setlist.items[0].id().to_string();
+
+        let show = format!(
+            r#"{{"setlist_id":"{}","item_id":"{first}","slide_index":7}}"#,
+            setlist.id
+        );
+        assert_eq!(
+            call(&router, "POST", "/api/live/show-item", Some(&show), None)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        assert_eq!(state.snapshot().title, "Amazing Grace");
+
+        let next = Some(r#"{"type":"next"}"#);
+        let prev = Some(r#"{"type":"prev"}"#);
+        // Last slide of the song → the announcement.
+        call(&router, "POST", "/api/live/command", next, None).await;
+        let live = state.snapshot();
+        assert_eq!(live.title, "Potluck");
+        assert_eq!(live.song_id, None);
+        assert_eq!(live.slides[0].text, "Potluck next Friday");
+        // Prev from its first slide → back to the song's last slide.
+        call(&router, "POST", "/api/live/command", prev, None).await;
+        let live = state.snapshot();
+        assert_eq!(
+            (live.title.as_str(), live.slide_index),
+            ("Amazing Grace", 7)
+        );
+        // Next item twice → the last song; Next on its last slide stays put.
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"next_item"}"#),
+            None,
+        )
+        .await;
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"next_item"}"#),
+            None,
+        )
+        .await;
+        assert_eq!(state.snapshot().title, "Holy, Holy, Holy");
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"go_to","index":7}"#),
+            None,
+        )
+        .await;
+        call(&router, "POST", "/api/live/command", next, None).await;
+        let live = state.snapshot();
+        assert_eq!(
+            (live.title.as_str(), live.slide_index),
+            ("Holy, Holy, Holy", 7)
+        );
+
+        // Restart: the setlist position comes back.
+        for _ in 0..100 {
+            let saved = state
+                .db
+                .get_state(LIVE_STATE_KEY)
+                .await
+                .unwrap()
+                .unwrap_or_default();
+            if saved.contains(&setlist.items[2].id().to_string())
+                && saved.contains("\"slide_index\":7")
+            {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+        let restarted = ServerState::new(
+            Arc::new(|_| None),
+            state.db.clone(),
+            PinGuard::new("1".into()),
+            9100,
+        );
+        restarted.restore_live().await;
+        let live = restarted.snapshot();
+        assert_eq!(live.setlist_id.as_deref(), Some(setlist.id.as_str()));
+        assert_eq!(live.item_id.as_deref(), Some(setlist.items[2].id()));
+        assert_eq!(live.slide_index, 7);
+
+        // Showing a library song directly leaves setlist mode.
+        let solo = format!(r#"{{"song_id":"{}"}}"#, grace.id);
+        call(&router, "POST", "/api/live/show-song", Some(&solo), None).await;
+        assert_eq!(state.snapshot().setlist_id, None);
+    }
+
+    #[tokio::test]
+    async fn editing_the_announcement_on_air_updates_the_screen() {
+        let (router, state) = app(LOCAL).await;
+        let (_, body) = call(
+            &router,
+            "POST",
+            "/api/setlists",
+            Some(r#"{"name":"N","items":[{"kind":"announcement","title":"Welcome","text":"Hello"}]}"#),
+            None,
+        )
+        .await;
+        let setlist: Setlist = serde_json::from_str(&body).unwrap();
+        let item = setlist.items[0].id().to_string();
+        let show = format!(r#"{{"setlist_id":"{}","item_id":"{item}"}}"#, setlist.id);
+        call(&router, "POST", "/api/live/show-item", Some(&show), None).await;
+        let edit = format!(
+            r#"{{"name":"N","items":[{{"kind":"announcement","id":"{item}","title":"Welcome","text":"Hello everyone"}}]}}"#
+        );
+        let (status, _) = call(
+            &router,
+            "PUT",
+            &format!("/api/setlists/{}", setlist.id),
+            Some(&edit),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(state.snapshot().slides[0].text, "Hello everyone");
+        let blank = Some(r#"{"name":" ","items":[]}"#);
+        assert_eq!(
+            call(&router, "POST", "/api/setlists", blank, None).await.0,
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
     }
 
     #[tokio::test]

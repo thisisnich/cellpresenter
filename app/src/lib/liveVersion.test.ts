@@ -6,6 +6,8 @@ const state = (session: string, version: number): LiveState => ({
   session,
   version,
   song_id: null,
+  setlist_id: null,
+  item_id: null,
   title: "",
   slides: [],
   slide_index: 0,

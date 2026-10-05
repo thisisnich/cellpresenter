@@ -19,6 +19,11 @@ version: number,
  */
 song_id: string | null, 
 /**
+ * The setlist being run, and which of its items is on air. Next on an
+ * item's last slide moves to the following item.
+ */
+setlist_id: string | null, item_id: string | null, 
+/**
  * Title of the song on air.
  */
 title: string, slides: Array<Slide>, 

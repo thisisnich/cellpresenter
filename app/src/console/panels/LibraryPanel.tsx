@@ -5,11 +5,15 @@ import { t } from "../../i18n";
 import { api } from "../../lib/api";
 import { onLibraryChanged } from "../../lib/libraryEvents";
 import { openEditor } from "../openEditor";
+import { newId } from "../../domain/songEditing";
+import { useConsole } from "../ConsoleContext";
 import { useLive } from "../LiveContext";
 
-// Every song in the library, searchable. Clicking a song puts it on air.
+// Every song in the library, searchable. Click a song to preview it in the
+// Slides panel; + adds it to the open setlist.
 export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
-  const { state, showSong } = useLive();
+  const { state } = useLive();
+  const { select, selection, setlist, saveSetlist } = useConsole();
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState("");
@@ -66,11 +70,16 @@ export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
         )}
         {shown.map((song) => {
           const onAir = song.id === state?.song_id;
+          const selected = selection?.kind === "song" && selection.songId === song.id;
           return (
-            <div key={song.id} className={`group flex items-stretch rounded-cp ${onAir ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}>
+            <div
+              key={song.id}
+              className={`group flex items-stretch rounded-cp ${selected ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}
+              style={onAir ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
+            >
               <button
                 type="button"
-                onClick={() => void showSong(song.id)}
+                onClick={() => select({ kind: "song", songId: song.id })}
                 aria-current={onAir ? "true" : undefined}
                 className={`grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-2 py-2 text-left ${onAir ? "font-semibold" : ""}`}
               >
@@ -78,6 +87,17 @@ export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
                 <span className="font-mono text-[11px] text-cp-muted">{song.key ?? ""}</span>
                 {song.artist && <span className="col-span-2 truncate text-[12px] font-normal text-cp-muted">{song.artist}</span>}
               </button>
+              {setlist && (
+                <button
+                  type="button"
+                  onClick={() => void saveSetlist((items) => [...items, { kind: "song", id: newId(), song_id: song.id }])}
+                  aria-label={t("library.addToSetlist", { title: song.title, setlist: setlist.name })}
+                  title={t("library.addToSetlist", { title: song.title, setlist: setlist.name })}
+                  className="px-1.5 text-[16px] leading-none text-cp-muted opacity-60 group-hover:opacity-100 hover:text-cp-live focus-visible:opacity-100"
+                >
+                  +
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => openEditor(containerApi, song.id, song.title)}

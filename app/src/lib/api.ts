@@ -6,6 +6,10 @@ import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { PinInfo } from "../generated/PinInfo";
+import type { Setlist } from "../generated/Setlist";
+import type { SetlistInput } from "../generated/SetlistInput";
+import type { SetlistSummary } from "../generated/SetlistSummary";
+import type { ShowItem } from "../generated/ShowItem";
 import type { ShowSong } from "../generated/ShowSong";
 import type { Song } from "../generated/Song";
 import type { SongInput } from "../generated/SongInput";
@@ -76,6 +80,7 @@ export const api = {
   liveState: () => request<LiveState>("/api/live/state"),
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),
   showSong: (args: ShowSong) => request<LiveState>("/api/live/show-song", json("POST", args)),
+  showItem: (args: ShowItem) => request<LiveState>("/api/live/show-item", json("POST", args)),
 
   listSongs: () => request<SongSummary[]>("/api/songs"),
   getSong: (id: string) => request<Song>(`/api/songs/${encodeURIComponent(id)}`),
@@ -83,4 +88,11 @@ export const api = {
   updateSong: (id: string, input: SongInput) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}`, json("PUT", input)),
   deleteSong: (id: string) => request<void>(`/api/songs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  listSetlists: () => request<SetlistSummary[]>("/api/setlists"),
+  getSetlist: (id: string) => request<Setlist>(`/api/setlists/${encodeURIComponent(id)}`),
+  createSetlist: (input: SetlistInput) => request<Setlist>("/api/setlists", json("POST", input)),
+  updateSetlist: (id: string, input: SetlistInput) =>
+    request<Setlist>(`/api/setlists/${encodeURIComponent(id)}`, json("PUT", input)),
+  deleteSetlist: (id: string) => request<void>(`/api/setlists/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };

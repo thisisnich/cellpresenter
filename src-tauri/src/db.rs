@@ -8,6 +8,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePo
 use sqlx::{FromRow, Sqlite, Transaction};
 use uuid::Uuid;
 
+use crate::setlist::{Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary};
 use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSlide, SongSummary};
 
 pub type DbResult<T> = Result<T, sqlx::Error>;
@@ -494,6 +495,7 @@ impl Db {
         }
         let taken: Option<(i64,)> = match table {
             "sections" => sqlx::query_as("SELECT 1 FROM sections WHERE id = ?"),
+            "setlist_items" => sqlx::query_as("SELECT 1 FROM setlist_items WHERE id = ?"),
             _ => sqlx::query_as("SELECT 1 FROM slides WHERE id = ?"),
         }
         .bind(id)
@@ -504,6 +506,252 @@ impl Db {
         } else {
             id.to_string()
         })
+    }
+}
+
+#[derive(FromRow)]
+struct SetlistRow {
+    id: String,
+    name: String,
+    service_date: Option<String>,
+    updated_at: i64,
+}
+
+#[derive(FromRow)]
+struct SetlistSummaryRow {
+    id: String,
+    name: String,
+    service_date: Option<String>,
+    updated_at: i64,
+    item_count: i64,
+}
+
+#[derive(FromRow)]
+struct SetlistItemRow {
+    id: String,
+    kind: String,
+    song_id: Option<String>,
+    title: Option<String>,
+    body: Option<String>,
+    song_title: Option<String>,
+    song_key: Option<String>,
+    song_deleted: Option<i64>,
+}
+
+impl Db {
+    pub async fn list_setlists(&self) -> DbResult<Vec<SetlistSummary>> {
+        let rows: Vec<SetlistSummaryRow> = sqlx::query_as(
+            "SELECT s.id, s.name, s.service_date, s.updated_at,
+                    (SELECT COUNT(*) FROM setlist_items i WHERE i.setlist_id = s.id AND i.deleted_at IS NULL) AS item_count
+             FROM setlists s WHERE s.library_id = ? AND s.deleted_at IS NULL
+             ORDER BY s.service_date IS NULL, s.service_date DESC, s.updated_at DESC",
+        )
+        .bind(&self.library_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| SetlistSummary {
+                id: r.id,
+                name: r.name,
+                service_date: r.service_date,
+                item_count: r.item_count.max(0) as u32,
+                updated_at: r.updated_at,
+            })
+            .collect())
+    }
+
+    pub async fn get_setlist(&self, id: &str) -> DbResult<Option<Setlist>> {
+        let row: Option<SetlistRow> = sqlx::query_as(
+            "SELECT id, name, service_date, updated_at FROM setlists
+             WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .bind(&self.library_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else { return Ok(None) };
+        let items: Vec<SetlistItemRow> = sqlx::query_as(
+            "SELECT i.id, i.kind, i.song_id, i.title, i.body,
+                    s.title AS song_title, s.song_key AS song_key, s.deleted_at AS song_deleted
+             FROM setlist_items i LEFT JOIN songs s ON s.id = i.song_id
+             WHERE i.setlist_id = ? AND i.deleted_at IS NULL ORDER BY i.position",
+        )
+        .bind(id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(Some(Setlist {
+            id: row.id,
+            name: row.name,
+            service_date: row.service_date,
+            updated_at: row.updated_at,
+            items: items
+                .into_iter()
+                .map(|i| match i.kind.as_str() {
+                    "song" => SetlistItem::Song {
+                        id: i.id,
+                        song_id: i.song_id.unwrap_or_default(),
+                        missing: i.song_title.is_none() || i.song_deleted.is_some(),
+                        title: i.song_title.unwrap_or_default(),
+                        key: i.song_key,
+                    },
+                    _ => SetlistItem::Announcement {
+                        id: i.id,
+                        title: i.title.unwrap_or_default(),
+                        text: i.body.unwrap_or_default(),
+                    },
+                })
+                .collect(),
+        }))
+    }
+
+    pub async fn create_setlist(&self, input: &SetlistInput) -> DbResult<Setlist> {
+        let id = new_id();
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query(
+            "INSERT INTO setlists (id, library_id, name, service_date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&self.library_id)
+        .bind(input.name.trim())
+        .bind(&input.service_date)
+        .bind(now)
+        .bind(now)
+        .execute(&mut *tx)
+        .await?;
+        self.write_setlist_items(&mut tx, &id, &input.items, now)
+            .await?;
+        tx.commit().await?;
+        Ok(self.get_setlist(&id).await?.expect("setlist just created"))
+    }
+
+    pub async fn update_setlist(
+        &self,
+        id: &str,
+        input: &SetlistInput,
+    ) -> DbResult<Option<Setlist>> {
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        let updated = sqlx::query(
+            "UPDATE setlists SET name = ?, service_date = ?, updated_at = ?
+             WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(input.name.trim())
+        .bind(&input.service_date)
+        .bind(now)
+        .bind(id)
+        .bind(&self.library_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if updated == 0 {
+            return Ok(None);
+        }
+        self.write_setlist_items(&mut tx, id, &input.items, now)
+            .await?;
+        tx.commit().await?;
+        self.get_setlist(id).await
+    }
+
+    pub async fn delete_setlist(&self, id: &str) -> DbResult<bool> {
+        let now = now_ms();
+        let mut tx = self.pool.begin().await?;
+        let deleted = sqlx::query(
+            "UPDATE setlists SET deleted_at = ?, updated_at = ? WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(id)
+        .bind(&self.library_id)
+        .execute(&mut *tx)
+        .await?
+        .rows_affected();
+        if deleted > 0 {
+            sqlx::query("UPDATE setlist_items SET deleted_at = ?, updated_at = ? WHERE setlist_id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        tx.commit().await?;
+        Ok(deleted > 0)
+    }
+
+    async fn write_setlist_items(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        setlist_id: &str,
+        items: &[SetlistItemInput],
+        now: i64,
+    ) -> DbResult<()> {
+        let own: HashSet<String> =
+            sqlx::query_as::<_, (String,)>("SELECT id FROM setlist_items WHERE setlist_id = ?")
+                .bind(setlist_id)
+                .fetch_all(&mut **tx)
+                .await?
+                .into_iter()
+                .map(|(id,)| id)
+                .collect();
+        let mut kept = HashSet::new();
+        for (position, item) in items.iter().enumerate() {
+            let (requested, kind, song_id, title, body) = match item {
+                SetlistItemInput::Song { id, song_id } => {
+                    (id, "song", Some(song_id.as_str()), None, None)
+                }
+                SetlistItemInput::Announcement { id, title, text } => (
+                    id,
+                    "announcement",
+                    None,
+                    Some(title.trim()),
+                    Some(text.as_str()),
+                ),
+            };
+            let item_id = self.claim_id(tx, requested, &own, "setlist_items").await?;
+            if own.contains(&item_id) {
+                sqlx::query(
+                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, updated_at = ?, deleted_at = NULL
+                     WHERE id = ?",
+                )
+                .bind(position as i64)
+                .bind(kind)
+                .bind(song_id)
+                .bind(title)
+                .bind(body)
+                .bind(now)
+                .bind(&item_id)
+                .execute(&mut **tx)
+                .await?;
+            } else {
+                sqlx::query(
+                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                )
+                .bind(&item_id)
+                .bind(&self.library_id)
+                .bind(setlist_id)
+                .bind(position as i64)
+                .bind(kind)
+                .bind(song_id)
+                .bind(title)
+                .bind(body)
+                .bind(now)
+                .bind(now)
+                .execute(&mut **tx)
+                .await?;
+            }
+            kept.insert(item_id);
+        }
+        for id in own.difference(&kept) {
+            sqlx::query("UPDATE setlist_items SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+                .bind(now)
+                .bind(now)
+                .bind(id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        Ok(())
     }
 }
 
@@ -622,5 +870,87 @@ mod tests {
     async fn ids_are_uuid_v7() {
         let id = new_id();
         assert_eq!(Uuid::parse_str(&id).unwrap().get_version_num(), 7);
+    }
+
+    #[tokio::test]
+    async fn setlists_round_trip_reorder_and_flag_deleted_songs() {
+        let db = Db::in_memory().await.unwrap();
+        let a = db
+            .create_song(&input("Alpha", &[("V", None, &["a"])]))
+            .await
+            .unwrap();
+        let b = db
+            .create_song(&input("Beta", &[("V", None, &["b"])]))
+            .await
+            .unwrap();
+        let list = db
+            .create_setlist(&SetlistInput {
+                name: " Friday ".into(),
+                service_date: Some("2026-10-09".into()),
+                items: vec![
+                    SetlistItemInput::Song {
+                        id: None,
+                        song_id: a.id.clone(),
+                    },
+                    SetlistItemInput::Announcement {
+                        id: None,
+                        title: "Potluck".into(),
+                        text: "Next Friday".into(),
+                    },
+                    SetlistItemInput::Song {
+                        id: None,
+                        song_id: b.id.clone(),
+                    },
+                ],
+            })
+            .await
+            .unwrap();
+        assert_eq!(list.name, "Friday");
+        assert_eq!(list.items.len(), 3);
+        assert!(matches!(&list.items[0], SetlistItem::Song { title, .. } if title == "Alpha"));
+
+        // Reorder: Beta first, drop the announcement; ids are kept.
+        let beta_id = list.items[2].id().to_string();
+        let alpha_id = list.items[0].id().to_string();
+        let updated = db
+            .update_setlist(
+                &list.id,
+                &SetlistInput {
+                    name: "Friday".into(),
+                    service_date: None,
+                    items: vec![
+                        SetlistItemInput::Song {
+                            id: Some(beta_id.clone()),
+                            song_id: b.id.clone(),
+                        },
+                        SetlistItemInput::Song {
+                            id: Some(alpha_id.clone()),
+                            song_id: a.id.clone(),
+                        },
+                    ],
+                },
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            updated
+                .items
+                .iter()
+                .map(|i| i.id().to_string())
+                .collect::<Vec<_>>(),
+            [beta_id, alpha_id]
+        );
+        assert_eq!(db.list_setlists().await.unwrap()[0].item_count, 2);
+
+        db.delete_song(&a.id).await.unwrap();
+        let after = db.get_setlist(&list.id).await.unwrap().unwrap();
+        assert!(matches!(
+            &after.items[1],
+            SetlistItem::Song { missing: true, .. }
+        ));
+
+        assert!(db.delete_setlist(&list.id).await.unwrap());
+        assert!(db.list_setlists().await.unwrap().is_empty());
     }
 }

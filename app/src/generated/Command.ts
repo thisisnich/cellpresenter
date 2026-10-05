@@ -4,4 +4,4 @@
  * Every change to live state, from any client. Local buttons, the phone
  * remote and (later) the cloud live room all send these same messages.
  */
-export type Command = { "type": "next" } | { "type": "prev" } | { "type": "go_to", index: number, } | { "type": "toggle_visible" } | { "type": "set_visible", visible: boolean, } | { "type": "set_text_scale", scale: number, };
+export type Command = { "type": "next" } | { "type": "prev" } | { "type": "next_item" } | { "type": "prev_item" } | { "type": "go_to", index: number, } | { "type": "toggle_visible" } | { "type": "set_visible", visible: boolean, } | { "type": "set_text_scale", scale: number, };

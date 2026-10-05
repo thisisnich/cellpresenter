@@ -18,6 +18,8 @@ describe("commandForKey", () => {
     expect(commandForKey(key("b"))).toEqual({ type: "toggle_visible" });
     expect(commandForKey(key("."))).toEqual({ type: "toggle_visible" });
     expect(commandForKey(key("Home"))).toEqual({ type: "go_to", index: 0 });
+    expect(commandForKey(key("n"))).toEqual({ type: "next_item" });
+    expect(commandForKey(key("P"))).toEqual({ type: "prev_item" });
   });
 
   it("ignores shortcuts with modifiers and unknown keys", () => {

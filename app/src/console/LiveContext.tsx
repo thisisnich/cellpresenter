@@ -12,6 +12,8 @@ interface LiveContextValue {
   send: (command: LiveCommand) => Promise<void>;
   /** Put a library song on air. */
   showSong: (songId: string, slideIndex?: number) => Promise<void>;
+  /** Put a setlist item on air. */
+  showItem: (setlistId: string, itemId: string, slideIndex?: number) => Promise<void>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -39,9 +41,15 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     [run],
   );
 
+  const showItem = useCallback(
+    (setlistId: string, itemId: string, slideIndex = 0) =>
+      run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: slideIndex })),
+    [run],
+  );
+
   const value = useMemo(
-    () => ({ state, status, error, send, showSong }),
-    [state, status, error, send, showSong],
+    () => ({ state, status, error, send, showSong, showItem }),
+    [state, status, error, send, showSong, showItem],
   );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }
@@ -52,8 +60,7 @@ export function useLive(): LiveContextValue {
   return value;
 }
 
-/** Index of the slide after the live one (wraps, matching the Next command). */
+/** Index of the slide after the live one within the same item, if any. */
 export function nextIndex(state: LiveState): number | null {
-  const n = state.slides.length;
-  return n > 1 ? (state.slide_index + 1) % n : null;
+  return state.slide_index + 1 < state.slides.length ? state.slide_index + 1 : null;
 }
