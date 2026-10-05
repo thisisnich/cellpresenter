@@ -78,7 +78,11 @@ export function connectLive({ onState, onStatus }: LiveOptions): () => void {
     };
   };
 
-  open();
+  // Open on the next tick, not synchronously. React's dev-mode double mount
+  // disposes the first subscription immediately; deferring means that one
+  // never opens a socket, instead of opening and instantly closing it (which
+  // made the Vite proxy log EPIPE errors).
+  timer = window.setTimeout(open, 0);
 
   return () => {
     disposed = true;
