@@ -1,5 +1,7 @@
 import { useCallback, useState } from "react";
+import { t } from "../i18n";
 import { api } from "../lib/api";
+import { ROUTES } from "../lib/routes";
 import { useLiveState } from "../lib/useLiveState";
 import type { LiveState } from "../lib/ws";
 import { LyricSlide } from "../display/LyricSlide";
@@ -17,7 +19,7 @@ export default function ConsoleApp() {
       try {
         patch(await fn());
       } catch (err) {
-        setError(err instanceof Error ? err.message : "request failed");
+        setError(err instanceof Error ? err.message : t("console.requestFailed"));
       }
     },
     [patch],
@@ -31,13 +33,13 @@ export default function ConsoleApp() {
     <div className="flex h-screen flex-col bg-slate-950 text-slate-100">
       <header className="flex items-center justify-between gap-4 border-b border-slate-800 px-5 py-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">CellPresenter Console</h1>
-          <p className="text-xs text-slate-500">M1 spike — live state over /ws</p>
+          <h1 className="text-lg font-semibold tracking-tight">{t("console.title")}</h1>
+          <p className="text-xs text-slate-500">{t("console.subtitle")}</p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Preview</span>
+            <span className="text-xs text-slate-500">{t("console.preview")}</span>
             <div className="flex overflow-hidden rounded-lg border border-slate-800">
               {ASPECT_OPTIONS.map((opt) => (
                 <button
@@ -62,7 +64,7 @@ export default function ConsoleApp() {
                 : "rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400"
             }
           >
-            {connected ? "connected" : status}
+            {t(`connection.${status}`)}
           </span>
         </div>
       </header>
@@ -70,7 +72,7 @@ export default function ConsoleApp() {
       <div className="flex min-h-0 flex-1">
         <aside className="w-64 shrink-0 overflow-y-auto border-r border-slate-800 p-3">
           <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-slate-500">
-            Slides
+            {t("console.slides")}
           </p>
           <ul className="space-y-1">
             {state?.slides.map((slide, i) => (
@@ -99,7 +101,7 @@ export default function ConsoleApp() {
                 {state.visible ? (
                   <LyricSlide text={active} textScale={textScale} />
                 ) : (
-                  <p className="text-sm text-slate-500">display blacked out</p>
+                  <p className="text-sm text-slate-500">{t("console.blackedOut")}</p>
                 )}
               </Stage>
             </PreviewFrame>
@@ -110,18 +112,18 @@ export default function ConsoleApp() {
       <footer className="flex items-center justify-between gap-4 border-t border-slate-800 px-5 py-3">
         <div className="flex items-center gap-2">
           <button onClick={() => run(api.livePrev)} className="btn">
-            ← Prev
+            {t("console.prev")}
           </button>
           <button onClick={() => run(api.liveNext)} className="btn-primary">
-            Next →
+            {t("console.next")}
           </button>
           <button onClick={() => run(api.liveToggleVisible)} className="btn">
-            {state?.visible ? "Black out" : "Show"}
+            {state?.visible ? t("console.blackOut") : t("console.show")}
           </button>
         </div>
 
         <label className="flex items-center gap-3 text-sm text-slate-400">
-          Text size
+          {t("console.textSize")}
           <input
             type="range"
             min={0.6}
@@ -136,7 +138,7 @@ export default function ConsoleApp() {
 
         {error && <p className="truncate text-sm text-rose-400">{error}</p>}
         <p className="hidden shrink-0 text-xs text-slate-500 lg:block">
-          display: http://{location.host}/?view=display
+          {t("console.displayLink", { url: `http://${location.host}${ROUTES.display}` })}
         </p>
       </footer>
     </div>

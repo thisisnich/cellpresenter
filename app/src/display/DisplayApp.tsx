@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { t } from "../i18n";
 import { useLiveState } from "../lib/useLiveState";
 import { LyricSlide } from "./LyricSlide";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
@@ -43,12 +44,12 @@ export default function DisplayApp() {
           <LyricSlide text={active} textScale={textScale} />
         ) : (
           <p className="text-sm text-white/30">
-            {state ? "blacked out" : "no signal"}
+            {state ? t("display.blackedOut") : t("display.noSignal")}
           </p>
         )}
         {state && (
           <p className="absolute bottom-6 right-10 text-xl font-medium text-white/40">
-            {state.slide_index + 1} / {state.slides.length}
+            {t("display.slideCount", { current: state.slide_index + 1, total: state.slides.length })}
           </p>
         )}
       </Stage>
@@ -67,7 +68,7 @@ export default function DisplayApp() {
 
       {status !== "open" && (
         <p className="absolute top-6 right-8 text-xs text-white/40">
-          {status === "connecting" ? "connecting…" : "disconnected — reconnecting"}
+          {status === "connecting" ? t("connection.connecting") : t("display.reconnecting")}
         </p>
       )}
     </div>

@@ -1,146 +1,45 @@
 # CellPresenter Desktop — Build Roadmap
 
-Testable milestones. Every milestone ends in something you can demo or verify; if a milestone can't be tested from outside the code, it's too big. North-star spec: `.cursor/scopes/TauriDesktop.md`.
+Free, open-source worship lyrics presentation. Cell groups first; built so it can grow into a ProPresenter alternative for bands and churches. North-star spec: `.cursor/scopes/TauriDesktop.md`. Live planning page (picks, build flow, open questions): https://claude.ai/artifact/HATbm1KBkEFxuebpVW1aqP
 
-## Critical path (the MVP spine)
+Every step ends in something you can demo or verify from outside the code. Built solo at about an hour a day, so releases stay small.
 
-```
-Server serves SPA → live state broadcasts over WS → console mutates → display renders → reachable on LAN → native projector window
-```
+## Done
 
-Everything hangs off the M1 spike. The data model, chord parser, and media are all *additive* once the live loop holds. Build the spine first, decorate later.
+- **M0** — Tauri v2 + axum + React SPA dev loop.
+- **M1** — Live state over WebSocket; a phone on the LAN and the native window stay in sync. Fixed 1920×1080 stage renders identically across devices.
 
----
+## R1 — "My cell group runs on it"
 
-## M0 — Repo skeleton + dev workflow  (~½ day)
+Goal: run a cell group night on the new app instead of the web app. ~200–240 h estimated.
 
-**Goal:** one command opens the app in dev with hot reload.
+| Step | Items | Status |
+|---|---|---|
+| 1. Groundwork | Bundled UI in release builds · server binds before windows open, port fallback in release · Tauri's async runtime · real page addresses (`/display`) · tests + CI · translatable UI text · parity list | **done** (branch `r1/groundwork`) |
+| 2. Backend core + workspace | Split backend into a tested reducer · Dockview workspace shell with the A1 default layout and theme tokens (colours, radius, borders as CSS variables) · transpose + capo (TS) · smarter caching | caching done in step 1 |
+| 3. Song library | SQLite with sync-ready ids (UUIDv7, `updated_at`, soft delete, `library_id`) · versioned live updates · PIN for controls · keyboard + clicker control · generated TS types | |
+| 4. Content + live state | Paste lyrics → slides (explicit lines, font fits the longest line) · setlists + announcements · song arrangements · image backgrounds · live state holds pointers, not content | |
+| 5. Screens + search | Live/Next previews · phone remote page · audience phone view · chords view for musicians · song search (own library, paste/URL import, public-domain hymns) | |
 
-**Build:**
-- Repo layout: `app/` (Vite + React + TS SPA) and `src-tauri/` (Tauri v2)
-- Axum stub boots on a fixed dev port; `/api/health` returns ok
-- Vite dev proxy forwards `/api`, `/ws`, `/media`, `/native` → axum (so `lib/api.ts` always uses relative URLs — same origin in dev and prod)
-- Native windows point at Vite (`localhost:5173`) in dev, at the axum server in prod (runtime choice at window creation)
+**Test for R1:** build a setlist from pasted chord sheets, run it from the console and a phone, and a musician's phone shows lyrics + chords in the transposed key.
 
-**Test:** `npm run tauri dev` opens a window showing the React page; `curl /api/health` → 200.
+## R2 — "Share with the team"
 
-**Lock before you start:** dev base-URL scheme (Vite proxy), default port (pick one, e.g. `9100`), live-state protocol shape (snapshot-on-connect + versioned deltas).
+Accounts + cloud library (text and thumbnails always synced; full media stays on the home laptop) · setlist share links with chords · remote live control (sign-in + per-session room code; LAN stays the default) · ChordPro / OpenLyrics / plain-text import · Operate / Prepare modes · first-run guide · open-source licence + contributor docs.
 
----
+## R3 — "Other churches"
 
-## M1 — Spike: server-served app + live broadcast  (1–2 days)
+Remote editing from another PC · team invites · opt-in media upload with temporary cloud copies · self-hostable cloud server (same Rust server, headless, one Docker image) · multiple output looks · undo · auto-update · Mac code signing · templates · timer + operator notes · more languages and scripts.
 
-**Goal (the product thesis):** a phone on the LAN *and* the native window both see live slide changes. If this works, the architecture is right. This is the milestone that de-risks everything.
+## Principles
 
-**Build:**
-- Axum serves the built SPA at `/app/*`
-- Live state in Rust: `Arc<RwLock<LiveState>>` + `tokio::sync::broadcast`
-- `/ws` endpoint: full snapshot on connect, then deltas
-- `/native/next`, `/native/prev` (localhost-only) flip a placeholder slide index
-- Minimal console page (Next / Prev buttons) + display page (renders "Song X · Slide Y")
-- Tauri window opens `http://127.0.0.1:PORT/app/console` via `WebviewUrl::External`
-
-**Test:**
-1. `npm run build` then `npm run tauri dev` → console window appears
-2. Open `http://<LAN-IP>:PORT/app/display` on a phone → shows slide 0
-3. Clicking Next in the console advances the phone instantly
-4. ⚠️ **Verify the built SPA + a test video background render on Linux WebKitGTK** — the biggest webview-variance risk; fail fast here
-
----
-
-## M2 — Data foundation  (2–3 days)
-
-**Goal:** songs/slides persist in SQLite; console and display read the same data.
-
-**Build:**
-- sqlx + SQLite; core tables (`songs`, `sections`, `slides`)
-- `/api/songs`, `/api/songs/:id` (nested sections/slides), CRUD
-- Live state references real songs; snapshot includes current song + slides
-- SPA skeleton: `lib/api.ts` (fetch), `lib/ws.ts` (reconnect + snapshot/delta), live-state hook
-- Single-instance plugin; bind `0.0.0.0:PORT` with a clear message if the port is busy
-
-**Test:** create a song with 2 sections × 3 slides via `curl`, read it back; connect a WS client → snapshot; navigate via API → delta arrives.
-
----
-
-## M3 — Domain: songs, chords, import  (2–4 days)
-
-**Goal:** real song editing and import work.
-
-**Build:**
-- Song model + section/slide editing logic in `app/src/domain/` (pure, unit-tested)
-- Chord parser (TS): chord-sheet text → slides; `transpose`, `applyCapo`, `detectKey` — port the logic from `cellpresenter-web`'s pure utils
-- JSON import from the web app's export format
-- Rust port of the parser only if a concrete server need appears (start TS-only)
-
-**Test:** unit tests for the parser; import a real chord sheet → preview slides; transpose +2 / apply capo → correct chords; restart the app → song persists.
-
----
-
-## M4 — Console workspace (Dockview)  (4–6 days)
-
-**Goal:** an operator can run a whole service from the console.
-
-**Build:**
-- Dockview shell with panels: song library, song editor, setlist, notes, timer, media, templates, share/display links
-- Panel add/close/dock/floating; layout persisted (localStorage — operator console only)
-- Live controls: go live, next / prev / clear, visibility toggle
-- **Layering rule from day one:** UI components never touch fetch/WS — only `lib/api.ts` + the live-state hook
-
-**Test:** create song → build setlist → go live → advance slides → everything shows on display; restart app → library + layout intact; drag/dock panels work.
-
----
-
-## M5 — Display renderers  (3–5 days)
-
-**Goal:** projector output looks right.
-
-**Build:**
-- `MainDisplay`, `ChordsDisplay`, `MobileChordsDisplay`, `SetlistDisplay` — rewritten, borrowing the web app's visual language
-- Backgrounds + `/media/*` serving; per-section / per-slide background inheritance
-- CCLI + watermark
-
-**Test:** phone display shows the right slide with background; chords display transposes correctly; watermark shows.
-
----
-
-## M6 — Remote + native windows  (2–4 days)
-
-**Goal:** full MVP success criteria.
-
-**Build:**
-- Remote phone/tablet console view (navigate, visibility)
-- Display tokens (`/app/display?token=…`) backed by the `presentations` table
-- Native projector window on a second monitor (position-then-show, always-on-top)
-- LAN discovery via mDNS (`mdns-sd`) — phone finds the console without typing an IP
-
-**Test:** MVP criteria — projector window on the machine *and* a phone on the LAN both show live-synced slides.
-
----
-
-## M7 — Polish  (ongoing)
-
-Keyboard shortcuts, undo, layout-persistence robustness, exports (JSON/PDF), auto-update (`tauri-plugin-updater`), settings page, tunnel story doc.
-
----
-
-## What to start with
-
-**M0 → M1, in one push.** M1 simultaneously de-risks the four scariest unknowns:
-1. Tauri window loading a server URL (works — verified)
-2. LAN reachability of the embedded server
-3. WS broadcast + stateless display clients
-4. Linux WebKitGTK rendering the built SPA + video backgrounds
-
-M2 and M3 are bigger but purely additive once the spine holds. Do **not** start SQLite, chord parsing, or Dockview layout before M1 — they don't change whether the architecture works, and you'll be testing the hard thing (the live loop) last instead of first.
+- **LAN first.** Live control never needs the internet; the cloud is a fallback and a sharing layer.
+- **The desktop app owns live state.** Every screen, including the app's own windows, is a web client of its embedded server.
+- **Domain logic in TypeScript** (`app/src/domain/`), unit-tested. Rust stays a thin layer for state, storage and serving.
+- **One data-access module.** UI components never call `fetch` or the WebSocket directly.
+- **All UI text goes through `t()`** (`app/src/i18n/`).
 
 ## Known issues (KIV — deferred)
 
-- **Cross-device line wrapping (M1).** The Stage (1920×1080 canvas, uniform fit-scale) guarantees *proportional* text size on every screen, but auto-wrapping is still font-metric-dependent: a client that lays out with a fallback font (or engine-specific rasterization — WebKitGTK vs Chrome mobile vs Firefox) can break lines earlier at the same ratio. Verified on small screens. **Proper fix (M3, with the data model): never auto-wrap — store slides as explicit lines and size the font to fit the longest line** (what ProPresenter/EasyWorship do). Mitigations so far: bundled Inter + font-readiness gate before first paint + `Cache-Control: no-cache`.
-
-## Decisions to lock before M0
-
-- **Dev base URL:** Vite dev server + proxy for `/api`, `/ws`, `/media`, `/native`; native windows target Vite in dev, axum in prod
-- **Default port:** reserve one now (e.g. `9100`), configurable, with EADDRINUSE handling
-- **Live-state protocol:** snapshot-on-connect + versioned deltas; client re-requests snapshot on version gap
-- **Data-access rule:** only `lib/api.ts` + the live-state hook talk to the server
+- **Cross-device line wrapping.** The stage guarantees proportional text size on every screen, but auto-wrapping still depends on font metrics, so engines can break lines differently. Fix lands with the song library in R1 step 4: store slides as explicit lines and size the font to fit the longest line.
+- **Dev builds need port 9100.** The Vite proxy targets it. Release builds fall back to other ports automatically.

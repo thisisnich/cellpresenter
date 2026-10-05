@@ -2,6 +2,17 @@
 
 Architecture spec. North star for the new repo. Rewrite of `cellpresenter-web` from scratch — new architecture, all components rewritten (no code ported).
 
+**Decisions update (2026-10-05)** — these override the sections below where they conflict:
+- **Free and open source**, cell groups first, built to grow into a band/church tool. Volunteer teenagers must be able to run it.
+- **Dockview workspace with an opinionated default layout.** Design direction **A1 "Slide Grid"** (dark, clean sans, slide thumbnails colour-coded by section, Live/Next output, clear buttons): setlist/library panel on the left, slides centre, output/stage on the right, transport bar at the bottom. It ships as the default layout plus a few presets, and panels can be rearranged and saved. Other views (Chords, Edit, Notes, Stage, Media) are panels or modes in the same workspace. Live/Next previews, big controls, keyboard and clicker support are core.
+- **Themeable from day one:** every colour, the corner radius and border widths are design tokens (CSS variables), so colour swatches and themes can be added later without touching components. Design canvas: https://claude.ai/artifact/BRMwEjkNm4ZGjm5dxLjNYh
+- **Accounts and cloud sync are in scope (R2/R3)**, layered on top of local-first. Live control stays on the LAN by default; a cloud live room (sign-in + per-session code) is the fallback. The cloud library always holds text and thumbnails; full media stays on the home laptop and is copied to the cloud only temporarily.
+- **Self-hostable:** the cloud side is the same Rust server running headless (one Docker image, SQLite, S3-compatible storage), not vendor-specific services.
+- **Sync-ready data from day one:** UUIDv7 ids, `updated_at`, soft delete (`deleted_at`) and `library_id` on every row.
+- **Routes:** console at `/`, display at `/display` (later `/remote`, `/stage`). No `/app` prefix; Vite emits absolute `/assets` paths.
+- **UI text goes through `t()`** in `app/src/i18n/` so other languages are a catalog, not a rewrite.
+- Release plan: `ROADMAP.md` (R1 / R2 / R3). Parity with the web app: `docs/PARITY.md`.
+
 **Locked decisions (2026-08-09):** Tauri v2 shell · Rust backend (axum + sqlx) · webview loads the UI **from the embedded server URL** (console is byte-for-byte the same client as phones) · Dockview for the console workspace · all components rewritten from scratch.
 
 ## Purpose
