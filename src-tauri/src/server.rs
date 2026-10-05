@@ -21,6 +21,7 @@ use uuid::Uuid;
 use crate::auth::{Denied, PinGuard};
 use crate::db::Db;
 use crate::live::{Command, LiveState};
+use crate::network::{self, NetworkInfo};
 use crate::song::{Song, SongInput, SongSummary};
 
 /// Preferred port. The Vite dev proxy targets it, so dev builds use it only.
@@ -57,10 +58,11 @@ pub struct ServerState {
     assets: AssetLookup,
     db: Db,
     pins: Arc<PinGuard>,
+    port: u16,
 }
 
 impl ServerState {
-    pub fn new(assets: AssetLookup, db: Db, pins: PinGuard) -> Self {
+    pub fn new(assets: AssetLookup, db: Db, pins: PinGuard, port: u16) -> Self {
         let (tx, _) = broadcast::channel(64);
         let session = Uuid::new_v4().simple().to_string();
         Self {
@@ -69,6 +71,7 @@ impl ServerState {
             assets,
             db,
             pins: Arc::new(pins),
+            port,
         }
     }
 
@@ -208,6 +211,14 @@ async fn health() -> Json<Health> {
     Json(Health {
         status: "ok",
         version: env!("CARGO_PKG_VERSION"),
+    })
+}
+
+/// Where phones can reach this computer, for the console's display link.
+async fn network_info(State(s): State<ServerState>) -> Json<NetworkInfo> {
+    Json(NetworkInfo {
+        port: s.port,
+        addresses: network::addresses(),
     })
 }
 
@@ -416,6 +427,7 @@ pub fn router(state: ServerState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .route("/pin", get(pin))
+        .route("/network", get(network_info))
         .route("/live/state", get(live_state))
         .route("/songs", get(list_songs))
         .route("/songs/{id}", get(get_song))
@@ -443,7 +455,7 @@ mod tests {
     async fn app(peer: &str) -> (Router, ServerState) {
         let db = Db::in_memory().await.unwrap();
         seed_if_empty(&db).await.unwrap();
-        let state = ServerState::new(Arc::new(|_| None), db, PinGuard::new("4321".into()));
+        let state = ServerState::new(Arc::new(|_| None), db, PinGuard::new("4321".into()), 9100);
         let router =
             router(state.clone()).layer(MockConnectInfo(peer.parse::<SocketAddr>().unwrap()));
         (router, state)

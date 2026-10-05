@@ -4,6 +4,7 @@
 // so same-origin holds in both worlds.
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
+import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { PinInfo } from "../generated/PinInfo";
 import type { ShowSong } from "../generated/ShowSong";
 import type { Song } from "../generated/Song";
@@ -70,6 +71,7 @@ const json = (method: string, body: unknown): RequestInit => ({ method, body: JS
 export const api = {
   health: () => request<Health>("/api/health"),
   pin: () => request<PinInfo>("/api/pin"),
+  network: () => request<NetworkInfo>("/api/network"),
 
   liveState: () => request<LiveState>("/api/live/state"),
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),

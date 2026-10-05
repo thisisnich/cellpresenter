@@ -21,8 +21,10 @@ export interface LiveOptions {
   onStatus?: (status: ConnectionStatus) => void;
 }
 
-const RECONNECT_BASE_MS = 500;
-const RECONNECT_MAX_MS = 10_000;
+// Retry quickly: a display that sits on "no signal" for long during a service
+// is worse than a few extra connection attempts on a local network.
+const RECONNECT_BASE_MS = 250;
+const RECONNECT_MAX_MS = 2_000;
 
 export function connectLive({ onState, onStatus }: LiveOptions): () => void {
   let disposed = false;
@@ -32,6 +34,7 @@ export function connectLive({ onState, onStatus }: LiveOptions): () => void {
 
   const scheduleReconnect = () => {
     if (disposed) return;
+    window.clearTimeout(timer);
     const delay = Math.min(RECONNECT_BASE_MS * 2 ** retry, RECONNECT_MAX_MS);
     retry += 1;
     timer = window.setTimeout(open, delay);
@@ -58,6 +61,7 @@ export function connectLive({ onState, onStatus }: LiveOptions): () => void {
       }
     };
     socket.onclose = () => {
+      socket = null;
       onStatus?.("closed");
       scheduleReconnect();
     };
@@ -72,9 +76,23 @@ export function connectLive({ onState, onStatus }: LiveOptions): () => void {
   // made the Vite proxy log EPIPE errors).
   timer = window.setTimeout(open, 0);
 
+  // A phone waking up or a tab coming back shouldn't wait out the backoff.
+  const retryNow = () => {
+    if (disposed || socket || document.visibilityState === "hidden") return;
+    window.clearTimeout(timer);
+    retry = 0;
+    open();
+  };
+  window.addEventListener("focus", retryNow);
+  window.addEventListener("online", retryNow);
+  document.addEventListener("visibilitychange", retryNow);
+
   return () => {
     disposed = true;
     if (timer !== undefined) window.clearTimeout(timer);
+    window.removeEventListener("focus", retryNow);
+    window.removeEventListener("online", retryNow);
+    document.removeEventListener("visibilitychange", retryNow);
     socket?.close();
   };
 }

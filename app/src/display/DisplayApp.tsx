@@ -52,7 +52,7 @@ export default function DisplayApp() {
           <LyricSlide text={active} textScale={textScale} />
         ) : (
           <p className="text-sm text-white/30">
-            {state ? t("display.blackedOut") : t("display.noSignal")}
+            {state ? t("display.blackedOut") : status === "closed" ? t("display.noSignal") : t("connection.connecting")}
           </p>
         )}
         {state && (

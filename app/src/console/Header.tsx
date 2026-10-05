@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../lib/api";
-import { ROUTES } from "../lib/routes";
+import { DisplayLink } from "./DisplayLink";
 import { useLive } from "./LiveContext";
 
 function useClock(): string {
@@ -23,8 +23,6 @@ const MODES = [
 export function Header({ onResetLayout }: { onResetLayout: () => void }) {
   const { status } = useLive();
   const clock = useClock();
-  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
-  const displayUrl = `${location.protocol}//${location.host}${ROUTES.display}`;
   const [pin, setPin] = useState<string | null>(null);
   useEffect(() => {
     api
@@ -32,17 +30,6 @@ export function Header({ onResetLayout }: { onResetLayout: () => void }) {
       .then((info) => setPin(info.pin))
       .catch(() => setPin(null)); // Only the laptop running the app may see it.
   }, []);
-
-  const copyLink = async () => {
-    try {
-      await navigator.clipboard.writeText(displayUrl);
-      setCopied("copied");
-      window.setTimeout(() => setCopied("idle"), 1500);
-    } catch {
-      // Clipboard blocked: show the address so it can be typed or selected.
-      setCopied("failed");
-    }
-  };
 
   return (
     <header className="flex min-h-12 flex-wrap items-center justify-between gap-3 border-b-cp bg-cp-chrome px-4 font-ui text-[13px] text-cp-text">
@@ -82,10 +69,7 @@ export function Header({ onResetLayout }: { onResetLayout: () => void }) {
           <span className={`size-[7px] rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} />
           {t(`connection.${status}`)}
         </span>
-        {copied === "failed" && <span className="font-mono text-[12px] text-cp-text select-all">{displayUrl}</span>}
-        <button type="button" onClick={copyLink} className="cp-btn" title={displayUrl}>
-          {copied === "copied" ? t("header.copied") : t("header.copyDisplayLink")}
-        </button>
+        <DisplayLink />
       </div>
     </header>
   );

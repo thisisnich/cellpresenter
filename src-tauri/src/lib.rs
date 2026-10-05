@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod live;
+mod network;
 mod seed;
 mod server;
 mod song;
@@ -85,7 +86,7 @@ pub fn run() {
                 })
             });
             let pins = PinGuard::random();
-            let state = ServerState::new(assets, db, pins);
+            let state = ServerState::new(assets, db, pins, port);
             tauri::async_runtime::spawn(async move {
                 let app = server::router(state).into_make_service_with_connect_info::<SocketAddr>();
                 if let Err(e) = axum::serve(listener, app).await {
