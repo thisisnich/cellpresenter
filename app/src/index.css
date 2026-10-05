@@ -30,6 +30,9 @@
 @utility border-t-cp {
   border-top: var(--cp-border-width) solid var(--cp-line);
 }
+@utility border-l-cp {
+  border-left: var(--cp-border-width) solid var(--cp-line);
+}
 @utility border-b-cp {
   border-bottom: var(--cp-border-width) solid var(--cp-line);
 }

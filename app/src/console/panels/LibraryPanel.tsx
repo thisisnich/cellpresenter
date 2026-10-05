@@ -1,11 +1,14 @@
+import type { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SongSummary } from "../../generated/SongSummary";
 import { t } from "../../i18n";
 import { api } from "../../lib/api";
+import { onLibraryChanged } from "../../lib/libraryEvents";
+import { openEditor } from "../openEditor";
 import { useLive } from "../LiveContext";
 
 // Every song in the library, searchable. Clicking a song puts it on air.
-export function LibraryPanel() {
+export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
   const { state, showSong } = useLive();
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
@@ -21,6 +24,7 @@ export function LibraryPanel() {
   }, []);
   useEffect(() => {
     void load();
+    return onLibraryChanged(() => void load());
   }, [load]);
 
   const shown = useMemo(() => {
@@ -31,7 +35,10 @@ export function LibraryPanel() {
 
   return (
     <div className="flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text">
-      <div className="border-b-cp p-3">
+      <div className="flex flex-col gap-2 border-b-cp p-3">
+        <button type="button" onClick={() => openEditor(containerApi, null)} className="cp-btn w-full">
+          {t("library.newSong")}
+        </button>
         <label htmlFor="library-search" className="sr-only">
           {t("library.search")}
         </label>
@@ -60,19 +67,30 @@ export function LibraryPanel() {
         {shown.map((song) => {
           const onAir = song.id === state?.song_id;
           return (
-            <button
-              key={song.id}
-              type="button"
-              onClick={() => void showSong(song.id)}
-              aria-current={onAir ? "true" : undefined}
-              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-cp px-2 py-2 text-left ${
-                onAir ? "bg-cp-surface-hi font-semibold" : "hover:bg-cp-surface"
-              }`}
-            >
-              <span className="truncate">{song.title}</span>
-              <span className="font-mono text-[11px] text-cp-muted">{song.key ?? ""}</span>
-              {song.artist && <span className="col-span-2 truncate text-[12px] font-normal text-cp-muted">{song.artist}</span>}
-            </button>
+            <div key={song.id} className={`group flex items-stretch rounded-cp ${onAir ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}>
+              <button
+                type="button"
+                onClick={() => void showSong(song.id)}
+                aria-current={onAir ? "true" : undefined}
+                className={`grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-2 py-2 text-left ${onAir ? "font-semibold" : ""}`}
+              >
+                <span className="truncate">{song.title}</span>
+                <span className="font-mono text-[11px] text-cp-muted">{song.key ?? ""}</span>
+                {song.artist && <span className="col-span-2 truncate text-[12px] font-normal text-cp-muted">{song.artist}</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => openEditor(containerApi, song.id, song.title)}
+                aria-label={t("library.edit", { title: song.title })}
+                title={t("library.edit", { title: song.title })}
+                className="px-2 text-cp-muted opacity-60 group-hover:opacity-100 hover:text-cp-text focus-visible:opacity-100"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M12 20h9" />
+                  <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                </svg>
+              </button>
+            </div>
           );
         })}
       </div>
