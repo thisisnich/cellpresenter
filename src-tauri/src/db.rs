@@ -131,6 +131,28 @@ impl Db {
         Ok(count == 0)
     }
 
+    /// Read an app-wide value saved with `set_state`.
+    pub async fn get_state(&self, key: &str) -> DbResult<Option<String>> {
+        let row: Option<(String,)> = sqlx::query_as("SELECT value FROM app_state WHERE key = ?")
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await?;
+        Ok(row.map(|(v,)| v))
+    }
+
+    pub async fn set_state(&self, key: &str, value: &str) -> DbResult<()> {
+        sqlx::query(
+            "INSERT INTO app_state (key, value, updated_at) VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        )
+        .bind(key)
+        .bind(value)
+        .bind(now_ms())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {
         let rows: Vec<SongRow> = sqlx::query_as(
             "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at

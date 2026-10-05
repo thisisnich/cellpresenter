@@ -87,7 +87,9 @@ pub fn run() {
             });
             let pins = PinGuard::random();
             let state = ServerState::new(assets, db, pins, port);
+            tauri::async_runtime::block_on(state.restore_live());
             tauri::async_runtime::spawn(async move {
+                state.spawn_persistence();
                 let app = server::router(state).into_make_service_with_connect_info::<SocketAddr>();
                 if let Err(e) = axum::serve(listener, app).await {
                     eprintln!("cellpresenter: embedded server stopped: {e}");

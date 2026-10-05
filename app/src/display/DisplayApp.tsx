@@ -48,14 +48,18 @@ export default function DisplayApp() {
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black">
       <Stage>
-        {state && shown ? (
-          <LyricSlide text={active} textScale={textScale} />
-        ) : (
-          <p className="text-sm text-white/30">
-            {state ? t("display.blackedOut") : status === "closed" ? t("display.noSignal") : t("connection.connecting")}
+        {/* Sizes here are stage pixels (1920 wide), so messages stay readable
+            when the stage is scaled down to a phone. Blacked out = nothing. */}
+        {!state && (
+          <p className="text-5xl text-white/40">
+            {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
           </p>
         )}
-        {state && (
+        {state && shown && state.slides.length > 0 && <LyricSlide text={active} textScale={textScale} />}
+        {state && shown && state.slides.length === 0 && (
+          <p className="text-4xl text-white/25">{t("display.waiting")}</p>
+        )}
+        {state && shown && state.slides.length > 0 && (
           <p className="absolute bottom-6 right-10 text-xl font-medium text-white/40">
             {t("display.slideCount", { current: state.slide_index + 1, total: state.slides.length })}
           </p>

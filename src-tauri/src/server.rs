@@ -94,6 +94,72 @@ impl ServerState {
     }
 }
 
+// ---------- surviving a restart ----------
+
+const LIVE_STATE_KEY: &str = "live";
+
+/// The part of live state worth restoring after a restart or crash: which
+/// song, where in it, and how the screen looked.
+#[derive(Serialize, Deserialize)]
+struct SavedLive {
+    song_id: Option<String>,
+    slide_index: usize,
+    visible: bool,
+    text_scale: f64,
+}
+
+impl ServerState {
+    /// Put back whatever was on air when the app last stopped.
+    pub async fn restore_live(&self) {
+        let saved = match self.db.get_state(LIVE_STATE_KEY).await {
+            Ok(Some(json)) => serde_json::from_str::<SavedLive>(&json).ok(),
+            _ => None,
+        };
+        let Some(saved) = saved else { return };
+        let song = match &saved.song_id {
+            Some(id) => self.db.get_song(id).await.ok().flatten(),
+            None => None,
+        };
+        self.mutate(|l| {
+            if let Some(song) = song {
+                let slides = song.live_slides();
+                l.show_song(song.id, song.title, slides, saved.slide_index);
+            }
+            l.visible = saved.visible;
+            l.apply(Command::SetTextScale {
+                scale: saved.text_scale,
+            });
+        });
+    }
+
+    /// Save live state whenever it changes. Bursts (a held arrow key) are
+    /// coalesced so only the latest state is written.
+    pub fn spawn_persistence(&self) -> tokio::task::JoinHandle<()> {
+        let mut rx = self.tx.subscribe();
+        let state = self.clone();
+        tokio::spawn(async move {
+            loop {
+                match rx.recv().await {
+                    Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(broadcast::error::RecvError::Closed) => break,
+                }
+                while rx.try_recv().is_ok() {}
+                let live = state.snapshot();
+                let saved = SavedLive {
+                    song_id: live.song_id,
+                    slide_index: live.slide_index,
+                    visible: live.visible,
+                    text_scale: live.text_scale,
+                };
+                let json = serde_json::to_string(&saved).expect("serialize saved live state");
+                if let Err(e) = state.db.set_state(LIVE_STATE_KEY, &json).await {
+                    eprintln!("cellpresenter: couldn't save live state: {e}");
+                }
+            }
+        })
+    }
+}
+
 // ---------- port binding ----------
 
 /// Ports to try, in order. Port 0 lets the OS pick a free one.
@@ -595,6 +661,52 @@ mod tests {
         let live = state.snapshot();
         assert_eq!(live.title, "Renamed");
         assert_eq!(live.slides[0].text, "New line");
+    }
+
+    #[tokio::test]
+    async fn what_was_on_air_survives_a_restart() {
+        let (router, first) = app(LOCAL).await;
+        first.spawn_persistence();
+        let id = first.db.list_songs().await.unwrap()[0].id.clone();
+        call(
+            &router,
+            "POST",
+            "/api/live/show-song",
+            Some(&format!(r#"{{"song_id":"{id}","slide_index":2}}"#)),
+            None,
+        )
+        .await;
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"toggle_visible"}"#),
+            None,
+        )
+        .await;
+
+        // Wait for the background save.
+        for _ in 0..100 {
+            if let Some(json) = first.db.get_state(LIVE_STATE_KEY).await.unwrap() {
+                if json.contains("\"visible\":false") {
+                    break;
+                }
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        }
+
+        let second = ServerState::new(
+            Arc::new(|_| None),
+            first.db.clone(),
+            PinGuard::new("1".into()),
+            9100,
+        );
+        second.restore_live().await;
+        let live = second.snapshot();
+        assert_eq!(live.song_id.as_deref(), Some(id.as_str()));
+        assert_eq!(live.slide_index, 2);
+        assert!(!live.visible);
+        assert_ne!(live.session, first.snapshot().session);
     }
 
     #[tokio::test]

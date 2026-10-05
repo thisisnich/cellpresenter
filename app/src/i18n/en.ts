@@ -70,8 +70,8 @@ export const en = {
   "connection.connecting": "Connecting…",
   "connection.closed": "Disconnected",
 
-  "display.blackedOut": "Blacked out",
   "display.noSignal": "No signal",
+  "display.waiting": "Waiting for a song",
   "display.reconnecting": "Disconnected — reconnecting",
   "display.slideCount": "{current} / {total}",
 } as const;
