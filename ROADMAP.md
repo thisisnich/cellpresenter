@@ -16,7 +16,7 @@ Goal: run a cell group night on the new app instead of the web app. ~200–240 h
 | Step | Items | Status |
 |---|---|---|
 | 1. Groundwork | Bundled UI in release builds · server binds before windows open, port fallback in release · Tauri's async runtime · real page addresses (`/display`) · tests + CI · translatable UI text · parity list | **done** (branch `r1/groundwork`) |
-| 2. Backend core + workspace | Split backend into a tested reducer · Dockview workspace shell with the A1 default layout and theme tokens (colours, radius, borders as CSS variables) · transpose + capo (TS) · smarter caching | caching done in step 1 |
+| 2. Backend core + workspace | Split backend into a tested reducer · Dockview workspace shell with the A1 default layout and theme tokens (colours, radius, borders as CSS variables) · transpose + capo (TS) · smarter caching | **done** (branch `r1/workspace`) |
 | 3. Song library | SQLite with sync-ready ids (UUIDv7, `updated_at`, soft delete, `library_id`) · versioned live updates · PIN for controls · keyboard + clicker control · generated TS types | |
 | 4. Content + live state | Paste lyrics → slides (explicit lines, font fits the longest line) · setlists + announcements · song arrangements · image backgrounds · live state holds pointers, not content | |
 | 5. Screens + search | Live/Next previews · phone remote page · audience phone view · chords view for musicians · song search (own library, paste/URL import, public-domain hymns) | |
@@ -41,5 +41,5 @@ Remote editing from another PC · team invites · opt-in media upload with tempo
 
 ## Known issues (KIV — deferred)
 
-- **Cross-device line wrapping.** The stage guarantees proportional text size on every screen, but auto-wrapping still depends on font metrics, so engines can break lines differently. Fix lands with the song library in R1 step 4: store slides as explicit lines and size the font to fit the longest line.
+- **Cross-device line wrapping.** Mostly fixed in step 2: the 1920×1080 stage was shrinking to the window's width as a flex child, so each screen wrapped lyrics at its own width. Auto-wrapping can still differ slightly between font engines; the full fix lands with the song library in R1 step 4: store slides as explicit lines and size the font to fit the longest line.
 - **Dev builds need port 9100.** The Vite proxy targets it. Release builds fall back to other ports automatically.

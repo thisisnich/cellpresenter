@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* Theme tokens (theme/tokens.ts sets the --cp-* variables at boot) exposed
+   as Tailwind utilities: bg-cp-panel, text-cp-muted, rounded-cp, … */
+@theme inline {
+  --color-cp-bg: var(--cp-bg);
+  --color-cp-chrome: var(--cp-chrome);
+  --color-cp-panel: var(--cp-panel);
+  --color-cp-surface: var(--cp-surface);
+  --color-cp-surface-hi: var(--cp-surface-hi);
+  --color-cp-line: var(--cp-line);
+  --color-cp-text: var(--cp-text);
+  --color-cp-muted: var(--cp-muted);
+  --color-cp-live: var(--cp-live);
+  --color-cp-on-live: var(--cp-on-live);
+  --color-cp-next: var(--cp-next);
+  --color-cp-ok: var(--cp-ok);
+  --color-cp-danger: var(--cp-danger);
+  --color-cp-danger-bg: var(--cp-danger-bg);
+  --color-cp-danger-line: var(--cp-danger-line);
+  --radius-cp: var(--cp-radius);
+  --radius-cp-sm: var(--cp-radius-sm);
+  --font-ui: "Geist Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", monospace;
+}
+
+@utility border-cp {
+  border: var(--cp-border-width) solid var(--cp-line);
+}
+@utility border-t-cp {
+  border-top: var(--cp-border-width) solid var(--cp-line);
+}
+@utility border-b-cp {
+  border-bottom: var(--cp-border-width) solid var(--cp-line);
+}
+
 html,
 body,
 #root {
@@ -11,10 +45,57 @@ body,
 }
 
 @layer components {
-  .btn {
-    @apply rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-slate-700 disabled:opacity-40;
+  .cp-btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-cp border-cp bg-cp-surface px-3.5 py-2 text-[13px] text-cp-text transition-colors hover:bg-cp-surface-hi disabled:cursor-not-allowed disabled:opacity-40;
   }
-  .btn-primary {
-    @apply rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:opacity-40;
+  .cp-btn-live {
+    @apply inline-flex items-center justify-center gap-2 rounded-cp bg-cp-live px-6 py-2 text-[13px] font-bold text-cp-on-live transition-[filter] hover:brightness-110 disabled:opacity-40;
   }
+  .cp-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-cp bg-cp-danger-bg px-3.5 py-2 text-[13px] font-semibold text-cp-danger disabled:opacity-40;
+    border: var(--cp-border-width) solid var(--cp-danger-line);
+  }
+  .cp-label {
+    @apply text-[11px] font-semibold tracking-[0.06em] text-cp-muted uppercase;
+  }
+}
+
+/* Dockview, styled from the same tokens. */
+.dockview-theme-cp {
+  color-scheme: dark;
+  --dv-background-color: var(--cp-bg);
+  --dv-group-view-background-color: var(--cp-panel);
+  --dv-tabs-and-actions-container-background-color: var(--cp-chrome);
+  --dv-tabs-and-actions-container-height: 34px;
+  --dv-tabs-and-actions-container-font-size: 13px;
+  --dv-activegroup-visiblepanel-tab-background-color: var(--cp-panel);
+  --dv-activegroup-hiddenpanel-tab-background-color: var(--cp-chrome);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--cp-panel);
+  --dv-inactivegroup-hiddenpanel-tab-background-color: var(--cp-chrome);
+  --dv-activegroup-visiblepanel-tab-color: var(--cp-text);
+  --dv-activegroup-hiddenpanel-tab-color: var(--cp-muted);
+  --dv-inactivegroup-visiblepanel-tab-color: var(--cp-text);
+  --dv-inactivegroup-hiddenpanel-tab-color: var(--cp-muted);
+  --dv-tab-divider-color: var(--cp-line);
+  --dv-separator-border: var(--cp-line);
+  --dv-paneview-header-border-color: var(--cp-line);
+  --dv-paneview-active-outline-color: var(--cp-live);
+  --dv-active-sash-color: var(--cp-live);
+  --dv-sash-color: transparent;
+  --dv-drag-over-background-color: color-mix(in srgb, var(--cp-live) 18%, transparent);
+  --dv-drag-over-border-color: var(--cp-live);
+  --dv-icon-hover-background-color: var(--cp-surface-hi);
+  --dv-scrollbar-background-color: var(--cp-surface-hi);
+  --dv-floating-box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  --dv-floating-border: var(--cp-border-width) solid var(--cp-line);
+  --dv-border-radius: var(--cp-radius);
+  --dv-tab-border-radius: 0px;
+  --dv-tab-margin: 0;
+  --dv-tab-font-size: inherit;
+  font-family: var(--font-ui);
+}
+
+/* The active tab in the focused group gets the live colour underline. */
+.dockview-theme-cp .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
+  box-shadow: inset 0 -2px 0 var(--cp-live);
 }

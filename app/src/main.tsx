@@ -1,8 +1,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import App from "./App";
 import "./index.css";
+import { applyTheme, DEFAULT_THEME } from "./theme/tokens";
 
 async function boot() {
   // The stage relies on identical font metrics on every device — a fallback
@@ -20,6 +23,7 @@ async function boot() {
     // Fonts API unavailable — render anyway rather than hanging.
   }
 
+  applyTheme(DEFAULT_THEME);
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <App />

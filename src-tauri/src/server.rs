@@ -11,12 +11,12 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use tauri::{AssetResolver, Wry};
 use tokio::net::TcpListener;
 use tokio::sync::broadcast;
 
-use crate::live::LiveState;
+use crate::live::{Command, LiveState};
 
 /// Preferred port. The Vite dev proxy targets it, so dev builds use it only.
 pub const DEFAULT_PORT: u16 = 9100;
@@ -121,37 +121,13 @@ async fn live_state(State(s): State<ServerState>) -> Json<LiveState> {
     Json(s.snapshot())
 }
 
-async fn live_next(State(s): State<ServerState>) -> Json<LiveState> {
-    Json(s.mutate(|l| l.step(1)))
-}
-
-async fn live_prev(State(s): State<ServerState>) -> Json<LiveState> {
-    Json(s.mutate(|l| l.step(-1)))
-}
-
-#[derive(Deserialize)]
-struct GoToArgs {
-    index: usize,
-}
-
-async fn live_go_to(State(s): State<ServerState>, Json(args): Json<GoToArgs>) -> Json<LiveState> {
-    Json(s.mutate(|l| l.go_to(args.index)))
-}
-
-async fn live_toggle_visible(State(s): State<ServerState>) -> Json<LiveState> {
-    Json(s.mutate(LiveState::toggle_visible))
-}
-
-#[derive(Deserialize)]
-struct TextScaleArgs {
-    scale: f64,
-}
-
-async fn live_text_scale(
+/// Apply one live command and return the new state. Every client — console,
+/// phone remote, later the cloud live room — changes live state this way.
+async fn live_command(
     State(s): State<ServerState>,
-    Json(args): Json<TextScaleArgs>,
+    Json(command): Json<Command>,
 ) -> Json<LiveState> {
-    Json(s.mutate(|l| l.set_text_scale(args.scale)))
+    Json(s.mutate(|l| l.apply(command)))
 }
 
 // ---------- WebSocket ----------
@@ -260,11 +236,7 @@ pub fn router(state: ServerState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .route("/live/state", get(live_state))
-        .route("/live/next", post(live_next))
-        .route("/live/prev", post(live_prev))
-        .route("/live/go-to", post(live_go_to))
-        .route("/live/toggle-visible", post(live_toggle_visible))
-        .route("/live/text-scale", post(live_text_scale))
+        .route("/live/command", post(live_command))
         .fallback(|| async { StatusCode::NOT_FOUND });
     Router::new()
         .nest("/api", api)

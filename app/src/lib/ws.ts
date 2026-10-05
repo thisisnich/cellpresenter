@@ -7,9 +7,17 @@
 // Relative URL on purpose: in dev the Vite proxy forwards /ws to axum; in
 // prod the SPA is served by axum itself, so location.host is always right.
 
+export interface Slide {
+  /** Section name as written in the song ("Verse 1", "Chorus", …). */
+  section: string;
+  /** Lyric lines, separated by "\n". */
+  text: string;
+}
+
 export interface LiveState {
+  title: string;
+  slides: Slide[];
   slide_index: number;
-  slides: string[];
   visible: boolean;
   text_scale: number;
 }

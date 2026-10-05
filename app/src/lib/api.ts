@@ -20,21 +20,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Every change to live state. Mirrors `Command` in src-tauri/src/live.rs. */
+export type LiveCommand =
+  | { type: "next" }
+  | { type: "prev" }
+  | { type: "go_to"; index: number }
+  | { type: "toggle_visible" }
+  | { type: "set_visible"; visible: boolean }
+  | { type: "set_text_scale"; scale: number };
+
 export const api = {
   health: () => request<Health>("/api/health"),
   liveState: () => request<LiveState>("/api/live/state"),
-  liveNext: () => request<LiveState>("/api/live/next", { method: "POST" }),
-  livePrev: () => request<LiveState>("/api/live/prev", { method: "POST" }),
-  liveGoTo: (index: number) =>
-    request<LiveState>("/api/live/go-to", {
+  liveCommand: (command: LiveCommand) =>
+    request<LiveState>("/api/live/command", {
       method: "POST",
-      body: JSON.stringify({ index }),
-    }),
-  liveToggleVisible: () =>
-    request<LiveState>("/api/live/toggle-visible", { method: "POST" }),
-  liveTextScale: (scale: number) =>
-    request<LiveState>("/api/live/text-scale", {
-      method: "POST",
-      body: JSON.stringify({ scale }),
+      body: JSON.stringify(command),
     }),
 };

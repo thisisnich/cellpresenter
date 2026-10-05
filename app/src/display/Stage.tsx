@@ -27,13 +27,15 @@ export function Stage({ children }: { children: ReactNode }) {
     return () => ro.disconnect();
   }, []);
 
+  // shrink-0 matters: as a flex child the 1920px canvas would otherwise shrink
+  // to its container's width, so each screen would wrap lyrics differently.
   return (
     <div
       ref={ref}
       className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black"
     >
       <div
-        className="relative flex items-center justify-center"
+        className="relative flex shrink-0 items-center justify-center"
         style={{
           width: STAGE_WIDTH,
           height: STAGE_HEIGHT,

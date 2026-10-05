@@ -4,7 +4,7 @@ import { en } from "./en";
 
 describe("t", () => {
   it("returns the English text for a key", () => {
-    expect(t("console.next")).toBe("Next →");
+    expect(t("transport.next")).toBe("Next →");
   });
 
   it("fills placeholders and leaves unknown ones alone", () => {

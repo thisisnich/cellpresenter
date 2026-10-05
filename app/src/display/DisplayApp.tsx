@@ -8,7 +8,7 @@ import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 // over /ws, so this view is byte-for-byte identical on a phone or projector.
 export default function DisplayApp() {
   const { state, status } = useLiveState();
-  const active = state?.slides[state.slide_index] ?? "";
+  const active = state?.slides[state.slide_index]?.text ?? "";
   const shown = state?.visible ?? false;
   const textScale = state?.text_scale ?? 1;
 
