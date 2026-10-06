@@ -872,6 +872,8 @@ pub fn router(state: ServerState) -> Router {
         .route("/live/command", post(live_command))
         .route("/live/show-song", post(live_show_song))
         .route("/live/show-item", post(live_show_item))
+        // Lets a phone check its PIN: 204 if it may control, 401 if not.
+        .route("/control/check", get(|| async { StatusCode::NO_CONTENT }))
         .route(
             "/media",
             post(upload_media).layer(DefaultBodyLimit::max(media::MAX_UPLOAD_BYTES)),
@@ -1013,6 +1015,29 @@ mod tests {
         assert_eq!(
             call(&router, "GET", "/api/pin", None, None).await.0,
             StatusCode::FORBIDDEN
+        );
+    }
+
+    #[tokio::test]
+    async fn phones_can_check_their_pin() {
+        let (router, _) = app(PHONE).await;
+        assert_eq!(
+            call(&router, "GET", "/api/control/check", None, None)
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            call(&router, "GET", "/api/control/check", None, Some("0000"))
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            call(&router, "GET", "/api/control/check", None, Some("4321"))
+                .await
+                .0,
+            StatusCode::NO_CONTENT
         );
     }
 

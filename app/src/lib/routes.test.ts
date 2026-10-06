@@ -5,6 +5,7 @@ describe("viewFromPath", () => {
   it("maps /display to the display view", () => {
     expect(viewFromPath("/display")).toBe("display");
     expect(viewFromPath("/display/")).toBe("display");
+    expect(viewFromPath("/remote")).toBe("remote");
   });
 
   it("falls back to the console for everything else", () => {

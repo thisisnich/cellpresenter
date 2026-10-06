@@ -45,6 +45,10 @@ let controlPin: string | null = (() => {
   }
 })();
 
+export function controlPinSet(): boolean {
+  return controlPin !== null;
+}
+
 export function setControlPin(pin: string | null): void {
   controlPin = pin;
   try {
@@ -78,6 +82,8 @@ export const api = {
   health: () => request<Health>("/api/health"),
   pin: () => request<PinInfo>("/api/pin"),
   network: () => request<NetworkInfo>("/api/network"),
+  /** Resolves if this device may control slides (PIN accepted or local). */
+  checkControl: () => request<void>("/api/control/check"),
 
   liveState: () => request<LiveState>("/api/live/state"),
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),

@@ -37,3 +37,25 @@ export function sectionAbbrev(name: string): string {
 export function arrangementOf(sections: string[]): string[] {
   return sections.filter((s, i) => i === 0 || s !== sections[i - 1]);
 }
+
+export interface SectionJump {
+  /** Short label for a chip, e.g. "V1". */
+  label: string;
+  section: string;
+  /** First slide of this run of the section. */
+  index: number;
+}
+
+/** Where each section starts in a run of slides, for jump buttons. */
+export function sectionJumps(slides: { section: string }[]): SectionJump[] {
+  return slides.flatMap((slide, index) =>
+    index === 0 || slide.section !== slides[index - 1].section
+      ? [{ label: sectionAbbrev(slide.section), section: slide.section, index }]
+      : [],
+  );
+}
+
+/** The jump whose run contains slide `index`. */
+export function currentJump(jumps: SectionJump[], index: number): SectionJump | undefined {
+  return [...jumps].reverse().find((j) => j.index <= index);
+}

@@ -6,8 +6,13 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { ROUTES } from "../lib/routes";
 
-function displayUrl(address: NetworkAddress, port: number): string {
-  return `http://${address.ip}:${port}${ROUTES.display}`;
+type Target = "display" | "remote";
+
+function linkUrl(address: NetworkAddress, port: number, target: Target, pin: string | null): string {
+  const base = `http://${address.ip}:${port}`;
+  // The remote link carries the PIN after #, which browsers never send to
+  // the server: scanning it pairs the phone without typing the PIN.
+  return target === "display" ? `${base}${ROUTES.display}` : `${base}${ROUTES.remote}${pin ? `#pin=${pin}` : ""}`;
 }
 
 /** A QR code drawn as SVG squares, so it scales crisply and follows no theme. */
@@ -47,11 +52,17 @@ export function DisplayLink() {
   const [open, setOpen] = useState(false);
   const [info, setInfo] = useState<NetworkInfo | null>(null);
   const [chosen, setChosen] = useState(0);
+  const [target, setTarget] = useState<Target>("display");
+  const [pin, setPin] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
+    api
+      .pin()
+      .then((p) => setPin(p.pin))
+      .catch(() => setPin(null));
     api
       .network()
       .then(setInfo)
@@ -70,7 +81,7 @@ export function DisplayLink() {
 
   const addresses = info?.addresses ?? [];
   const current = addresses[Math.min(chosen, addresses.length - 1)];
-  const url = current && info ? displayUrl(current, info.port) : null;
+  const url = current && info ? linkUrl(current, info.port, target, pin) : null;
 
   const copy = async () => {
     if (!url) return;
@@ -96,7 +107,22 @@ export function DisplayLink() {
         >
           <div>
             <h2 className="m-0 text-sm font-semibold">{t("displayLink.title")}</h2>
-            <p className="m-0 mt-1 text-cp-muted">{t("displayLink.howTo")}</p>
+            <p className="m-0 mt-1 text-cp-muted">{target === "display" ? t("displayLink.howTo") : t("displayLink.howToRemote")}</p>
+          </div>
+
+          <div className="flex rounded-cp border-cp bg-cp-bg p-0.5" role="tablist">
+            {(["display", "remote"] as const).map((k) => (
+              <button
+                key={k}
+                type="button"
+                role="tab"
+                aria-selected={target === k}
+                onClick={() => setTarget(k)}
+                className={`flex-1 rounded-cp-sm px-3 py-1 ${target === k ? "bg-cp-surface-hi font-semibold" : "text-cp-muted"}`}
+              >
+                {k === "display" ? t("displayLink.display") : t("displayLink.remote")}
+              </button>
+            ))}
           </div>
 
           {!info && <p className="m-0 text-cp-muted">{t("connection.connecting")}</p>}
