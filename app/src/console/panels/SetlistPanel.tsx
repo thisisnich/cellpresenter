@@ -3,6 +3,7 @@ import { newId } from "../../domain/songEditing";
 import type { SetlistItem } from "../../generated/SetlistItem";
 import type { SetlistItemInput } from "../../generated/SetlistItemInput";
 import { t } from "../../i18n";
+import { BackgroundPicker } from "../BackgroundPicker";
 import { useConsole } from "../ConsoleContext";
 import { useLive } from "../LiveContext";
 
@@ -11,6 +12,7 @@ interface AnnouncementDraft {
   id: string | null;
   title: string;
   text: string;
+  backgroundId: string | null;
 }
 
 const move = <T,>(list: T[], from: number, to: number): T[] => {
@@ -42,7 +44,13 @@ export function SetlistPanel() {
 
   const saveDraft = async () => {
     if (!draft || !draft.title.trim()) return;
-    const entry: SetlistItemInput = { kind: "announcement", id: draft.id ?? newId(), title: draft.title.trim(), text: draft.text };
+    const entry: SetlistItemInput = {
+      kind: "announcement",
+      id: draft.id ?? newId(),
+      title: draft.title.trim(),
+      text: draft.text,
+      background_id: draft.backgroundId,
+    };
     await saveSetlist((items) => (draft.id ? items.map((i) => (i.id === draft.id ? entry : i)) : [...items, entry]));
     setDraft(null);
   };
@@ -129,7 +137,7 @@ export function SetlistPanel() {
                 {item.kind === "announcement" && (
                   <button
                     type="button"
-                    onClick={() => setDraft({ id: item.id, title: item.title, text: item.text })}
+                    onClick={() => setDraft({ id: item.id, title: item.title, text: item.text, backgroundId: item.background_id })}
                     aria-label={t("setlist.editItem", { title: itemLabel(item) })}
                     className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:text-cp-text"
                   >
@@ -194,6 +202,16 @@ export function SetlistPanel() {
                 className="resize-y rounded-cp border-cp bg-cp-panel px-2 py-1.5"
               />
             </label>
+            <div className="flex flex-col gap-1">
+              <label htmlFor="announcement-background" className="cp-label">
+                {t("background.label")}
+              </label>
+              <BackgroundPicker
+                id="announcement-background"
+                value={draft.backgroundId}
+                onChange={(id) => setDraft({ ...draft, backgroundId: id })}
+              />
+            </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setDraft(null)} className="cp-btn px-3 py-1.5">
                 {t("editor.close")}
@@ -208,7 +226,7 @@ export function SetlistPanel() {
 
       {setlist && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t-cp p-2">
-          <button type="button" onClick={() => setDraft({ id: null, title: "", text: "" })} className="cp-btn px-2.5 py-1.5">
+          <button type="button" onClick={() => setDraft({ id: null, title: "", text: "", backgroundId: null })} className="cp-btn px-2.5 py-1.5">
             {t("setlist.addAnnouncement")}
           </button>
           {confirmDelete ? (

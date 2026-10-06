@@ -4,6 +4,8 @@
 // so same-origin holds in both worlds.
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
+import type { Media } from "../generated/Media";
+import type { Settings } from "../generated/Settings";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { PinInfo } from "../generated/PinInfo";
 import type { Setlist } from "../generated/Setlist";
@@ -53,8 +55,8 @@ export function setControlPin(pin: string | null): void {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+async function request<T>(path: string, init?: RequestInit, contentType = "application/json"): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": contentType };
   if (controlPin) headers["X-CP-Pin"] = controlPin;
   const res = await fetch(path, { ...init, headers });
   if (!res.ok) {
@@ -88,6 +90,18 @@ export const api = {
   updateSong: (id: string, input: SongInput) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}`, json("PUT", input)),
   deleteSong: (id: string) => request<void>(`/api/songs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  listMedia: () => request<Media[]>("/api/media"),
+  /** Upload an image file; big photos are scaled down on the server. */
+  uploadMedia: (file: File) =>
+    request<Media>(
+      `/api/media?name=${encodeURIComponent(file.name)}`,
+      { method: "POST", body: file },
+      file.type || "application/octet-stream",
+    ),
+  deleteMedia: (id: string) => request<void>(`/api/media/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  settings: () => request<Settings>("/api/settings"),
+  updateSettings: (settings: Settings) => request<Settings>("/api/settings", json("PUT", settings)),
 
   listSetlists: () => request<SetlistSummary[]>("/api/setlists"),
   getSetlist: (id: string) => request<Setlist>(`/api/setlists/${encodeURIComponent(id)}`),

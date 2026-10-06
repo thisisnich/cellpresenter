@@ -12,6 +12,7 @@ const song = (arrangement: string[] | null): Song => ({
   ccli_number: null,
   copyright: null,
   arrangement,
+  background_id: null,
   sections: [
     { id: "v", name: "Verse 1", slides: [{ id: "v1", lines: [line("a"), line("b")] }] },
     { id: "c", name: "Chorus", slides: [{ id: "c1", lines: [line("c")] }] },
@@ -33,10 +34,10 @@ describe("playedSlides", () => {
 
 describe("announcementSlides", () => {
   it("splits on blank lines and never comes out empty", () => {
-    expect(announcementSlides("Potluck", "Potluck next Friday\nBring a dish\n\n\n7 pm")).toEqual([
-      { section: "Potluck", text: "Potluck next Friday\nBring a dish" },
-      { section: "Potluck", text: "7 pm" },
+    expect(announcementSlides("Potluck", "Potluck next Friday\nBring a dish\n\n\n7 pm", "/media/x.jpg")).toEqual([
+      { section: "Potluck", text: "Potluck next Friday\nBring a dish", background: "/media/x.jpg" },
+      { section: "Potluck", text: "7 pm", background: "/media/x.jpg" },
     ]);
-    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome" }]);
+    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null }]);
   });
 });

@@ -3,6 +3,7 @@ import { t } from "../../i18n";
 import type { LiveState } from "../../lib/ws";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { nextIndex, useLive } from "../LiveContext";
+import { backgroundFor } from "../../display/SlideBackground";
 import { SlidePreview } from "../SlidePreview";
 
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
@@ -91,7 +92,7 @@ export function SlidesPanel() {
               className="flex flex-col overflow-hidden rounded-cp bg-cp-chrome text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cp-live"
               style={{ border: `${width} solid ${ring}` }}
             >
-              <SlidePreview text={slide.text} />
+              <SlidePreview text={slide.text} background={backgroundFor(slide.background, state.default_background)} />
               <span
                 className="flex items-center justify-between gap-1.5 px-2 py-1 text-[11px] font-semibold text-white"
                 style={{ background: sectionColor(slide.section) }}

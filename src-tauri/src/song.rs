@@ -50,6 +50,8 @@ pub struct Song {
     pub copyright: Option<String>,
     /// Section ids in play order; `None` plays sections in order.
     pub arrangement: Option<Vec<String>>,
+    /// Background image (a media id); `None` uses the default background.
+    pub background_id: Option<String>,
     pub sections: Vec<SongSection>,
     #[ts(type = "number")]
     pub updated_at: i64,
@@ -85,6 +87,8 @@ pub struct SongInput {
     pub copyright: Option<String>,
     #[serde(default)]
     pub arrangement: Option<Vec<String>>,
+    #[serde(default)]
+    pub background_id: Option<String>,
     pub sections: Vec<SectionInput>,
 }
 
@@ -127,6 +131,7 @@ impl Song {
             .into_iter()
             .flat_map(|section| {
                 section.slides.iter().map(|slide| Slide {
+                    background: None,
                     section: section.name.clone(),
                     text: slide
                         .lines
@@ -176,6 +181,7 @@ mod tests {
             ccli_number: None,
             copyright: None,
             arrangement: arrangement.map(|a| a.into_iter().map(String::from).collect()),
+            background_id: None,
             sections: vec![
                 section("v1", "Verse 1", &[&["a", "b"]]),
                 section("c", "Chorus", &[&["c"]]),

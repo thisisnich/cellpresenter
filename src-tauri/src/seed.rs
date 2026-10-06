@@ -42,6 +42,7 @@ fn hymn(
         ccli_number: None,
         copyright: Some("Public domain".into()),
         arrangement,
+        background_id: None,
         sections,
     }
 }

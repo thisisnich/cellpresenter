@@ -15,4 +15,8 @@ missing: boolean, } | { "kind": "announcement", id: string, title: string,
 /**
  * Lines of text; a blank line starts a new slide.
  */
-text: string, };
+text: string, 
+/**
+ * Background image (a media id); `None` uses the default.
+ */
+background_id: string | null, };

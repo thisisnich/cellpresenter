@@ -1,6 +1,7 @@
 mod auth;
 mod db;
 mod live;
+mod media;
 mod network;
 mod seed;
 mod server;
@@ -14,6 +15,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use auth::PinGuard;
 use db::Db;
+use media::MediaStore;
 use server::{ServerState, WebAsset};
 
 const DEV_WEBVIEW_URL: &str = "http://localhost:5173";
@@ -87,8 +89,18 @@ pub fn run() {
                 })
             });
             let pins = PinGuard::random();
-            let state = ServerState::new(assets, db, pins, port);
-            tauri::async_runtime::block_on(state.restore_live());
+            let media_dir = handle
+                .path()
+                .app_data_dir()
+                .map_err(|e| report(format!("no app data folder: {e}")))?
+                .join("media");
+            let media = MediaStore::new(media_dir.clone())
+                .map_err(|e| report(format!("can't create {}: {e}", media_dir.display())))?;
+            let state = ServerState::new(assets, db, pins, port, media);
+            tauri::async_runtime::block_on(async {
+                state.restore_settings().await;
+                state.restore_live().await;
+            });
             tauri::async_runtime::spawn(async move {
                 state.spawn_persistence();
                 let app = server::router(state).into_make_service_with_connect_info::<SocketAddr>();

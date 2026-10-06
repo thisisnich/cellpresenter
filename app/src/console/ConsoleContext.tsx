@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { announcementSlides, playedSlides } from "../domain/played";
+import type { Media } from "../generated/Media";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
 import type { SetlistItem } from "../generated/SetlistItem";
@@ -36,6 +37,14 @@ interface ConsoleValue {
   contentOf: (selection: Selection) => Promise<Content | null>;
   /** Bumps when songs change, so content is reloaded. */
   libraryVersion: number;
+
+  /** Background images in the library, newest first. */
+  media: Media[];
+  reloadMedia: () => Promise<void>;
+  /** Image URL for a media id, if it still exists. */
+  mediaUrl: (id: string | null | undefined) => string | null;
+  defaultBackgroundId: string | null;
+  setDefaultBackground: (id: string | null) => Promise<void>;
 }
 
 const ConsoleContext = createContext<ConsoleValue | null>(null);
@@ -45,7 +54,7 @@ const OPEN_SETLIST_KEY = "cellpresenter.setlist";
 export function itemInput(item: SetlistItem): SetlistItemInput {
   return item.kind === "song"
     ? { kind: "song", id: item.id, song_id: item.song_id }
-    : { kind: "announcement", id: item.id, title: item.title, text: item.text };
+    : { kind: "announcement", id: item.id, title: item.title, text: item.text, background_id: item.background_id };
 }
 
 function defaultSetlistName(date: Date): string {
@@ -73,6 +82,30 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [setlistError, setSetlistError] = useState<string | null>(null);
   const [libraryVersion, setLibraryVersion] = useState(0);
   const songs = useRef(new Map<string, Promise<Song | null>>());
+  const [media, setMedia] = useState<Media[]>([]);
+  const [defaultBackgroundId, setDefaultBackgroundId] = useState<string | null>(null);
+
+  const reloadMedia = useCallback(async () => {
+    try {
+      const [list, settings] = await Promise.all([api.listMedia(), api.settings()]);
+      setMedia(list);
+      setDefaultBackgroundId(settings.default_background_id);
+    } catch {
+      // Keep what we have; the Media panel shows its own errors.
+    }
+  }, []);
+  useEffect(() => {
+    void reloadMedia();
+  }, [reloadMedia]);
+
+  const mediaUrl = useCallback(
+    (id: string | null | undefined) => (id ? (media.find((m) => m.id === id)?.url ?? null) : null),
+    [media],
+  );
+  const setDefaultBackground = useCallback(async (id: string | null) => {
+    const settings = await api.updateSettings({ default_background_id: id });
+    setDefaultBackgroundId(settings.default_background_id);
+  }, []);
 
   const refreshSetlists = useCallback(async () => {
     try {
@@ -131,16 +164,17 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     async (sel: Selection): Promise<Content | null> => {
       if (sel.kind === "song") {
         const s = await song(sel.songId);
-        return s && { title: s.title, slides: playedSlides(s) };
+        return s && { title: s.title, slides: playedSlides(s, mediaUrl(s.background_id)) };
       }
       const list = setlist?.id === sel.setlistId ? setlist : await api.getSetlist(sel.setlistId).catch(() => null);
       const item = list?.items.find((i) => i.id === sel.itemId);
       if (!item) return null;
-      if (item.kind === "announcement") return { title: item.title, slides: announcementSlides(item.title, item.text) };
+      if (item.kind === "announcement")
+        return { title: item.title, slides: announcementSlides(item.title, item.text, mediaUrl(item.background_id)) };
       const s = await song(item.song_id);
-      return s && { title: s.title, slides: playedSlides(s) };
+      return s && { title: s.title, slides: playedSlides(s, mediaUrl(s.background_id)) };
     },
-    [setlist, song],
+    [setlist, song, mediaUrl],
   );
 
   const saveSetlist = useCallback<ConsoleValue["saveSetlist"]>(
@@ -199,8 +233,28 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       setlistError,
       contentOf,
       libraryVersion,
+      media,
+      reloadMedia,
+      mediaUrl,
+      defaultBackgroundId,
+      setDefaultBackground,
     }),
-    [selection, setlists, setlist, createSetlist, saveSetlist, deleteSetlist, setlistError, contentOf, libraryVersion],
+    [
+      selection,
+      setlists,
+      setlist,
+      createSetlist,
+      saveSetlist,
+      deleteSetlist,
+      setlistError,
+      contentOf,
+      libraryVersion,
+      media,
+      reloadMedia,
+      mediaUrl,
+      defaultBackgroundId,
+      setDefaultBackground,
+    ],
   );
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>;
 }

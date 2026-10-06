@@ -11,4 +11,8 @@ section: string,
 /**
  * Lyric lines, separated by `\n`.
  */
-text: string, };
+text: string, 
+/**
+ * Background image URL for this slide; `None` uses the default.
+ */
+background: string | null, };

@@ -5,6 +5,7 @@ import type { Theme } from "../theme/tokens";
 import { restoreLayout, saveLayout } from "./layout";
 import { EditorPanel } from "./panels/EditorPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
+import { MediaPanel } from "./panels/MediaPanel";
 import { OutputPanel } from "./panels/OutputPanel";
 import { PlaceholderPanel } from "./panels/PlaceholderPanel";
 import { SetlistPanel } from "./panels/SetlistPanel";
@@ -14,6 +15,7 @@ const components = {
   setlist: SetlistPanel,
   library: LibraryPanel,
   editor: EditorPanel,
+  media: MediaPanel,
   slides: SlidesPanel,
   output: OutputPanel,
   placeholder: PlaceholderPanel,

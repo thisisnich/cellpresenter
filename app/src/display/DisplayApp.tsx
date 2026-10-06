@@ -5,6 +5,7 @@ import { api } from "../lib/api";
 import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
 import { LyricSlide } from "./LyricSlide";
+import { backgroundFor, SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 
 // Stateless renderer: everything it shows comes from the live state pushed
@@ -16,9 +17,18 @@ export default function DisplayApp() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const send = useCallback((command: LiveCommand) => api.liveCommand(command).catch(() => undefined), []);
   useTransportKeys(send, local);
-  const active = state?.slides[state.slide_index]?.text ?? "";
+  const slide = state?.slides[state.slide_index];
+  const active = slide?.text ?? "";
   const shown = state?.visible ?? false;
   const textScale = state?.text_scale ?? 1;
+  const background =
+    state && !state.background_hidden ? backgroundFor(slide?.background, state.default_background) : null;
+  const nextBackground = state ? backgroundFor(state.slides[state.slide_index + 1]?.background, state.default_background) : null;
+
+  // Load the next slide's background ahead of time so it never pops in.
+  useEffect(() => {
+    if (nextBackground) new Image().src = nextBackground;
+  }, [nextBackground]);
 
   // `?diag=1` overlays diagnostics so we can confirm every client runs the
   // same bundle, has the font loaded, and computes the same stage scale.
@@ -55,11 +65,14 @@ export default function DisplayApp() {
             {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
           </p>
         )}
-        {state && shown && state.slides.length > 0 && <LyricSlide text={active} textScale={textScale} />}
-        {state && shown && state.slides.length === 0 && (
+        {state && shown && <SlideBackground url={background} />}
+        {state && shown && !state.text_hidden && state.slides.length > 0 && (
+          <LyricSlide text={active} textScale={textScale} />
+        )}
+        {state && shown && state.slides.length === 0 && !background && (
           <p className="text-4xl text-white/25">{t("display.waiting")}</p>
         )}
-        {state && shown && state.slides.length > 0 && (
+        {state && shown && !state.text_hidden && state.slides.length > 0 && (
           <p className="absolute bottom-6 right-10 text-xl font-medium text-white/40">
             {t("display.slideCount", { current: state.slide_index + 1, total: state.slides.length })}
           </p>

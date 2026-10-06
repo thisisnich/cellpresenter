@@ -4,7 +4,7 @@ use std::sync::{Arc, RwLock};
 use axum::{
     extract::{
         ws::{Message as WsMessage, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Path, Request, State,
+        ConnectInfo, DefaultBodyLimit, Path, Query, Request, State,
     },
     http::{header, StatusCode, Uri},
     middleware::{self, Next},
@@ -19,8 +19,9 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
-use crate::db::{Db, DbResult};
+use crate::db::{Db, DbResult, NewMedia};
 use crate::live::{Command, LiveState, Slide};
+use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
 use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
@@ -60,10 +61,11 @@ pub struct ServerState {
     db: Db,
     pins: Arc<PinGuard>,
     port: u16,
+    media: MediaStore,
 }
 
 impl ServerState {
-    pub fn new(assets: AssetLookup, db: Db, pins: PinGuard, port: u16) -> Self {
+    pub fn new(assets: AssetLookup, db: Db, pins: PinGuard, port: u16, media: MediaStore) -> Self {
         let (tx, _) = broadcast::channel(64);
         let session = Uuid::new_v4().simple().to_string();
         Self {
@@ -73,6 +75,7 @@ impl ServerState {
             db,
             pins: Arc::new(pins),
             port,
+            media,
         }
     }
 
@@ -137,9 +140,15 @@ impl ServerState {
             (Some(id), false) => self.db.get_song(id).await.ok().flatten(),
             _ => None,
         };
+        let song = match song {
+            Some(song) => {
+                let slides = self.song_slides(&song).await.unwrap_or_default();
+                Some((song, slides))
+            }
+            None => None,
+        };
         self.mutate(|l| {
-            if let Some(song) = song {
-                let slides = song.live_slides();
+            if let Some((song, slides)) = song {
                 l.show(Some(song.id), song.title, slides, saved.slide_index);
             }
             l.visible = saved.visible;
@@ -181,6 +190,13 @@ impl ServerState {
 
 // ---------- setlist items on air ----------
 
+fn with_background(mut slides: Vec<Slide>, background: Option<String>) -> Vec<Slide> {
+    for slide in &mut slides {
+        slide.background = background.clone();
+    }
+    slides
+}
+
 /// Where to start in an item's slides.
 #[derive(Clone, Copy)]
 enum SlideAt {
@@ -195,14 +211,38 @@ impl ServerState {
         item: &SetlistItem,
     ) -> DbResult<Option<(Option<String>, String, Vec<Slide>)>> {
         Ok(match item {
-            SetlistItem::Song { song_id, .. } => self.db.get_song(song_id).await?.map(|song| {
-                let slides = song.live_slides();
-                (Some(song.id), song.title, slides)
-            }),
-            SetlistItem::Announcement { title, text, .. } => {
-                Some((None, title.clone(), announcement_slides(title, text)))
+            SetlistItem::Song { song_id, .. } => match self.db.get_song(song_id).await? {
+                Some(song) => {
+                    let slides = self.song_slides(&song).await?;
+                    Some((Some(song.id), song.title, slides))
+                }
+                None => None,
+            },
+            SetlistItem::Announcement {
+                title,
+                text,
+                background_id,
+                ..
+            } => {
+                let background = self.background_url(background_id.as_deref()).await?;
+                let slides = with_background(announcement_slides(title, text), background);
+                Some((None, title.clone(), slides))
             }
         })
+    }
+
+    /// URL of a background image, if the media id names one.
+    async fn background_url(&self, media_id: Option<&str>) -> DbResult<Option<String>> {
+        Ok(match media_id {
+            Some(id) => self.db.get_media(id).await?.map(|m| m.url),
+            None => None,
+        })
+    }
+
+    /// A song's slides with its background attached.
+    async fn song_slides(&self, song: &Song) -> DbResult<Vec<Slide>> {
+        let background = self.background_url(song.background_id.as_deref()).await?;
+        Ok(with_background(song.live_slides(), background))
     }
 
     /// Put item `index` of `setlist` on air. None if it can't be shown.
@@ -460,7 +500,7 @@ async fn live_show_song(
     Json(args): Json<ShowSong>,
 ) -> ApiResult<LiveState> {
     let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
-    let slides = song.live_slides();
+    let slides = s.song_slides(&song).await?;
     Ok(Json(s.mutate(|l| {
         l.show(Some(song.id), song.title, slides, args.slide_index);
         l.setlist_id = None;
@@ -500,7 +540,7 @@ async fn update_song(
     let song = s.db.update_song(&id, &input).await?.ok_or(NOT_FOUND)?;
     // If this song is on air, show the edit straight away.
     if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
-        let slides = song.live_slides();
+        let slides = s.song_slides(&song).await?;
         let (song_id, title) = (song.id.clone(), song.title.clone());
         s.mutate(|l| {
             let index = l.slide_index;
@@ -578,6 +618,149 @@ async fn delete_setlist(
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(NOT_FOUND)
+    }
+}
+
+// ---------- media ----------
+
+const DEFAULT_BACKGROUND_KEY: &str = "default_background";
+
+#[derive(Deserialize)]
+struct UploadParams {
+    #[serde(default)]
+    name: Option<String>,
+}
+
+/// Upload a background image: the raw file is the request body, its name a
+/// query parameter. Big photos are scaled down and a thumbnail is made.
+async fn upload_media(
+    State(s): State<ServerState>,
+    Query(params): Query<UploadParams>,
+    body: axum::body::Bytes,
+) -> Result<(StatusCode, Json<Media>), ApiError> {
+    let processed = tokio::task::spawn_blocking(move || media::process(&body))
+        .await
+        .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "processing_failed"))?
+        .map_err(|e| match e {
+            MediaError::NotAnImage => ApiError(StatusCode::UNSUPPORTED_MEDIA_TYPE, "not_an_image"),
+            MediaError::TooLarge => ApiError(StatusCode::PAYLOAD_TOO_LARGE, "too_large"),
+        })?;
+    s.media.save(&processed).map_err(|e| {
+        eprintln!("cellpresenter: couldn't store image: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage_failed")
+    })?;
+    let name = params
+        .name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Background".to_string());
+    let media =
+        s.db.add_media(&NewMedia {
+            name: &name,
+            hash: &processed.hash,
+            ext: processed.ext,
+            width: processed.width,
+            height: processed.height,
+            size_bytes: processed.image.len(),
+        })
+        .await?;
+    Ok((StatusCode::CREATED, Json(media)))
+}
+
+async fn list_media(State(s): State<ServerState>) -> ApiResult<Vec<Media>> {
+    Ok(Json(s.db.list_media().await?))
+}
+
+async fn delete_media(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if !s.db.delete_media(&id).await? {
+        return Err(NOT_FOUND);
+    }
+    // Deleting the default background clears it.
+    if s.db.get_state(DEFAULT_BACKGROUND_KEY).await?.as_deref() == Some(id.as_str()) {
+        s.db.set_state(DEFAULT_BACKGROUND_KEY, "").await?;
+        s.mutate(|l| l.default_background = None);
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn serve_media_file(s: &ServerState, name: &str, thumb: bool) -> Response {
+    let Some(path) = s.media.path(name, thumb) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => {
+            let mime = if name.ends_with(".png") {
+                "image/png"
+            } else {
+                "image/jpeg"
+            };
+            (
+                [
+                    (header::CONTENT_TYPE, mime),
+                    // Named by content hash, so a file never changes.
+                    (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
+                ],
+                bytes,
+            )
+                .into_response()
+        }
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
+async fn media_file(State(s): State<ServerState>, Path(name): Path<String>) -> Response {
+    serve_media_file(&s, &name, false).await
+}
+
+async fn media_thumb(State(s): State<ServerState>, Path(name): Path<String>) -> Response {
+    serve_media_file(&s, &name, true).await
+}
+
+#[derive(Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Settings {
+    /// Media id of the background used when a slide has none.
+    pub default_background_id: Option<String>,
+}
+
+async fn get_settings(State(s): State<ServerState>) -> ApiResult<Settings> {
+    let id =
+        s.db.get_state(DEFAULT_BACKGROUND_KEY)
+            .await?
+            .filter(|v| !v.is_empty());
+    Ok(Json(Settings {
+        default_background_id: id,
+    }))
+}
+
+async fn update_settings(
+    State(s): State<ServerState>,
+    Json(settings): Json<Settings>,
+) -> ApiResult<Settings> {
+    let id = settings.default_background_id.filter(|v| !v.is_empty());
+    let url = s.background_url(id.as_deref()).await?;
+    if id.is_some() && url.is_none() {
+        return Err(NOT_FOUND);
+    }
+    s.db.set_state(DEFAULT_BACKGROUND_KEY, id.as_deref().unwrap_or(""))
+        .await?;
+    s.mutate(|l| l.default_background = url);
+    Ok(Json(Settings {
+        default_background_id: id,
+    }))
+}
+
+impl ServerState {
+    /// Load the default background into live state (on startup).
+    pub async fn restore_settings(&self) {
+        if let Ok(Some(id)) = self.db.get_state(DEFAULT_BACKGROUND_KEY).await {
+            if let Ok(Some(url)) = self.background_url(Some(&id)).await {
+                self.mutate(|l| l.default_background = Some(url));
+            }
+        }
     }
 }
 
@@ -689,6 +872,12 @@ pub fn router(state: ServerState) -> Router {
         .route("/live/command", post(live_command))
         .route("/live/show-song", post(live_show_song))
         .route("/live/show-item", post(live_show_item))
+        .route(
+            "/media",
+            post(upload_media).layer(DefaultBodyLimit::max(media::MAX_UPLOAD_BYTES)),
+        )
+        .route("/media/{id}", axum::routing::delete(delete_media))
+        .route("/settings", axum::routing::put(update_settings))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",
@@ -711,12 +900,16 @@ pub fn router(state: ServerState) -> Router {
         .route("/songs", get(list_songs))
         .route("/songs/{id}", get(get_song))
         .route("/setlists", get(list_setlists))
+        .route("/media", get(list_media))
+        .route("/settings", get(get_settings))
         .route("/setlists/{id}", get(get_setlist))
         .merge(control)
         .fallback(|| async { StatusCode::NOT_FOUND });
     Router::new()
         .nest("/api", api)
         .route("/ws", get(ws_handler))
+        .route("/media/{name}", get(media_file))
+        .route("/media/thumbs/{name}", get(media_thumb))
         .fallback(spa)
         .with_state(state)
 }
@@ -733,10 +926,23 @@ mod tests {
     const LOCAL: &str = "127.0.0.1:50000";
     const PHONE: &str = "192.168.1.23:50000";
 
+    /// A fresh media folder under the system temp dir.
+    fn test_media() -> MediaStore {
+        let dir =
+            std::env::temp_dir().join(format!("cellpresenter-test-{}", Uuid::new_v4().simple()));
+        MediaStore::new(dir).unwrap()
+    }
+
     async fn app(peer: &str) -> (Router, ServerState) {
         let db = Db::in_memory().await.unwrap();
         seed_if_empty(&db).await.unwrap();
-        let state = ServerState::new(Arc::new(|_| None), db, PinGuard::new("4321".into()), 9100);
+        let state = ServerState::new(
+            Arc::new(|_| None),
+            db,
+            PinGuard::new("4321".into()),
+            9100,
+            test_media(),
+        );
         let router =
             router(state.clone()).layer(MockConnectInfo(peer.parse::<SocketAddr>().unwrap()));
         (router, state)
@@ -915,6 +1121,7 @@ mod tests {
             first.db.clone(),
             PinGuard::new("1".into()),
             9100,
+            first.media.clone(),
         );
         second.restore_live().await;
         let live = second.snapshot();
@@ -1026,6 +1233,7 @@ mod tests {
             state.db.clone(),
             PinGuard::new("1".into()),
             9100,
+            state.media.clone(),
         );
         restarted.restore_live().await;
         let live = restarted.snapshot();
@@ -1071,6 +1279,136 @@ mod tests {
         assert_eq!(
             call(&router, "POST", "/api/setlists", blank, None).await.0,
             StatusCode::UNPROCESSABLE_ENTITY
+        );
+    }
+
+    async fn call_bytes(router: &Router, uri: &str, body: Vec<u8>) -> (StatusCode, String) {
+        let req = HttpRequest::builder()
+            .method("POST")
+            .uri(uri)
+            .body(Body::from(body))
+            .unwrap();
+        let res = router.clone().oneshot(req).await.unwrap();
+        let status = res.status();
+        let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8_lossy(&bytes).into_owned())
+    }
+
+    #[tokio::test]
+    async fn backgrounds_upload_serve_and_reach_the_screen() {
+        let (router, state) = app(LOCAL).await;
+        let png = crate::media::tests::sample_png(640, 360, false);
+        let (status, body) = call_bytes(&router, "/api/media?name=Sunrise.png", png.clone()).await;
+        assert_eq!(status, StatusCode::CREATED);
+        let media: Media = serde_json::from_str(&body).unwrap();
+        assert_eq!(media.name, "Sunrise.png");
+        assert!(media.url.ends_with(".jpg"));
+
+        // Same picture again: same entry.
+        let (_, again) = call_bytes(&router, "/api/media", png).await;
+        assert_eq!(serde_json::from_str::<Media>(&again).unwrap().id, media.id);
+        assert_eq!(
+            call_bytes(&router, "/api/media", b"nope".to_vec()).await.0,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
+
+        // Files are served; anything that isn't a hash name is not.
+        assert_eq!(
+            call(&router, "GET", &media.url, None, None).await.0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router, "GET", &media.thumb_url, None, None).await.0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            call(&router, "GET", "/media/..%2Fsecret.jpg", None, None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+
+        // A song's background travels with its slides.
+        let song = state.db.list_songs().await.unwrap()[0].id.clone();
+        let edit = format!(
+            r#"{{"title":"T","background_id":"{}","sections":[{{"name":"V","slides":[{{"lines":[{{"text":"x"}}]}}]}}]}}"#,
+            media.id
+        );
+        call(
+            &router,
+            "PUT",
+            &format!("/api/songs/{song}"),
+            Some(&edit),
+            None,
+        )
+        .await;
+        call(
+            &router,
+            "POST",
+            "/api/live/show-song",
+            Some(&format!(r#"{{"song_id":"{song}"}}"#)),
+            None,
+        )
+        .await;
+        assert_eq!(
+            state.snapshot().slides[0].background.as_deref(),
+            Some(media.url.as_str())
+        );
+
+        // Default background reaches live state, and clears when deleted.
+        let set = format!(r#"{{"default_background_id":"{}"}}"#, media.id);
+        assert_eq!(
+            call(&router, "PUT", "/api/settings", Some(&set), None)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        assert_eq!(
+            state.snapshot().default_background.as_deref(),
+            Some(media.url.as_str())
+        );
+        assert_eq!(
+            call(
+                &router,
+                "DELETE",
+                &format!("/api/media/{}", media.id),
+                None,
+                None
+            )
+            .await
+            .0,
+            StatusCode::NO_CONTENT
+        );
+        assert_eq!(state.snapshot().default_background, None);
+
+        // Clear text / clear background toggles.
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"toggle_text"}"#),
+            None,
+        )
+        .await;
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"toggle_background"}"#),
+            None,
+        )
+        .await;
+        let live = state.snapshot();
+        assert!(live.text_hidden && live.background_hidden);
+    }
+
+    #[tokio::test]
+    async fn phones_cannot_upload_without_the_pin() {
+        let (router, _) = app(PHONE).await;
+        let png = crate::media::tests::sample_png(32, 32, false);
+        assert_eq!(
+            call_bytes(&router, "/api/media", png).await.0,
+            StatusCode::UNAUTHORIZED
         );
     }
 

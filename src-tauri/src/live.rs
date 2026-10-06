@@ -9,6 +9,9 @@ pub struct Slide {
     pub section: String,
     /// Lyric lines, separated by `\n`.
     pub text: String,
+    /// Background image URL for this slide; `None` uses the default.
+    #[serde(default)]
+    pub background: Option<String>,
 }
 
 /// Live presentation state. The server owns it; every client renders from it.
@@ -34,6 +37,12 @@ pub struct LiveState {
     pub slide_index: usize,
     /// Black-out toggle: display clients render nothing when false.
     pub visible: bool,
+    /// "Clear text": the background stays, the words go.
+    pub text_hidden: bool,
+    /// "Clear background": the words stay on black.
+    pub background_hidden: bool,
+    /// Background image URL used when a slide has none of its own.
+    pub default_background: Option<String>,
     /// Operator's proportional lyric-size control. Part of the shared live
     /// state so every display scales identically.
     pub text_scale: f64,
@@ -58,6 +67,8 @@ pub enum Command {
     SetVisible {
         visible: bool,
     },
+    ToggleText,
+    ToggleBackground,
     SetTextScale {
         scale: f64,
     },
@@ -105,6 +116,8 @@ impl LiveState {
             }
             Command::ToggleVisible => self.visible = !self.visible,
             Command::SetVisible { visible } => self.visible = visible,
+            Command::ToggleText => self.text_hidden = !self.text_hidden,
+            Command::ToggleBackground => self.background_hidden = !self.background_hidden,
             Command::SetTextScale { scale } => {
                 if scale.is_finite() {
                     self.text_scale = scale.clamp(TEXT_SCALE_MIN, TEXT_SCALE_MAX);
@@ -141,6 +154,7 @@ mod tests {
             .map(|i| Slide {
                 section: format!("Verse {i}"),
                 text: format!("line {i}"),
+                background: None,
             })
             .collect();
         s.show(Some("song".into()), "Song".into(), slides, 0);

@@ -24,6 +24,8 @@ pub enum SetlistItem {
         title: String,
         /// Lines of text; a blank line starts a new slide.
         text: String,
+        /// Background image (a media id); `None` uses the default.
+        background_id: Option<String>,
     },
 }
 
@@ -72,6 +74,8 @@ pub enum SetlistItemInput {
         id: Option<String>,
         title: String,
         text: String,
+        #[serde(default)]
+        background_id: Option<String>,
     },
 }
 
@@ -95,12 +99,14 @@ pub fn announcement_slides(title: &str, text: &str) -> Vec<Slide> {
         .map(|block| Slide {
             section: title.to_string(),
             text: block.to_string(),
+            background: None,
         })
         .collect();
     if slides.is_empty() {
         vec![Slide {
             section: title.to_string(),
             text: title.to_string(),
+            background: None,
         }]
     } else {
         slides

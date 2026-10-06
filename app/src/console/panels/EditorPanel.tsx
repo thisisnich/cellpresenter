@@ -9,15 +9,18 @@ import { api, ApiError } from "../../lib/api";
 import { notifyLibraryChanged } from "../../lib/libraryEvents";
 import { useLive } from "../LiveContext";
 import type { EditorParams } from "../openEditor";
+import { BackgroundPicker } from "../BackgroundPicker";
+import { useConsole } from "../ConsoleContext";
 import { SlidePreview } from "../SlidePreview";
 
 const KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B", "Am", "Bm", "Cm", "Dm", "Em", "Fm", "Gm"];
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
-const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0 };
+const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, backgroundId: null };
 
 // Edit a song as text, with a live preview of the slides it makes.
 export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorParams>) {
-  const { showSong } = useLive();
+  const { state, showSong } = useLive();
+  const { mediaUrl } = useConsole();
   const [songId, setSongId] = useState(params.songId);
   const [stored, setStored] = useState<Song | null>(null);
   const [loading, setLoading] = useState(Boolean(params.songId));
@@ -35,7 +38,13 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       .getSong(params.songId)
       .then((song) => {
         setStored(song);
-        setMeta({ title: song.title, artist: song.artist ?? "", key: song.key ?? "", capo: song.capo });
+        setMeta({
+          title: song.title,
+          artist: song.artist ?? "",
+          key: song.key ?? "",
+          capo: song.capo,
+          backgroundId: song.background_id,
+        });
         setText(songToText(songForText(song)));
         setLinesPerSlide(longestSlide(song));
       })
@@ -142,6 +151,12 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             className="h-9 rounded-cp border-cp bg-cp-bg px-2.5 font-mono"
           />
         </label>
+        <div className="flex min-w-56 flex-1 flex-col gap-1">
+          <label htmlFor="song-background" className="cp-label">
+            {t("background.label")}
+          </label>
+          <BackgroundPicker id="song-background" value={meta.backgroundId} onChange={(id) => edit("backgroundId", id)} />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-wrap">
@@ -171,7 +186,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
               <div key={i} className="overflow-hidden rounded-cp border-cp">
-                <SlidePreview text={slide.text} />
+                <SlidePreview text={slide.text} background={mediaUrl(meta.backgroundId) ?? state?.default_background ?? null} />
                 <div className="px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
                   {i + 1} · {slide.section}
                 </div>

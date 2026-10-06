@@ -5,4 +5,4 @@ import type { SectionInput } from "./SectionInput";
  * What a client sends to create or replace a song. Ids are optional:
  * clients may generate them (useful offline), otherwise the server does.
  */
-export type SongInput = { title: string, artist: string | null, key: string | null, capo: number, ccli_number: string | null, copyright: string | null, arrangement: Array<string> | null, sections: Array<SectionInput>, };
+export type SongInput = { title: string, artist: string | null, key: string | null, capo: number, ccli_number: string | null, copyright: string | null, arrangement: Array<string> | null, background_id: string | null, sections: Array<SectionInput>, };

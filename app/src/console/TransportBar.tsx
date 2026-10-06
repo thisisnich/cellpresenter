@@ -47,6 +47,24 @@ export function TransportBar() {
         >
           {state?.visible === false ? t("transport.show") : t("transport.blackOut")}
         </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => send({ type: "toggle_text" })}
+          className={state?.text_hidden ? "cp-btn-danger" : "cp-btn"}
+          aria-pressed={state?.text_hidden ?? false}
+        >
+          {state?.text_hidden ? t("transport.showText") : t("transport.clearText")}
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => send({ type: "toggle_background" })}
+          className={state?.background_hidden ? "cp-btn-danger" : "cp-btn"}
+          aria-pressed={state?.background_hidden ?? false}
+        >
+          {state?.background_hidden ? t("transport.showBackground") : t("transport.clearBackground")}
+        </button>
         {error && (
           <p role="alert" className="m-0 text-cp-danger">
             {t("transport.requestFailed", { message: error })}

@@ -9,6 +9,8 @@ export interface SongMeta {
   artist: string;
   key: string;
   capo: number;
+  /** Background image (media id); null uses the default background. */
+  backgroundId: string | null;
 }
 
 /** A random v4 UUID. Works on plain-http LAN pages, unlike randomUUID(). */
@@ -63,6 +65,7 @@ export function toSongInput(parsed: ParsedSong, meta: SongMeta, existing?: Song)
     ccli_number: existing?.ccli_number ?? null,
     copyright: existing?.copyright ?? null,
     arrangement: naturalOrder ? null : arrangement,
+    background_id: meta.backgroundId,
     sections,
   };
 }

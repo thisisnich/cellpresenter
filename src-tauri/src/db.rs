@@ -8,6 +8,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePo
 use sqlx::{FromRow, Sqlite, Transaction};
 use uuid::Uuid;
 
+use crate::media::{image_url, thumb_url, Media};
 use crate::setlist::{Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary};
 use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSlide, SongSummary};
 
@@ -51,6 +52,7 @@ struct SongRow {
     ccli_number: Option<String>,
     copyright: Option<String>,
     arrangement: Option<String>,
+    background_id: Option<String>,
     updated_at: i64,
 }
 
@@ -156,7 +158,7 @@ impl Db {
 
     pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {
         let rows: Vec<SongRow> = sqlx::query_as(
-            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, background_id, updated_at
              FROM songs WHERE library_id = ? AND deleted_at IS NULL
              ORDER BY title COLLATE NOCASE",
         )
@@ -177,7 +179,7 @@ impl Db {
 
     pub async fn get_song(&self, id: &str) -> DbResult<Option<Song>> {
         let row: Option<SongRow> = sqlx::query_as(
-            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, background_id, updated_at
              FROM songs WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
         )
         .bind(id)
@@ -222,6 +224,7 @@ impl Db {
             capo: row.capo.clamp(0, 11) as u8,
             ccli_number: row.ccli_number,
             copyright: row.copyright,
+            background_id: row.background_id,
             arrangement,
             sections: sections
                 .into_iter()
@@ -240,8 +243,8 @@ impl Db {
         let now = now_ms();
         let mut tx = self.pool.begin().await?;
         sqlx::query(
-            "INSERT INTO songs (id, library_id, title, artist, song_key, capo, ccli_number, copyright, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO songs (id, library_id, title, artist, song_key, capo, ccli_number, copyright, background_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&self.library_id)
@@ -251,6 +254,7 @@ impl Db {
         .bind(i64::from(input.capo.min(11)))
         .bind(&input.ccli_number)
         .bind(&input.copyright)
+        .bind(&input.background_id)
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
@@ -266,7 +270,7 @@ impl Db {
         let now = now_ms();
         let mut tx = self.pool.begin().await?;
         let updated = sqlx::query(
-            "UPDATE songs SET title = ?, artist = ?, song_key = ?, capo = ?, ccli_number = ?, copyright = ?, updated_at = ?
+            "UPDATE songs SET title = ?, artist = ?, song_key = ?, capo = ?, ccli_number = ?, copyright = ?, background_id = ?, updated_at = ?
              WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
         )
         .bind(input.title.trim())
@@ -275,6 +279,7 @@ impl Db {
         .bind(i64::from(input.capo.min(11)))
         .bind(&input.ccli_number)
         .bind(&input.copyright)
+        .bind(&input.background_id)
         .bind(now)
         .bind(id)
         .bind(&self.library_id)
@@ -533,6 +538,7 @@ struct SetlistItemRow {
     song_id: Option<String>,
     title: Option<String>,
     body: Option<String>,
+    background_id: Option<String>,
     song_title: Option<String>,
     song_key: Option<String>,
     song_deleted: Option<i64>,
@@ -572,7 +578,7 @@ impl Db {
         .await?;
         let Some(row) = row else { return Ok(None) };
         let items: Vec<SetlistItemRow> = sqlx::query_as(
-            "SELECT i.id, i.kind, i.song_id, i.title, i.body,
+            "SELECT i.id, i.kind, i.song_id, i.title, i.body, i.background_id,
                     s.title AS song_title, s.song_key AS song_key, s.deleted_at AS song_deleted
              FROM setlist_items i LEFT JOIN songs s ON s.id = i.song_id
              WHERE i.setlist_id = ? AND i.deleted_at IS NULL ORDER BY i.position",
@@ -599,6 +605,7 @@ impl Db {
                         id: i.id,
                         title: i.title.unwrap_or_default(),
                         text: i.body.unwrap_or_default(),
+                        background_id: i.background_id,
                     },
                 })
                 .collect(),
@@ -696,22 +703,28 @@ impl Db {
                 .collect();
         let mut kept = HashSet::new();
         for (position, item) in items.iter().enumerate() {
-            let (requested, kind, song_id, title, body) = match item {
+            let (requested, kind, song_id, title, body, background_id) = match item {
                 SetlistItemInput::Song { id, song_id } => {
-                    (id, "song", Some(song_id.as_str()), None, None)
+                    (id, "song", Some(song_id.as_str()), None, None, None)
                 }
-                SetlistItemInput::Announcement { id, title, text } => (
+                SetlistItemInput::Announcement {
+                    id,
+                    title,
+                    text,
+                    background_id,
+                } => (
                     id,
                     "announcement",
                     None,
                     Some(title.trim()),
                     Some(text.as_str()),
+                    background_id.as_deref(),
                 ),
             };
             let item_id = self.claim_id(tx, requested, &own, "setlist_items").await?;
             if own.contains(&item_id) {
                 sqlx::query(
-                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, updated_at = ?, deleted_at = NULL
+                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, background_id = ?, updated_at = ?, deleted_at = NULL
                      WHERE id = ?",
                 )
                 .bind(position as i64)
@@ -719,14 +732,15 @@ impl Db {
                 .bind(song_id)
                 .bind(title)
                 .bind(body)
+                .bind(background_id)
                 .bind(now)
                 .bind(&item_id)
                 .execute(&mut **tx)
                 .await?;
             } else {
                 sqlx::query(
-                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, background_id, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&item_id)
                 .bind(&self.library_id)
@@ -736,6 +750,7 @@ impl Db {
                 .bind(song_id)
                 .bind(title)
                 .bind(body)
+                .bind(background_id)
                 .bind(now)
                 .bind(now)
                 .execute(&mut **tx)
@@ -755,6 +770,119 @@ impl Db {
     }
 }
 
+#[derive(FromRow)]
+struct MediaRow {
+    id: String,
+    name: String,
+    hash: String,
+    ext: String,
+    width: i64,
+    height: i64,
+    created_at: i64,
+}
+
+impl From<MediaRow> for Media {
+    fn from(r: MediaRow) -> Self {
+        Media {
+            url: image_url(&r.hash, &r.ext),
+            thumb_url: thumb_url(&r.hash),
+            id: r.id,
+            name: r.name,
+            hash: r.hash,
+            width: r.width.max(0) as u32,
+            height: r.height.max(0) as u32,
+            created_at: r.created_at,
+        }
+    }
+}
+
+/// What the library knows about a newly stored image.
+pub struct NewMedia<'a> {
+    pub name: &'a str,
+    pub hash: &'a str,
+    pub ext: &'a str,
+    pub width: u32,
+    pub height: u32,
+    pub size_bytes: usize,
+}
+
+impl Db {
+    pub async fn list_media(&self) -> DbResult<Vec<Media>> {
+        let rows: Vec<MediaRow> = sqlx::query_as(
+            "SELECT id, name, hash, ext, width, height, created_at FROM media
+             WHERE library_id = ? AND deleted_at IS NULL ORDER BY created_at DESC",
+        )
+        .bind(&self.library_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows.into_iter().map(Media::from).collect())
+    }
+
+    pub async fn get_media(&self, id: &str) -> DbResult<Option<Media>> {
+        let row: Option<MediaRow> = sqlx::query_as(
+            "SELECT id, name, hash, ext, width, height, created_at FROM media
+             WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .bind(&self.library_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row.map(Media::from))
+    }
+
+    /// Record an image. Uploading the same picture again returns the
+    /// existing entry instead of a duplicate.
+    pub async fn add_media(&self, m: &NewMedia<'_>) -> DbResult<Media> {
+        let existing: Option<MediaRow> = sqlx::query_as(
+            "SELECT id, name, hash, ext, width, height, created_at FROM media
+             WHERE library_id = ? AND hash = ? AND deleted_at IS NULL",
+        )
+        .bind(&self.library_id)
+        .bind(m.hash)
+        .fetch_optional(&self.pool)
+        .await?;
+        if let Some(row) = existing {
+            return Ok(row.into());
+        }
+        let id = new_id();
+        let now = now_ms();
+        sqlx::query(
+            "INSERT INTO media (id, library_id, name, hash, ext, width, height, size_bytes, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(&self.library_id)
+        .bind(m.name)
+        .bind(m.hash)
+        .bind(m.ext)
+        .bind(i64::from(m.width))
+        .bind(i64::from(m.height))
+        .bind(m.size_bytes as i64)
+        .bind(now)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        Ok(self.get_media(&id).await?.expect("media just added"))
+    }
+
+    /// Soft-delete. The file stays on disk (another library entry or a
+    /// synced copy may still use the same hash).
+    pub async fn delete_media(&self, id: &str) -> DbResult<bool> {
+        let now = now_ms();
+        let deleted = sqlx::query(
+            "UPDATE media SET deleted_at = ?, updated_at = ? WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(id)
+        .bind(&self.library_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        Ok(deleted > 0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -769,6 +897,7 @@ mod tests {
             ccli_number: None,
             copyright: None,
             arrangement: None,
+            background_id: None,
             sections: sections
                 .iter()
                 .map(|(name, id, lines)| SectionInput {
@@ -896,6 +1025,7 @@ mod tests {
                         id: None,
                         title: "Potluck".into(),
                         text: "Next Friday".into(),
+                        background_id: None,
                     },
                     SetlistItemInput::Song {
                         id: None,
@@ -952,5 +1082,35 @@ mod tests {
 
         assert!(db.delete_setlist(&list.id).await.unwrap());
         assert!(db.list_setlists().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn media_dedupes_by_hash_and_soft_deletes() {
+        let db = Db::in_memory().await.unwrap();
+        let new = NewMedia {
+            name: "sunrise.jpg",
+            hash: "abc",
+            ext: "jpg",
+            width: 1920,
+            height: 1080,
+            size_bytes: 1000,
+        };
+        let first = db.add_media(&new).await.unwrap();
+        let again = db
+            .add_media(&NewMedia {
+                name: "copy.jpg",
+                ..new
+            })
+            .await
+            .unwrap();
+        assert_eq!(first.id, again.id);
+        assert_eq!(first.url, "/media/abc.jpg");
+        assert_eq!(first.thumb_url, "/media/thumbs/abc.jpg");
+        assert_eq!(db.list_media().await.unwrap().len(), 1);
+        assert!(db.delete_media(&first.id).await.unwrap());
+        assert!(db.get_media(&first.id).await.unwrap().is_none());
+        // After deleting, the same picture can be added again as a new entry.
+        let readded = db.add_media(&new).await.unwrap();
+        assert_ne!(readded.id, first.id);
     }
 }

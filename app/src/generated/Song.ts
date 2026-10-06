@@ -5,4 +5,8 @@ export type Song = { id: string, title: string, artist: string | null, key: stri
 /**
  * Section ids in play order; `None` plays sections in order.
  */
-arrangement: Array<string> | null, sections: Array<SongSection>, updated_at: number, };
+arrangement: Array<string> | null, 
+/**
+ * Background image (a media id); `None` uses the default background.
+ */
+background_id: string | null, sections: Array<SongSection>, updated_at: number, };

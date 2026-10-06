@@ -3,4 +3,4 @@
 /**
  * An item as a client sends it. Ids are optional, as for songs.
  */
-export type SetlistItemInput = { "kind": "song", id: string | null, song_id: string, } | { "kind": "announcement", id: string | null, title: string, text: string, };
+export type SetlistItemInput = { "kind": "song", id: string | null, song_id: string, } | { "kind": "announcement", id: string | null, title: string, text: string, background_id: string | null, };

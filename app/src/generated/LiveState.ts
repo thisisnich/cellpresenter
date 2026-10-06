@@ -36,6 +36,18 @@ slide_index: number,
  */
 visible: boolean, 
 /**
+ * "Clear text": the background stays, the words go.
+ */
+text_hidden: boolean, 
+/**
+ * "Clear background": the words stay on black.
+ */
+background_hidden: boolean, 
+/**
+ * Background image URL used when a slide has none of its own.
+ */
+default_background: string | null, 
+/**
  * Operator's proportional lyric-size control. Part of the shared live
  * state so every display scales identically.
  */

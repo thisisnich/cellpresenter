@@ -1,4 +1,5 @@
 import { t } from "../../i18n";
+import { backgroundFor } from "../../display/SlideBackground";
 import { STAGE_HEIGHT, STAGE_WIDTH } from "../../display/Stage";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { nextIndex, useLive } from "../LiveContext";
@@ -23,9 +24,9 @@ export function OutputPanel() {
   const next = nextIndex(state);
   const nextSlide =
     next !== null
-      ? { label: state.slides[next].section, text: state.slides[next].text }
+      ? { label: state.slides[next].section, text: state.slides[next].text, background: state.slides[next].background }
       : upcomingContent?.slides[0]
-        ? { label: upcomingContent.title, text: upcomingContent.slides[0].text }
+        ? { label: upcomingContent.title, text: upcomingContent.slides[0].text, background: upcomingContent.slides[0].background }
         : null;
 
   return (
@@ -43,6 +44,8 @@ export function OutputPanel() {
             textScale={state.text_scale}
             blank={!state.visible}
             blankLabel={t("output.blackedOut")}
+            background={state.background_hidden ? null : backgroundFor(live?.background, state.default_background)}
+            hideText={state.text_hidden}
           />
         </div>
       </section>
@@ -51,7 +54,11 @@ export function OutputPanel() {
         <section className="flex flex-col gap-1.5">
           <span className="cp-label text-cp-next">{t("output.next", { section: nextSlide.label })}</span>
           <div className="w-[62%] overflow-hidden rounded-cp-sm border-cp">
-            <SlidePreview text={nextSlide.text} textScale={state.text_scale} />
+            <SlidePreview
+              text={nextSlide.text}
+              textScale={state.text_scale}
+              background={backgroundFor(nextSlide.background, state.default_background)}
+            />
           </div>
         </section>
       )}

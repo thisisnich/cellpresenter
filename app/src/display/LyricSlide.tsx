@@ -34,8 +34,9 @@ export function LyricSlide({ text, textScale }: { text: string; textScale: numbe
   );
   return (
     <p
-      className="m-0 whitespace-pre text-center font-bold text-white"
-      style={{ fontSize, lineHeight: LINE_HEIGHT, fontFamily: LYRIC_FONT }}
+      className="relative m-0 whitespace-pre text-center font-bold text-white"
+      // The shadow keeps lyrics legible over bright parts of a background.
+      style={{ fontSize, lineHeight: LINE_HEIGHT, fontFamily: LYRIC_FONT, textShadow: "0 4px 24px rgb(0 0 0 / 0.55)" }}
     >
       {text}
     </p>
