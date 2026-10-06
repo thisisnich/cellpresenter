@@ -11,10 +11,10 @@ export function SlideBackground({ url }: { url: string | null | undefined }) {
   );
 }
 
-/** Which background a slide shows: its own, else the default. */
-export function backgroundFor(
-  slideBackground: string | null | undefined,
-  defaultBackground: string | null | undefined,
-): string | null {
-  return slideBackground ?? defaultBackground ?? null;
+/**
+ * The background a slide would appear with: the first of its own cue, its
+ * song's or announcement's cue, and whatever is on the background layer.
+ */
+export function backgroundFor(...candidates: (string | null | undefined)[]): string | null {
+  return candidates.find((c) => c) ?? null;
 }

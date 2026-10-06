@@ -8,6 +8,7 @@ fn slides(groups: &[&[&str]]) -> Vec<SlideInput> {
         .iter()
         .map(|lines| SlideInput {
             id: None,
+            background_id: None,
             lines: lines
                 .iter()
                 .map(|t| LyricLine {
@@ -260,7 +261,11 @@ mod tests {
 
         let well = songs.iter().find(|s| s.title == "It Is Well").unwrap();
         let song = db.get_song(&well.id).await.unwrap().unwrap();
-        let sections: Vec<_> = song.live_slides().into_iter().map(|s| s.section).collect();
+        let sections: Vec<_> = song
+            .live_slides(|_| None)
+            .into_iter()
+            .map(|s| s.section)
+            .collect();
         assert_eq!(
             sections,
             [

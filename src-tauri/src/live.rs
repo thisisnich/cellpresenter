@@ -9,9 +9,14 @@ pub struct Slide {
     pub section: String,
     /// Lyric lines, separated by `\n`.
     pub text: String,
-    /// Background image URL for this slide; `None` uses the default.
+    /// Background cue: when this slide goes on screen, the background layer
+    /// switches to this image. `None` leaves the background as it is.
     #[serde(default)]
     pub background: Option<String>,
+    /// The stored song slide this came from (None for announcements), so the
+    /// console can attach a background cue to it.
+    #[serde(default)]
+    pub slide_id: Option<String>,
 }
 
 /// Live presentation state. The server owns it; every client renders from it.
@@ -37,12 +42,11 @@ pub struct LiveState {
     pub slide_index: usize,
     /// Black-out toggle: display clients render nothing when false.
     pub visible: bool,
-    /// "Clear text": the background stays, the words go.
+    /// "Clear text": the words are off screen until the next slide.
     pub text_hidden: bool,
-    /// "Clear background": the words stay on black.
-    pub background_hidden: bool,
-    /// Background image URL used when a slide has none of its own.
-    pub default_background: Option<String>,
+    /// The background layer: an image URL shown behind the words. It stays
+    /// across slides and songs until another image is cued or it's cleared.
+    pub background: Option<String>,
     /// Operator's proportional lyric-size control. Part of the shared live
     /// state so every display scales identically.
     pub text_scale: f64,
@@ -67,8 +71,10 @@ pub enum Command {
     SetVisible {
         visible: bool,
     },
-    ToggleText,
-    ToggleBackground,
+    /// Take the words off screen until the next slide.
+    ClearText,
+    /// Empty the background layer.
+    ClearBackground,
     SetTextScale {
         scale: f64,
     },
@@ -89,17 +95,37 @@ impl LiveState {
 
     /// Put slides on air, starting at `slide_index` (clamped). `song_id` is
     /// the library song they come from, if any (announcements have none).
+    /// `cue` is the song's or announcement's own background: it takes over
+    /// the background layer; without one the layer stays as it is.
     pub fn show(
         &mut self,
         song_id: Option<String>,
         title: String,
         slides: Vec<Slide>,
         slide_index: usize,
+        cue: Option<String>,
     ) {
         self.slide_index = slide_index.min(slides.len().saturating_sub(1));
         self.song_id = song_id;
         self.title = title;
         self.slides = slides;
+        if cue.is_some() {
+            self.background = cue;
+        }
+        self.slide_changed();
+    }
+
+    /// A (possibly new) slide is on screen: its words come back, and its
+    /// background cue, if any, takes over the background layer.
+    fn slide_changed(&mut self) {
+        self.text_hidden = false;
+        if let Some(cue) = self
+            .slides
+            .get(self.slide_index)
+            .and_then(|s| s.background.clone())
+        {
+            self.background = Some(cue);
+        }
     }
 
     /// Apply one command. Invalid input (out-of-range index, NaN scale) is
@@ -112,12 +138,13 @@ impl LiveState {
             Command::GoTo { index } => {
                 if index < self.slides.len() {
                     self.slide_index = index;
+                    self.slide_changed();
                 }
             }
             Command::ToggleVisible => self.visible = !self.visible,
             Command::SetVisible { visible } => self.visible = visible,
-            Command::ToggleText => self.text_hidden = !self.text_hidden,
-            Command::ToggleBackground => self.background_hidden = !self.background_hidden,
+            Command::ClearText => self.text_hidden = true,
+            Command::ClearBackground => self.background = None,
             Command::SetTextScale { scale } => {
                 if scale.is_finite() {
                     self.text_scale = scale.clamp(TEXT_SCALE_MIN, TEXT_SCALE_MAX);
@@ -131,7 +158,11 @@ impl LiveState {
     fn step(&mut self, delta: isize) {
         let n = self.slides.len() as isize;
         if n > 0 {
-            self.slide_index = (self.slide_index as isize + delta).clamp(0, n - 1) as usize;
+            let to = (self.slide_index as isize + delta).clamp(0, n - 1) as usize;
+            if to != self.slide_index {
+                self.slide_index = to;
+                self.slide_changed();
+            }
         }
     }
 
@@ -155,9 +186,10 @@ mod tests {
                 section: format!("Verse {i}"),
                 text: format!("line {i}"),
                 background: None,
+                slide_id: None,
             })
             .collect();
-        s.show(Some("song".into()), "Song".into(), slides, 0);
+        s.show(Some("song".into()), "Song".into(), slides, 0, None);
         s
     }
 
@@ -220,11 +252,53 @@ mod tests {
     fn show_song_clamps_the_start_slide() {
         let mut s = fixture();
         let slides = s.slides.clone();
-        s.show(Some("b".into()), "B".into(), slides, 99);
+        s.show(Some("b".into()), "B".into(), slides, 99, None);
         assert_eq!(s.slide_index, 3);
         assert_eq!(s.song_id.as_deref(), Some("b"));
-        s.show(Some("c".into()), "C".into(), vec![], 5);
+        s.show(Some("c".into()), "C".into(), vec![], 5, None);
         assert_eq!(s.slide_index, 0);
+    }
+
+    fn cued(section: &str, cue: Option<&str>) -> Slide {
+        Slide {
+            section: section.into(),
+            text: section.into(),
+            background: cue.map(String::from),
+            slide_id: None,
+        }
+    }
+
+    #[test]
+    fn background_layer_follows_cues_and_stays_without_them() {
+        let mut s = LiveState::new("t".into());
+        s.background = Some("/media/manual.jpg".into());
+        let slides = vec![
+            cued("A", None),
+            cued("B", Some("/media/b.jpg")),
+            cued("C", None),
+        ];
+        s.show(None, "Song".into(), slides, 0, None);
+        // No cue on the first slide: the picture already showing stays.
+        assert_eq!(s.background.as_deref(), Some("/media/manual.jpg"));
+        s.apply(Command::Next);
+        assert_eq!(s.background.as_deref(), Some("/media/b.jpg"));
+        s.apply(Command::Next);
+        assert_eq!(s.background.as_deref(), Some("/media/b.jpg"));
+        s.apply(Command::ClearBackground);
+        assert_eq!(s.background, None);
+        s.apply(Command::GoTo { index: 1 });
+        assert_eq!(s.background.as_deref(), Some("/media/b.jpg"));
+    }
+
+    #[test]
+    fn clear_text_lasts_until_the_next_slide() {
+        let mut s = fixture();
+        s.apply(Command::ClearText);
+        assert!(s.text_hidden);
+        s.apply(Command::Prev); // already on the first slide: nothing changes
+        assert!(s.text_hidden);
+        s.apply(Command::Next);
+        assert!(!s.text_hidden);
     }
 
     #[test]

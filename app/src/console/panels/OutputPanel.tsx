@@ -44,7 +44,7 @@ export function OutputPanel() {
             textScale={state.text_scale}
             blank={!state.visible}
             blankLabel={t("output.blackedOut")}
-            background={state.background_hidden ? null : backgroundFor(live?.background, state.default_background)}
+            background={state.background}
             hideText={state.text_hidden}
           />
         </div>
@@ -57,7 +57,7 @@ export function OutputPanel() {
             <SlidePreview
               text={nextSlide.text}
               textScale={state.text_scale}
-              background={backgroundFor(nextSlide.background, state.default_background)}
+              background={backgroundFor(nextSlide.background, state.background)}
             />
           </div>
         </section>

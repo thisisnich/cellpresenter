@@ -5,7 +5,6 @@
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
 import type { Media } from "../generated/Media";
-import type { Settings } from "../generated/Settings";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { PinInfo } from "../generated/PinInfo";
 import type { Setlist } from "../generated/Setlist";
@@ -106,8 +105,14 @@ export const api = {
       file.type || "application/octet-stream",
     ),
   deleteMedia: (id: string) => request<void>(`/api/media/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  settings: () => request<Settings>("/api/settings"),
-  updateSettings: (settings: Settings) => request<Settings>("/api/settings", json("PUT", settings)),
+  /** Put an image on the background layer now (null clears it). */
+  liveBackground: (mediaId: string | null) => request<LiveState>("/api/live/background", json("POST", { media_id: mediaId })),
+  /** Attach a background cue to one slide of a song (null removes it). */
+  setSlideBackground: (songId: string, slideId: string, mediaId: string | null) =>
+    request<Song>(
+      `/api/songs/${encodeURIComponent(songId)}/slides/${encodeURIComponent(slideId)}/background`,
+      json("PUT", { media_id: mediaId }),
+    ),
 
   listSetlists: () => request<SetlistSummary[]>("/api/setlists"),
   getSetlist: (id: string) => request<Setlist>(`/api/setlists/${encodeURIComponent(id)}`),

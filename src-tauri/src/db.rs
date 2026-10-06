@@ -67,6 +67,7 @@ struct SlideRow {
     id: String,
     section_id: String,
     lines: String,
+    background_id: Option<String>,
 }
 
 impl Db {
@@ -195,7 +196,7 @@ impl Db {
         .fetch_all(&self.pool)
         .await?;
         let slide_rows: Vec<SlideRow> = sqlx::query_as(
-            "SELECT id, section_id, lines FROM slides WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
+            "SELECT id, section_id, lines, background_id FROM slides WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
         )
         .bind(id)
         .fetch_all(&self.pool)
@@ -207,7 +208,11 @@ impl Db {
             slides_by_section
                 .entry(s.section_id)
                 .or_default()
-                .push(SongSlide { id: s.id, lines });
+                .push(SongSlide {
+                    id: s.id,
+                    lines,
+                    background_id: s.background_id,
+                });
         }
         let arrangement = row
             .arrangement
@@ -292,6 +297,37 @@ impl Db {
         self.write_children(&mut tx, id, input, now).await?;
         tx.commit().await?;
         self.get_song(id).await
+    }
+
+    /// Set or clear one slide's background cue. False if the slide isn't
+    /// part of that song.
+    pub async fn set_slide_background(
+        &self,
+        song_id: &str,
+        slide_id: &str,
+        media_id: Option<&str>,
+    ) -> DbResult<bool> {
+        let now = now_ms();
+        let updated = sqlx::query(
+            "UPDATE slides SET background_id = ?, updated_at = ?
+             WHERE id = ? AND song_id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(media_id)
+        .bind(now)
+        .bind(slide_id)
+        .bind(song_id)
+        .bind(&self.library_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        if updated > 0 {
+            sqlx::query("UPDATE songs SET updated_at = ? WHERE id = ?")
+                .bind(now)
+                .bind(song_id)
+                .execute(&self.pool)
+                .await?;
+        }
+        Ok(updated > 0)
     }
 
     pub async fn delete_song(&self, id: &str) -> DbResult<bool> {
@@ -453,19 +489,20 @@ impl Db {
             let lines = serde_json::to_string(&slide.lines).map_err(decode_err)?;
             if own_slides.contains(&slide_id) {
                 sqlx::query(
-                    "UPDATE slides SET section_id = ?, position = ?, lines = ?, updated_at = ?, deleted_at = NULL WHERE id = ?",
+                    "UPDATE slides SET section_id = ?, position = ?, lines = ?, background_id = ?, updated_at = ?, deleted_at = NULL WHERE id = ?",
                 )
                 .bind(section_id)
                 .bind(position as i64)
                 .bind(&lines)
+                .bind(&slide.background_id)
                 .bind(now)
                 .bind(&slide_id)
                 .execute(&mut **tx)
                 .await?;
             } else {
                 sqlx::query(
-                    "INSERT INTO slides (id, library_id, song_id, section_id, position, lines, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO slides (id, library_id, song_id, section_id, position, lines, background_id, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&slide_id)
                 .bind(&self.library_id)
@@ -473,6 +510,7 @@ impl Db {
                 .bind(section_id)
                 .bind(position as i64)
                 .bind(&lines)
+                .bind(&slide.background_id)
                 .bind(now)
                 .bind(now)
                 .execute(&mut **tx)
@@ -905,6 +943,7 @@ mod tests {
                     name: (*name).into(),
                     slides: vec![SlideInput {
                         id: None,
+                        background_id: None,
                         lines: lines
                             .iter()
                             .map(|t| LyricLine {

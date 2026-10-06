@@ -9,6 +9,7 @@ import { api, ApiError } from "../../lib/api";
 import { notifyLibraryChanged } from "../../lib/libraryEvents";
 import { useLive } from "../LiveContext";
 import type { EditorParams } from "../openEditor";
+import { backgroundFor } from "../../display/SlideBackground";
 import { BackgroundPicker } from "../BackgroundPicker";
 import { useConsole } from "../ConsoleContext";
 import { SlidePreview } from "../SlidePreview";
@@ -57,9 +58,15 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
     () =>
       parsed.arrangement.flatMap((name) => {
         const section = parsed.sections.find((s) => s.name === name);
-        return (section?.slides ?? []).map((lines) => ({ section: name, text: lines.map((l) => l.text).join("\n") }));
+        // A slide keeps its background cue by position, as on save.
+        const old = stored?.sections.find((s) => s.name === name);
+        return (section?.slides ?? []).map((lines, i) => ({
+          section: name,
+          text: lines.map((l) => l.text).join("\n"),
+          background: mediaUrl(old?.slides[i]?.background_id),
+        }));
       }),
-    [parsed],
+    [parsed, stored, mediaUrl],
   );
 
   const edit = <K extends keyof SongMeta>(field: K, value: SongMeta[K]) => {
@@ -186,7 +193,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
               <div key={i} className="overflow-hidden rounded-cp border-cp">
-                <SlidePreview text={slide.text} background={mediaUrl(meta.backgroundId) ?? state?.default_background ?? null} />
+                <SlidePreview text={slide.text} background={backgroundFor(slide.background, mediaUrl(meta.backgroundId), state?.background)} />
                 <div className="px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
                   {i + 1} · {slide.section}
                 </div>

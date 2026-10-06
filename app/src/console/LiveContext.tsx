@@ -14,6 +14,8 @@ interface LiveContextValue {
   showSong: (songId: string, slideIndex?: number) => Promise<void>;
   /** Put a setlist item on air. */
   showItem: (setlistId: string, itemId: string, slideIndex?: number) => Promise<void>;
+  /** Put an image on the background layer now (null clears it). */
+  setBackground: (mediaId: string | null) => Promise<void>;
 }
 
 const LiveContext = createContext<LiveContextValue | null>(null);
@@ -47,9 +49,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     [run],
   );
 
+  const setBackground = useCallback((mediaId: string | null) => run(() => api.liveBackground(mediaId)), [run]);
+
   const value = useMemo(
-    () => ({ state, status, error, send, showSong, showItem }),
-    [state, status, error, send, showSong, showItem],
+    () => ({ state, status, error, send, showSong, showItem, setBackground }),
+    [state, status, error, send, showSong, showItem, setBackground],
   );
   return <LiveContext.Provider value={value}>{children}</LiveContext.Provider>;
 }

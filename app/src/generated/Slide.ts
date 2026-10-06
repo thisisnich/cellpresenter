@@ -13,6 +13,12 @@ section: string,
  */
 text: string, 
 /**
- * Background image URL for this slide; `None` uses the default.
+ * Background cue: when this slide goes on screen, the background layer
+ * switches to this image. `None` leaves the background as it is.
  */
-background: string | null, };
+background: string | null, 
+/**
+ * The stored song slide this came from (None for announcements), so the
+ * console can attach a background cue to it.
+ */
+slide_id: string | null, };

@@ -16,9 +16,9 @@ const stored: Song = {
   arrangement: ["v1", "c", "v2", "c"],
   background_id: null,
   sections: [
-    { id: "v1", name: "Verse 1", slides: [{ id: "v1a", lines: [{ text: "a", chords: [] }] }] },
-    { id: "c", name: "Chorus", slides: [{ id: "ca", lines: [{ text: "b", chords: [] }] }] },
-    { id: "v2", name: "Verse 2", slides: [{ id: "v2a", lines: [{ text: "c", chords: [] }, { text: "d", chords: [] }] }] },
+    { id: "v1", name: "Verse 1", slides: [{ id: "v1a", lines: [{ text: "a", chords: [] }], background_id: null }] },
+    { id: "c", name: "Chorus", slides: [{ id: "ca", lines: [{ text: "b", chords: [] }], background_id: "pic" }] },
+    { id: "v2", name: "Verse 2", slides: [{ id: "v2a", lines: [{ text: "c", chords: [] }, { text: "d", chords: [] }], background_id: null }] },
   ],
   updated_at: 0,
 };
@@ -38,7 +38,7 @@ describe("toSongInput", () => {
     expect(input.artist).toBeNull();
     expect(input.copyright).toBe("Public domain");
     expect(input.sections.map((s) => s.id)).toEqual(["v1", "c", "v2"]);
-    expect(input.sections[1].slides[0]).toEqual({ id: "ca", lines: [{ text: "b edited", chords: [] }] });
+    expect(input.sections[1].slides[0]).toEqual({ id: "ca", lines: [{ text: "b edited", chords: [] }], background_id: "pic" });
     expect(input.arrangement).toEqual(["v1", "c", "v2", "c"]);
   });
 

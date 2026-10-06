@@ -13,8 +13,7 @@ const state = (session: string, version: number): LiveState => ({
   slide_index: 0,
   visible: true,
   text_hidden: false,
-  background_hidden: false,
-  default_background: null,
+  background: null,
   text_scale: 1,
 });
 

@@ -14,8 +14,8 @@ const song = (arrangement: string[] | null): Song => ({
   arrangement,
   background_id: null,
   sections: [
-    { id: "v", name: "Verse 1", slides: [{ id: "v1", lines: [line("a"), line("b")] }] },
-    { id: "c", name: "Chorus", slides: [{ id: "c1", lines: [line("c")] }] },
+    { id: "v", name: "Verse 1", slides: [{ id: "v1", lines: [line("a"), line("b")], background_id: null }] },
+    { id: "c", name: "Chorus", slides: [{ id: "c1", lines: [line("c")], background_id: "m1" }] },
   ],
   updated_at: 0,
 });
@@ -26,6 +26,12 @@ describe("playedSlides", () => {
     expect(playedSlides(song(["v"]))[0].text).toBe("a\nb");
   });
 
+  it("carries each slide's background cue and id", () => {
+    const slides = playedSlides(song(null), (id) => `/media/${id}.jpg`);
+    expect(slides.map((s) => s.background)).toEqual([null, "/media/m1.jpg"]);
+    expect(slides[1].slide_id).toBe("c1");
+  });
+
   it("falls back to section order", () => {
     expect(playedSlides(song(null))).toHaveLength(2);
     expect(playedSlides(song(["gone"]))).toHaveLength(2);
@@ -34,10 +40,10 @@ describe("playedSlides", () => {
 
 describe("announcementSlides", () => {
   it("splits on blank lines and never comes out empty", () => {
-    expect(announcementSlides("Potluck", "Potluck next Friday\nBring a dish\n\n\n7 pm", "/media/x.jpg")).toEqual([
-      { section: "Potluck", text: "Potluck next Friday\nBring a dish", background: "/media/x.jpg" },
-      { section: "Potluck", text: "7 pm", background: "/media/x.jpg" },
+    expect(announcementSlides("Potluck", "Potluck next Friday\nBring a dish\n\n\n7 pm").map((s) => s.text)).toEqual([
+      "Potluck next Friday\nBring a dish",
+      "7 pm",
     ]);
-    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null }]);
+    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null, slide_id: null }]);
   });
 });

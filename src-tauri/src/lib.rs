@@ -98,7 +98,6 @@ pub fn run() {
                 .map_err(|e| report(format!("can't create {}: {e}", media_dir.display())))?;
             let state = ServerState::new(assets, db, pins, port, media);
             tauri::async_runtime::block_on(async {
-                state.restore_settings().await;
                 state.restore_live().await;
             });
             tauri::async_runtime::spawn(async move {

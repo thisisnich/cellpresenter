@@ -5,7 +5,7 @@ import { api } from "../lib/api";
 import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
 import { LyricSlide } from "./LyricSlide";
-import { backgroundFor, SlideBackground } from "./SlideBackground";
+import { SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 
 // Stateless renderer: everything it shows comes from the live state pushed
@@ -21,9 +21,9 @@ export default function DisplayApp() {
   const active = slide?.text ?? "";
   const shown = state?.visible ?? false;
   const textScale = state?.text_scale ?? 1;
-  const background =
-    state && !state.background_hidden ? backgroundFor(slide?.background, state.default_background) : null;
-  const nextBackground = state ? backgroundFor(state.slides[state.slide_index + 1]?.background, state.default_background) : null;
+  // The background layer, which slide cues switch on the server.
+  const background = state?.background ?? null;
+  const nextBackground = state?.slides[state.slide_index + 1]?.background ?? null;
 
   // Load the next slide's background ahead of time so it never pops in.
   useEffect(() => {

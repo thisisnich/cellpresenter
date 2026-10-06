@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { SlidePreview } from "../console/SlidePreview";
-import { backgroundFor } from "../display/SlideBackground";
 import { currentJump, sectionJumps } from "../domain/sections";
 import type { LiveState } from "../generated/LiveState";
 import { t } from "../i18n";
@@ -95,7 +94,7 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
   const next = state.slides[state.slide_index + 1];
   const jumps = sectionJumps(state.slides);
   const here = currentJump(jumps, state.slide_index);
-  const background = state.background_hidden ? null : backgroundFor(slide?.background, state.default_background);
+  const background = state.background;
 
   return (
     <main className="flex h-dvh flex-col gap-3 bg-cp-bg p-3 font-ui text-cp-text select-none">
@@ -172,11 +171,11 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
           </button>
           <button
             type="button"
-            onClick={() => void send({ type: "toggle_text" })}
-            aria-pressed={state.text_hidden}
-            className={`h-12 ${state.text_hidden ? "cp-btn-danger" : "cp-btn"}`}
+            disabled={state.text_hidden}
+            onClick={() => void send({ type: "clear_text" })}
+            className="cp-btn h-12"
           >
-            {state.text_hidden ? t("transport.showText") : t("transport.clearText")}
+            {t("transport.clearText")}
           </button>
         </div>
         <div className="grid grid-cols-3 gap-2">

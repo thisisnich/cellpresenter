@@ -100,6 +100,7 @@ pub fn announcement_slides(title: &str, text: &str) -> Vec<Slide> {
             section: title.to_string(),
             text: block.to_string(),
             background: None,
+            slide_id: None,
         })
         .collect();
     if slides.is_empty() {
@@ -107,6 +108,7 @@ pub fn announcement_slides(title: &str, text: &str) -> Vec<Slide> {
             section: title.to_string(),
             text: title.to_string(),
             background: None,
+            slide_id: None,
         }]
     } else {
         slides

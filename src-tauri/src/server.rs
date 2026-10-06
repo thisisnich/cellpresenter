@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::{Arc, RwLock};
 
@@ -114,6 +115,8 @@ struct SavedLive {
     slide_index: usize,
     visible: bool,
     text_scale: f64,
+    #[serde(default)]
+    background: Option<String>,
 }
 
 impl ServerState {
@@ -142,15 +145,17 @@ impl ServerState {
         };
         let song = match song {
             Some(song) => {
-                let slides = self.song_slides(&song).await.unwrap_or_default();
+                let (slides, _) = self.song_content(&song).await.unwrap_or_default();
                 Some((song, slides))
             }
             None => None,
         };
         self.mutate(|l| {
             if let Some((song, slides)) = song {
-                l.show(Some(song.id), song.title, slides, saved.slide_index);
+                l.show(Some(song.id), song.title, slides, saved.slide_index, None);
             }
+            // The background layer comes back as it was, not from cues.
+            l.background = saved.background;
             l.visible = saved.visible;
             l.apply(Command::SetTextScale {
                 scale: saved.text_scale,
@@ -178,6 +183,7 @@ impl ServerState {
                     slide_index: live.slide_index,
                     visible: live.visible,
                     text_scale: live.text_scale,
+                    background: live.background,
                 };
                 let json = serde_json::to_string(&saved).expect("serialize saved live state");
                 if let Err(e) = state.db.set_state(LIVE_STATE_KEY, &json).await {
@@ -190,12 +196,8 @@ impl ServerState {
 
 // ---------- setlist items on air ----------
 
-fn with_background(mut slides: Vec<Slide>, background: Option<String>) -> Vec<Slide> {
-    for slide in &mut slides {
-        slide.background = background.clone();
-    }
-    slides
-}
+/// What a setlist item puts on screen: song id, title, slides, background cue.
+type ItemContent = (Option<String>, String, Vec<Slide>, Option<String>);
 
 /// Where to start in an item's slides.
 #[derive(Clone, Copy)]
@@ -206,15 +208,13 @@ enum SlideAt {
 
 impl ServerState {
     /// The slides an item shows, or None if its song is gone.
-    async fn item_content(
-        &self,
-        item: &SetlistItem,
-    ) -> DbResult<Option<(Option<String>, String, Vec<Slide>)>> {
+    /// Its song id (if any), title, slides and background cue.
+    async fn item_content(&self, item: &SetlistItem) -> DbResult<Option<ItemContent>> {
         Ok(match item {
             SetlistItem::Song { song_id, .. } => match self.db.get_song(song_id).await? {
                 Some(song) => {
-                    let slides = self.song_slides(&song).await?;
-                    Some((Some(song.id), song.title, slides))
+                    let (slides, cue) = self.song_content(&song).await?;
+                    Some((Some(song.id), song.title, slides, cue))
                 }
                 None => None,
             },
@@ -224,9 +224,8 @@ impl ServerState {
                 background_id,
                 ..
             } => {
-                let background = self.background_url(background_id.as_deref()).await?;
-                let slides = with_background(announcement_slides(title, text), background);
-                Some((None, title.clone(), slides))
+                let cue = self.background_url(background_id.as_deref()).await?;
+                Some((None, title.clone(), announcement_slides(title, text), cue))
             }
         })
     }
@@ -239,10 +238,22 @@ impl ServerState {
         })
     }
 
-    /// A song's slides with its background attached.
-    async fn song_slides(&self, song: &Song) -> DbResult<Vec<Slide>> {
-        let background = self.background_url(song.background_id.as_deref()).await?;
-        Ok(with_background(song.live_slides(), background))
+    /// A song's slides (each carrying its own background cue, if any) and
+    /// the song's background cue.
+    async fn song_content(&self, song: &Song) -> DbResult<(Vec<Slide>, Option<String>)> {
+        let urls: HashMap<String, String> = self
+            .db
+            .list_media()
+            .await?
+            .into_iter()
+            .map(|m| (m.id, m.url))
+            .collect();
+        let slides = song.live_slides(|id| urls.get(id).cloned());
+        let cue = song
+            .background_id
+            .as_ref()
+            .and_then(|id| urls.get(id).cloned());
+        Ok((slides, cue))
     }
 
     /// Put item `index` of `setlist` on air. None if it can't be shown.
@@ -255,7 +266,7 @@ impl ServerState {
         let Some(item) = setlist.items.get(index) else {
             return Ok(None);
         };
-        let Some((song_id, title, slides)) = self.item_content(item).await? else {
+        let Some((song_id, title, slides, cue)) = self.item_content(item).await? else {
             return Ok(None);
         };
         let slide_index = match at {
@@ -264,7 +275,7 @@ impl ServerState {
         };
         let (setlist_id, item_id) = (setlist.id.clone(), item.id().to_string());
         Ok(Some(self.mutate(|l| {
-            l.show(song_id, title, slides, slide_index);
+            l.show(song_id, title, slides, slide_index, cue);
             l.setlist_id = Some(setlist_id);
             l.item_id = Some(item_id);
         })))
@@ -500,9 +511,9 @@ async fn live_show_song(
     Json(args): Json<ShowSong>,
 ) -> ApiResult<LiveState> {
     let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
-    let slides = s.song_slides(&song).await?;
+    let (slides, cue) = s.song_content(&song).await?;
     Ok(Json(s.mutate(|l| {
-        l.show(Some(song.id), song.title, slides, args.slide_index);
+        l.show(Some(song.id), song.title, slides, args.slide_index, cue);
         l.setlist_id = None;
         l.item_id = None;
     })))
@@ -540,11 +551,11 @@ async fn update_song(
     let song = s.db.update_song(&id, &input).await?.ok_or(NOT_FOUND)?;
     // If this song is on air, show the edit straight away.
     if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
-        let slides = s.song_slides(&song).await?;
+        let (slides, _) = s.song_content(&song).await?;
         let (song_id, title) = (song.id.clone(), song.title.clone());
         s.mutate(|l| {
             let index = l.slide_index;
-            l.show(Some(song_id), title, slides, index);
+            l.show(Some(song_id), title, slides, index, None);
         });
     }
     Ok(Json(song))
@@ -623,8 +634,6 @@ async fn delete_setlist(
 
 // ---------- media ----------
 
-const DEFAULT_BACKGROUND_KEY: &str = "default_background";
-
 #[derive(Deserialize)]
 struct UploadParams {
     #[serde(default)]
@@ -675,13 +684,11 @@ async fn delete_media(
     State(s): State<ServerState>,
     Path(id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    if !s.db.delete_media(&id).await? {
-        return Err(NOT_FOUND);
-    }
-    // Deleting the default background clears it.
-    if s.db.get_state(DEFAULT_BACKGROUND_KEY).await?.as_deref() == Some(id.as_str()) {
-        s.db.set_state(DEFAULT_BACKGROUND_KEY, "").await?;
-        s.mutate(|l| l.default_background = None);
+    let media = s.db.get_media(&id).await?.ok_or(NOT_FOUND)?;
+    s.db.delete_media(&id).await?;
+    // A removed picture leaves the screen too.
+    if s.snapshot().background.as_deref() == Some(media.url.as_str()) {
+        s.mutate(|l| l.background = None);
     }
     Ok(StatusCode::NO_CONTENT)
 }
@@ -719,49 +726,53 @@ async fn media_thumb(State(s): State<ServerState>, Path(name): Path<String>) -> 
     serve_media_file(&s, &name, true).await
 }
 
-#[derive(Serialize, Deserialize, TS)]
+#[derive(Deserialize, TS)]
 #[ts(export)]
-pub struct Settings {
-    /// Media id of the background used when a slide has none.
-    pub default_background_id: Option<String>,
+pub struct BackgroundChoice {
+    /// The image to show, or null to clear the background layer.
+    pub media_id: Option<String>,
 }
 
-async fn get_settings(State(s): State<ServerState>) -> ApiResult<Settings> {
-    let id =
-        s.db.get_state(DEFAULT_BACKGROUND_KEY)
-            .await?
-            .filter(|v| !v.is_empty());
-    Ok(Json(Settings {
-        default_background_id: id,
-    }))
-}
-
-async fn update_settings(
+/// Put an image on the background layer now (or clear it). It stays across
+/// slides and songs until another image is cued.
+async fn live_background(
     State(s): State<ServerState>,
-    Json(settings): Json<Settings>,
-) -> ApiResult<Settings> {
-    let id = settings.default_background_id.filter(|v| !v.is_empty());
-    let url = s.background_url(id.as_deref()).await?;
-    if id.is_some() && url.is_none() {
+    Json(choice): Json<BackgroundChoice>,
+) -> ApiResult<LiveState> {
+    let url = match choice.media_id.as_deref() {
+        Some(id) => Some(s.background_url(Some(id)).await?.ok_or(NOT_FOUND)?),
+        None => None,
+    };
+    Ok(Json(s.mutate(|l| l.background = url)))
+}
+
+/// Attach a background cue to one slide of a song (or remove it).
+async fn set_slide_background(
+    State(s): State<ServerState>,
+    Path((song_id, slide_id)): Path<(String, String)>,
+    Json(choice): Json<BackgroundChoice>,
+) -> ApiResult<Song> {
+    if let Some(id) = choice.media_id.as_deref() {
+        s.db.get_media(id).await?.ok_or(NOT_FOUND)?;
+    }
+    if !s
+        .db
+        .set_slide_background(&song_id, &slide_id, choice.media_id.as_deref())
+        .await?
+    {
         return Err(NOT_FOUND);
     }
-    s.db.set_state(DEFAULT_BACKGROUND_KEY, id.as_deref().unwrap_or(""))
-        .await?;
-    s.mutate(|l| l.default_background = url);
-    Ok(Json(Settings {
-        default_background_id: id,
-    }))
-}
-
-impl ServerState {
-    /// Load the default background into live state (on startup).
-    pub async fn restore_settings(&self) {
-        if let Ok(Some(id)) = self.db.get_state(DEFAULT_BACKGROUND_KEY).await {
-            if let Ok(Some(url)) = self.background_url(Some(&id)).await {
-                self.mutate(|l| l.default_background = Some(url));
-            }
-        }
+    let song = s.db.get_song(&song_id).await?.ok_or(NOT_FOUND)?;
+    // If the song is on air, its slides pick up the new cue.
+    if s.snapshot().song_id.as_deref() == Some(song_id.as_str()) {
+        let (slides, _) = s.song_content(&song).await?;
+        s.mutate(|l| {
+            let index = l.slide_index;
+            let (id, title) = (song.id.clone(), song.title.clone());
+            l.show(Some(id), title, slides, index, None);
+        });
     }
+    Ok(Json(song))
 }
 
 // ---------- WebSocket ----------
@@ -879,7 +890,11 @@ pub fn router(state: ServerState) -> Router {
             post(upload_media).layer(DefaultBodyLimit::max(media::MAX_UPLOAD_BYTES)),
         )
         .route("/media/{id}", axum::routing::delete(delete_media))
-        .route("/settings", axum::routing::put(update_settings))
+        .route("/live/background", post(live_background))
+        .route(
+            "/songs/{song_id}/slides/{slide_id}/background",
+            axum::routing::put(set_slide_background),
+        )
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",
@@ -903,7 +918,6 @@ pub fn router(state: ServerState) -> Router {
         .route("/songs/{id}", get(get_song))
         .route("/setlists", get(list_setlists))
         .route("/media", get(list_media))
-        .route("/settings", get(get_settings))
         .route("/setlists/{id}", get(get_setlist))
         .merge(control)
         .fallback(|| async { StatusCode::NOT_FOUND });
@@ -1319,25 +1333,28 @@ mod tests {
         (status, String::from_utf8_lossy(&bytes).into_owned())
     }
 
+    async fn upload(router: &Router, name: &str, alpha: bool, size: u32) -> Media {
+        let png = crate::media::tests::sample_png(size, size / 2, alpha);
+        let (status, body) = call_bytes(router, &format!("/api/media?name={name}"), png).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        serde_json::from_str(&body).unwrap()
+    }
+
     #[tokio::test]
-    async fn backgrounds_upload_serve_and_reach_the_screen() {
-        let (router, state) = app(LOCAL).await;
+    async fn uploads_are_deduped_served_and_checked() {
+        let (router, _) = app(LOCAL).await;
         let png = crate::media::tests::sample_png(640, 360, false);
         let (status, body) = call_bytes(&router, "/api/media?name=Sunrise.png", png.clone()).await;
         assert_eq!(status, StatusCode::CREATED);
         let media: Media = serde_json::from_str(&body).unwrap();
         assert_eq!(media.name, "Sunrise.png");
         assert!(media.url.ends_with(".jpg"));
-
-        // Same picture again: same entry.
         let (_, again) = call_bytes(&router, "/api/media", png).await;
         assert_eq!(serde_json::from_str::<Media>(&again).unwrap().id, media.id);
         assert_eq!(
             call_bytes(&router, "/api/media", b"nope".to_vec()).await.0,
             StatusCode::UNSUPPORTED_MEDIA_TYPE
         );
-
-        // Files are served; anything that isn't a hash name is not.
         assert_eq!(
             call(&router, "GET", &media.url, None, None).await.0,
             StatusCode::OK
@@ -1352,17 +1369,87 @@ mod tests {
                 .0,
             StatusCode::NOT_FOUND
         );
+    }
 
-        // A song's background travels with its slides.
-        let song = state.db.list_songs().await.unwrap()[0].id.clone();
+    #[tokio::test]
+    async fn background_layer_works_like_propresenter() {
+        let (router, state) = app(LOCAL).await;
+        let hills = upload(&router, "hills", false, 640).await;
+        let sea = upload(&router, "sea", false, 800).await;
+        let snapshot = || state.snapshot();
+
+        // Clicking a picture puts it on the layer; it survives a song change.
+        let pick = |id: &str| format!(r#"{{"media_id":"{id}"}}"#);
+        call(
+            &router,
+            "POST",
+            "/api/live/background",
+            Some(&pick(&hills.id)),
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background.as_deref(), Some(hills.url.as_str()));
+        let songs = state.db.list_songs().await.unwrap();
+        let grace = songs
+            .iter()
+            .find(|s| s.title == "Amazing Grace")
+            .unwrap()
+            .id
+            .clone();
+        call(
+            &router,
+            "POST",
+            "/api/live/show-song",
+            Some(&format!(r#"{{"song_id":"{grace}"}}"#)),
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background.as_deref(), Some(hills.url.as_str()));
+
+        // A slide with a cue switches the layer when it goes on screen.
+        let song = state.db.get_song(&grace).await.unwrap().unwrap();
+        let third = song.sections[1].slides[0].id.clone(); // Verse 2, played 3rd
+        let path = format!("/api/songs/{grace}/slides/{third}/background");
+        assert_eq!(
+            call(&router, "PUT", &path, Some(&pick(&sea.id)), None)
+                .await
+                .0,
+            StatusCode::OK
+        );
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"next"}"#),
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background.as_deref(), Some(hills.url.as_str()));
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"next"}"#),
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background.as_deref(), Some(sea.url.as_str()));
+
+        // A song's own background is cued when the song goes on air.
+        let holy = songs
+            .iter()
+            .find(|s| s.title == "Holy, Holy, Holy")
+            .unwrap()
+            .id
+            .clone();
         let edit = format!(
-            r#"{{"title":"T","background_id":"{}","sections":[{{"name":"V","slides":[{{"lines":[{{"text":"x"}}]}}]}}]}}"#,
-            media.id
+            r#"{{"title":"Holy","background_id":"{}","sections":[{{"name":"V","slides":[{{"lines":[{{"text":"x"}}]}}]}}]}}"#,
+            hills.id
         );
         call(
             &router,
             "PUT",
-            &format!("/api/songs/{song}"),
+            &format!("/api/songs/{holy}"),
             Some(&edit),
             None,
         )
@@ -1371,60 +1458,70 @@ mod tests {
             &router,
             "POST",
             "/api/live/show-song",
-            Some(&format!(r#"{{"song_id":"{song}"}}"#)),
+            Some(&format!(r#"{{"song_id":"{holy}"}}"#)),
             None,
         )
         .await;
-        assert_eq!(
-            state.snapshot().slides[0].background.as_deref(),
-            Some(media.url.as_str())
-        );
+        assert_eq!(snapshot().background.as_deref(), Some(hills.url.as_str()));
 
-        // Default background reaches live state, and clears when deleted.
-        let set = format!(r#"{{"default_background_id":"{}"}}"#, media.id);
-        assert_eq!(
-            call(&router, "PUT", "/api/settings", Some(&set), None)
-                .await
-                .0,
-            StatusCode::OK
-        );
-        assert_eq!(
-            state.snapshot().default_background.as_deref(),
-            Some(media.url.as_str())
-        );
+        // Clear text lasts until the next slide; clear background empties the layer.
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"clear_text"}"#),
+            None,
+        )
+        .await;
+        assert!(snapshot().text_hidden);
+        call(
+            &router,
+            "POST",
+            "/api/live/command",
+            Some(r#"{"type":"clear_background"}"#),
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background, None);
+
+        // Removing the picture on screen takes it off screen.
+        call(
+            &router,
+            "POST",
+            "/api/live/background",
+            Some(&pick(&sea.id)),
+            None,
+        )
+        .await;
+        call(
+            &router,
+            "DELETE",
+            &format!("/api/media/{}", sea.id),
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(snapshot().background, None);
+        // Unknown media and wrong slides are refused.
         assert_eq!(
             call(
                 &router,
-                "DELETE",
-                &format!("/api/media/{}", media.id),
-                None,
+                "POST",
+                "/api/live/background",
+                Some(&pick("nope")),
                 None
             )
             .await
             .0,
-            StatusCode::NO_CONTENT
+            StatusCode::NOT_FOUND
         );
-        assert_eq!(state.snapshot().default_background, None);
-
-        // Clear text / clear background toggles.
-        call(
-            &router,
-            "POST",
-            "/api/live/command",
-            Some(r#"{"type":"toggle_text"}"#),
-            None,
-        )
-        .await;
-        call(
-            &router,
-            "POST",
-            "/api/live/command",
-            Some(r#"{"type":"toggle_background"}"#),
-            None,
-        )
-        .await;
-        let live = state.snapshot();
-        assert!(live.text_hidden && live.background_hidden);
+        let wrong = format!("/api/songs/{holy}/slides/{third}/background");
+        assert_eq!(
+            call(&router, "PUT", &wrong, Some(r#"{"media_id":null}"#), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
     }
 
     #[tokio::test]

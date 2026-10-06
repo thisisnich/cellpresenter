@@ -28,6 +28,9 @@ pub struct LyricLine {
 pub struct SongSlide {
     pub id: String,
     pub lines: Vec<LyricLine>,
+    /// Background cue (a media id): when this slide goes on screen the
+    /// background layer switches to it.
+    pub background_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -107,6 +110,8 @@ pub struct SlideInput {
     #[serde(default)]
     pub id: Option<String>,
     pub lines: Vec<LyricLine>,
+    #[serde(default)]
+    pub background_id: Option<String>,
 }
 
 impl Song {
@@ -125,13 +130,15 @@ impl Song {
         self.sections.iter().collect()
     }
 
-    /// The slides a display shows for this song, in play order.
-    pub fn live_slides(&self) -> Vec<Slide> {
+    /// The slides a display shows for this song, in play order. `url_of`
+    /// turns a slide's background cue (a media id) into an image URL.
+    pub fn live_slides(&self, url_of: impl Fn(&str) -> Option<String>) -> Vec<Slide> {
         self.played_sections()
             .into_iter()
             .flat_map(|section| {
                 section.slides.iter().map(|slide| Slide {
-                    background: None,
+                    background: slide.background_id.as_deref().and_then(&url_of),
+                    slide_id: Some(slide.id.clone()),
                     section: section.name.clone(),
                     text: slide
                         .lines
@@ -166,6 +173,7 @@ mod tests {
                 .map(|(i, lines)| SongSlide {
                     id: format!("{id}-{i}"),
                     lines: lines.iter().map(|l| line(l)).collect(),
+                    background_id: None,
                 })
                 .collect(),
         }
@@ -192,7 +200,7 @@ mod tests {
 
     #[test]
     fn live_slides_follow_section_order_without_arrangement() {
-        let slides = song(None).live_slides();
+        let slides = song(None).live_slides(|_| None);
         assert_eq!(slides.len(), 2);
         assert_eq!(slides[0].text, "a\nb");
         assert_eq!(slides[1].section, "Chorus");
@@ -200,13 +208,13 @@ mod tests {
 
     #[test]
     fn arrangement_repeats_sections_and_skips_unknown_ids() {
-        let slides = song(Some(vec!["v1", "c", "nope", "c"])).live_slides();
+        let slides = song(Some(vec!["v1", "c", "nope", "c"])).live_slides(|_| None);
         let sections: Vec<_> = slides.iter().map(|s| s.section.as_str()).collect();
         assert_eq!(sections, ["Verse 1", "Chorus", "Chorus"]);
     }
 
     #[test]
     fn an_arrangement_of_only_unknown_ids_falls_back_to_order() {
-        assert_eq!(song(Some(vec!["gone"])).live_slides().len(), 2);
+        assert_eq!(song(Some(vec!["gone"])).live_slides(|_| None).len(), 2);
     }
 }

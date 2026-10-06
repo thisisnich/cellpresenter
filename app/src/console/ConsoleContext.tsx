@@ -19,6 +19,10 @@ export type Selection = { kind: "song"; songId: string } | { kind: "item"; setli
 export interface Content {
   title: string;
   slides: Slide[];
+  /** The library song these slides come from (null for announcements). */
+  songId: string | null;
+  /** The song's or announcement's own background cue (image URL). */
+  cue: string | null;
 }
 
 interface ConsoleValue {
@@ -43,8 +47,6 @@ interface ConsoleValue {
   reloadMedia: () => Promise<void>;
   /** Image URL for a media id, if it still exists. */
   mediaUrl: (id: string | null | undefined) => string | null;
-  defaultBackgroundId: string | null;
-  setDefaultBackground: (id: string | null) => Promise<void>;
 }
 
 const ConsoleContext = createContext<ConsoleValue | null>(null);
@@ -83,13 +85,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
   const [libraryVersion, setLibraryVersion] = useState(0);
   const songs = useRef(new Map<string, Promise<Song | null>>());
   const [media, setMedia] = useState<Media[]>([]);
-  const [defaultBackgroundId, setDefaultBackgroundId] = useState<string | null>(null);
 
   const reloadMedia = useCallback(async () => {
     try {
-      const [list, settings] = await Promise.all([api.listMedia(), api.settings()]);
-      setMedia(list);
-      setDefaultBackgroundId(settings.default_background_id);
+      setMedia(await api.listMedia());
     } catch {
       // Keep what we have; the Media panel shows its own errors.
     }
@@ -102,10 +101,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     (id: string | null | undefined) => (id ? (media.find((m) => m.id === id)?.url ?? null) : null),
     [media],
   );
-  const setDefaultBackground = useCallback(async (id: string | null) => {
-    const settings = await api.updateSettings({ default_background_id: id });
-    setDefaultBackgroundId(settings.default_background_id);
-  }, []);
+
 
   const refreshSetlists = useCallback(async () => {
     try {
@@ -164,15 +160,15 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     async (sel: Selection): Promise<Content | null> => {
       if (sel.kind === "song") {
         const s = await song(sel.songId);
-        return s && { title: s.title, slides: playedSlides(s, mediaUrl(s.background_id)) };
+        return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: mediaUrl(s.background_id) };
       }
       const list = setlist?.id === sel.setlistId ? setlist : await api.getSetlist(sel.setlistId).catch(() => null);
       const item = list?.items.find((i) => i.id === sel.itemId);
       if (!item) return null;
       if (item.kind === "announcement")
-        return { title: item.title, slides: announcementSlides(item.title, item.text, mediaUrl(item.background_id)) };
+        return { title: item.title, slides: announcementSlides(item.title, item.text), songId: null, cue: mediaUrl(item.background_id) };
       const s = await song(item.song_id);
-      return s && { title: s.title, slides: playedSlides(s, mediaUrl(s.background_id)) };
+      return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: mediaUrl(s.background_id) };
     },
     [setlist, song, mediaUrl],
   );
@@ -236,8 +232,6 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       media,
       reloadMedia,
       mediaUrl,
-      defaultBackgroundId,
-      setDefaultBackground,
     }),
     [
       selection,
@@ -252,8 +246,6 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       media,
       reloadMedia,
       mediaUrl,
-      defaultBackgroundId,
-      setDefaultBackground,
     ],
   );
   return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>;

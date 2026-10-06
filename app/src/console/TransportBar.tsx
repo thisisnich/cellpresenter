@@ -49,21 +49,21 @@ export function TransportBar() {
         </button>
         <button
           type="button"
-          disabled={disabled}
-          onClick={() => send({ type: "toggle_text" })}
-          className={state?.text_hidden ? "cp-btn-danger" : "cp-btn"}
-          aria-pressed={state?.text_hidden ?? false}
+          disabled={disabled || state.text_hidden}
+          onClick={() => send({ type: "clear_text" })}
+          title={t("transport.clearTextHelp")}
+          className="cp-btn"
         >
-          {state?.text_hidden ? t("transport.showText") : t("transport.clearText")}
+          {t("transport.clearText")}
         </button>
         <button
           type="button"
-          disabled={disabled}
-          onClick={() => send({ type: "toggle_background" })}
-          className={state?.background_hidden ? "cp-btn-danger" : "cp-btn"}
-          aria-pressed={state?.background_hidden ?? false}
+          disabled={disabled || !state.background}
+          onClick={() => send({ type: "clear_background" })}
+          title={t("transport.clearBackgroundHelp")}
+          className="cp-btn"
         >
-          {state?.background_hidden ? t("transport.showBackground") : t("transport.clearBackground")}
+          {t("transport.clearBackground")}
         </button>
         {error && (
           <p role="alert" className="m-0 text-cp-danger">

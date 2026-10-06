@@ -51,7 +51,12 @@ export function toSongInput(parsed: ParsedSong, meta: SongMeta, existing?: Song)
     return {
       id,
       name: section.name,
-      slides: section.slides.map((lines, i) => ({ id: old?.slides[i]?.id ?? null, lines })),
+      // Slides keep their id and background cue by position.
+      slides: section.slides.map((lines, i) => ({
+        id: old?.slides[i]?.id ?? null,
+        lines,
+        background_id: old?.slides[i]?.background_id ?? null,
+      })),
     };
   });
   const arrangement = parsed.arrangement.map((name) => idOf.get(name)).filter((id): id is string => Boolean(id));
