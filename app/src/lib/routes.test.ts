@@ -6,6 +6,7 @@ describe("viewFromPath", () => {
     expect(viewFromPath("/display")).toBe("display");
     expect(viewFromPath("/display/")).toBe("display");
     expect(viewFromPath("/remote")).toBe("remote");
+    expect(viewFromPath("/chords")).toBe("chords");
   });
 
   it("falls back to the console for everything else", () => {

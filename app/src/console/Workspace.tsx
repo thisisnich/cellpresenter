@@ -3,6 +3,7 @@ import "dockview-react/dist/styles/dockview.css";
 import { useMemo } from "react";
 import type { Theme } from "../theme/tokens";
 import { restoreLayout, saveLayout } from "./layout";
+import { ChordsPanel } from "./panels/ChordsPanel";
 import { EditorPanel } from "./panels/EditorPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { MediaPanel } from "./panels/MediaPanel";
@@ -16,6 +17,7 @@ const components = {
   library: LibraryPanel,
   editor: EditorPanel,
   media: MediaPanel,
+  chords: ChordsPanel,
   slides: SlidesPanel,
   output: OutputPanel,
   placeholder: PlaceholderPanel,

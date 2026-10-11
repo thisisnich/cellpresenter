@@ -6,13 +6,15 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { ROUTES } from "../lib/routes";
 
-type Target = "display" | "remote";
+type Target = "display" | "remote" | "chords";
 
 function linkUrl(address: NetworkAddress, port: number, target: Target, pin: string | null): string {
   const base = `http://${address.ip}:${port}`;
   // The remote link carries the PIN after #, which browsers never send to
   // the server: scanning it pairs the phone without typing the PIN.
-  return target === "display" ? `${base}${ROUTES.display}` : `${base}${ROUTES.remote}${pin ? `#pin=${pin}` : ""}`;
+  if (target === "display") return `${base}${ROUTES.display}`;
+  if (target === "chords") return `${base}${ROUTES.chords}`;
+  return `${base}${ROUTES.remote}${pin ? `#pin=${pin}` : ""}`;
 }
 
 /** A QR code drawn as SVG squares, so it scales crisply and follows no theme. */
@@ -107,11 +109,11 @@ export function DisplayLink() {
         >
           <div>
             <h2 className="m-0 text-sm font-semibold">{t("displayLink.title")}</h2>
-            <p className="m-0 mt-1 text-cp-muted">{target === "display" ? t("displayLink.howTo") : t("displayLink.howToRemote")}</p>
+            <p className="m-0 mt-1 text-cp-muted">{target === "remote" ? t("displayLink.howToRemote") : target === "chords" ? t("displayLink.howToChords") : t("displayLink.howTo")}</p>
           </div>
 
           <div className="flex rounded-cp border-cp bg-cp-bg p-0.5" role="tablist">
-            {(["display", "remote"] as const).map((k) => (
+            {(["display", "chords", "remote"] as const).map((k) => (
               <button
                 key={k}
                 type="button"
@@ -120,7 +122,7 @@ export function DisplayLink() {
                 onClick={() => setTarget(k)}
                 className={`flex-1 rounded-cp-sm px-3 py-1 ${target === k ? "bg-cp-surface-hi font-semibold" : "text-cp-muted"}`}
               >
-                {k === "display" ? t("displayLink.display") : t("displayLink.remote")}
+                {k === "display" ? t("displayLink.display") : k === "chords" ? t("displayLink.chords") : t("displayLink.remote")}
               </button>
             ))}
           </div>

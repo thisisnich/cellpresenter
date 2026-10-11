@@ -6,16 +6,15 @@ import { t } from "../i18n";
 // is saved per machine and "Reset layout" brings this back.
 
 // Bump the version when panels change, so old saved layouts are dropped.
-const STORAGE_KEY = "cellpresenter.layout.v4";
+const STORAGE_KEY = "cellpresenter.layout.v5";
 
 export function buildDefaultLayout(api: DockviewApi): void {
   api.clear();
   api.addPanel({ id: "slides", component: "slides", title: t("panel.slides") });
   api.addPanel({
     id: "chords",
-    component: "placeholder",
+    component: "chords",
     title: t("panel.chords"),
-    params: { message: "chords.comingSoon" },
     position: { referencePanel: "slides", direction: "within" },
     inactive: true,
   });
