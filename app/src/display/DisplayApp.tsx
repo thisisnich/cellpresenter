@@ -72,11 +72,6 @@ export default function DisplayApp() {
         {state && shown && state.slides.length === 0 && !background && (
           <p className="text-4xl text-white/25">{t("display.waiting")}</p>
         )}
-        {state && shown && !state.text_hidden && state.slides.length > 0 && (
-          <p className="absolute bottom-6 right-10 text-xl font-medium text-white/40">
-            {t("display.slideCount", { current: state.slide_index + 1, total: state.slides.length })}
-          </p>
-        )}
       </Stage>
 
       {diag && (

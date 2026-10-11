@@ -6,7 +6,9 @@ export const en = {
   "mode.show": "Show",
   "mode.edit": "Edit",
   "mode.chords": "Chords",
-  "mode.comingSoon": "Coming soon",
+  "mode.showHelp": "Slides of what's on air or being previewed",
+  "mode.editHelp": "Edit the song being previewed or on air",
+  "mode.chordsHelp": "The song on air with chords",
   "layout.reset": "Reset layout",
   "header.copied": "Copied",
   "header.remotePin": "Remote PIN",
@@ -114,6 +116,12 @@ export const en = {
   "chords.bigger": "Bigger text",
   "chords.lyricsOnly": "Lyrics only",
   "chords.noChords": "This song has no chords yet. Add them in the song editor (chords above the words, or inline like [C]this).",
+  "chords.showShapes": "Ways to play {chord}",
+  "chords.shapesTitle": "Ways to play {chord}",
+  "chords.shapeLabel": "Guitar shape {shape}, low string first",
+  "chords.inThisSong": "Chords in this song",
+  "chords.noShapes": "No guitar shapes for this chord.",
+  "chords.shapesHint": "Easiest first, then further up the neck. A dot is a finger, o is an open string, × is not played; a number on the left is the starting fret.",
   "chords.panelEmpty": "The song on air shows here with its chords, in any key.",
   "notes.comingSoon": "Notes for the operator and the band.",
   "stage.comingSoon": "Countdowns and messages to the stage display.",
@@ -132,7 +140,10 @@ export const en = {
   "media.takeOff": "Take off screen",
   "media.remove": "Remove",
   "media.removeNamed": "Remove {name}",
-  "background.label": "Background when the song starts",
+  "background.label": "Background when it comes on",
+  "editor.sectionBackgrounds": "Backgrounds",
+  "editor.backgroundsSet": "{count} set",
+  "editor.sectionBackgroundsHint": "Each section switches the background when it comes on. A picture dropped on a single slide wins over its section's.",
   "background.default": "Keep what's showing",
 
   "slides.count": "{count} slides",
@@ -183,7 +194,6 @@ export const en = {
   "display.noSignal": "No signal",
   "display.waiting": "Waiting for a song",
   "display.reconnecting": "Disconnected — reconnecting",
-  "display.slideCount": "{current} / {total}",
 } as const;
 
 export type MessageKey = keyof typeof en;

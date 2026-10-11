@@ -160,7 +160,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     async (sel: Selection): Promise<Content | null> => {
       if (sel.kind === "song") {
         const s = await song(sel.songId);
-        return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: mediaUrl(s.background_id) };
+        return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
       }
       const list = setlist?.id === sel.setlistId ? setlist : await api.getSetlist(sel.setlistId).catch(() => null);
       const item = list?.items.find((i) => i.id === sel.itemId);
@@ -168,7 +168,7 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       if (item.kind === "announcement")
         return { title: item.title, slides: announcementSlides(item.title, item.text), songId: null, cue: mediaUrl(item.background_id) };
       const s = await song(item.song_id);
-      return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: mediaUrl(s.background_id) };
+      return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
     },
     [setlist, song, mediaUrl],
   );

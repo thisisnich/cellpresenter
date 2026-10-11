@@ -1,7 +1,26 @@
 //! Starter songs for a brand-new library. All public-domain hymn texts.
 
 use crate::db::{new_id, Db, DbResult};
-use crate::song::{LyricLine, SectionInput, SlideInput, SongInput};
+use crate::song::{ChordMark, LyricLine, SectionInput, SlideInput, SongInput};
+
+/// A line written with inline chords, `[C]` before the syllable the chord
+/// starts on. Positions count characters, like the editor does.
+fn line(inline: &str) -> LyricLine {
+    let mut text = String::new();
+    let mut chords = vec![];
+    let mut rest = inline;
+    while let Some(open) = rest.find('[') {
+        text.push_str(&rest[..open]);
+        let close = open + rest[open..].find(']').expect("unclosed chord");
+        chords.push(ChordMark {
+            at: text.chars().count() as u32,
+            chord: rest[open + 1..close].into(),
+        });
+        rest = &rest[close + 1..];
+    }
+    text.push_str(rest);
+    LyricLine { text, chords }
+}
 
 fn slides(groups: &[&[&str]]) -> Vec<SlideInput> {
     groups
@@ -9,13 +28,7 @@ fn slides(groups: &[&[&str]]) -> Vec<SlideInput> {
         .map(|lines| SlideInput {
             id: None,
             background_id: None,
-            lines: lines
-                .iter()
-                .map(|t| LyricLine {
-                    text: (*t).into(),
-                    chords: vec![],
-                })
-                .collect(),
+            lines: lines.iter().map(|t| line(t)).collect(),
         })
         .collect()
 }
@@ -24,6 +37,7 @@ fn section(id: &str, name: &str, groups: &[&[&str]]) -> SectionInput {
     SectionInput {
         id: Some(id.into()),
         name: name.into(),
+        background_id: None,
         slides: slides(groups),
     }
 }
@@ -43,7 +57,6 @@ fn hymn(
         ccli_number: None,
         copyright: Some("Public domain".into()),
         arrangement,
-        background_id: None,
         sections,
     }
 }
@@ -56,12 +69,12 @@ fn it_is_well() -> SongInput {
             "Verse 1",
             &[
                 &[
-                    "When peace like a river attendeth my way,",
-                    "When sorrows like sea billows roll;",
+                    "When [C]peace like a river at[F]tendeth my [C]way,",
+                    "When [C]sorrows like sea billows [G]roll;",
                 ],
                 &[
-                    "Whatever my lot, Thou hast taught me to say,",
-                    "It is well, it is well with my soul.",
+                    "What[C]ever my lot, Thou hast [F]taught me to [C]say,",
+                    "It is [G]well, it is [G7]well with my [C]soul.",
                 ],
             ],
         ),
@@ -69,8 +82,8 @@ fn it_is_well() -> SongInput {
             &c,
             "Chorus",
             &[&[
-                "It is well with my soul,",
-                "It is well, it is well with my soul.",
+                "It is [G7]well [C]with my soul,",
+                "It is [F]well, it is [G7]well with my [C]soul.",
             ]],
         ),
         section(
@@ -78,12 +91,12 @@ fn it_is_well() -> SongInput {
             "Verse 2",
             &[
                 &[
-                    "Though Satan should buffet, though trials should come,",
-                    "Let this blest assurance control,",
+                    "Though [C]Satan should buffet, though [F]trials should [C]come,",
+                    "Let [C]this blest assurance con[G]trol,",
                 ],
                 &[
-                    "That Christ has regarded my helpless estate,",
-                    "And hath shed His own blood for my soul.",
+                    "That [C]Christ has regarded my [F]helpless es[C]tate,",
+                    "And hath [G]shed His own [G7]blood for my [C]soul.",
                 ],
             ],
         ),
@@ -92,12 +105,12 @@ fn it_is_well() -> SongInput {
             "Verse 3",
             &[
                 &[
-                    "My sin, oh, the bliss of this glorious thought!",
-                    "My sin, not in part but the whole,",
+                    "My [C]sin, oh, the bliss of this [F]glorious [C]thought!",
+                    "My [C]sin, not in part but the [G]whole,",
                 ],
                 &[
-                    "Is nailed to the cross, and I bear it no more,",
-                    "Praise the Lord, praise the Lord, O my soul!",
+                    "Is [C]nailed to the cross, and I [F]bear it no [C]more,",
+                    "Praise the [G]Lord, praise the [G7]Lord, O my [C]soul!",
                 ],
             ],
         ),
@@ -119,12 +132,12 @@ fn amazing_grace() -> SongInput {
             "Verse 1",
             &[
                 &[
-                    "Amazing grace! How sweet the sound",
-                    "That saved a wretch like me!",
+                    "A[G]mazing [G7]grace! How [C]sweet the [G]sound",
+                    "That [G]saved a wretch like [D]me!",
                 ],
                 &[
-                    "I once was lost, but now am found;",
-                    "Was blind, but now I see.",
+                    "I [G]once was [G7]lost, but [C]now am [G]found;",
+                    "Was [Em]blind, but [D]now I [G]see.",
                 ],
             ],
         ),
@@ -133,12 +146,12 @@ fn amazing_grace() -> SongInput {
             "Verse 2",
             &[
                 &[
-                    "'Twas grace that taught my heart to fear,",
-                    "And grace my fears relieved;",
+                    "'Twas [G]grace that [G7]taught my [C]heart to [G]fear,",
+                    "And [G]grace my fears re[D]lieved;",
                 ],
                 &[
-                    "How precious did that grace appear",
-                    "The hour I first believed.",
+                    "How [G]precious [G7]did that [C]grace ap[G]pear",
+                    "The [Em]hour I [D]first be[G]lieved.",
                 ],
             ],
         ),
@@ -147,12 +160,12 @@ fn amazing_grace() -> SongInput {
             "Verse 3",
             &[
                 &[
-                    "Through many dangers, toils and snares,",
-                    "I have already come;",
+                    "Through [G]many [G7]dangers, [C]toils and [G]snares,",
+                    "I [G]have already [D]come;",
                 ],
                 &[
-                    "'Tis grace hath brought me safe thus far,",
-                    "And grace will lead me home.",
+                    "'Tis [G]grace hath [G7]brought me [C]safe thus [G]far,",
+                    "And [Em]grace will [D]lead me [G]home.",
                 ],
             ],
         ),
@@ -161,12 +174,12 @@ fn amazing_grace() -> SongInput {
             "Verse 4",
             &[
                 &[
-                    "When we've been there ten thousand years,",
-                    "Bright shining as the sun,",
+                    "When [G]we've been [G7]there ten [C]thousand [G]years,",
+                    "Bright [G]shining as the [D]sun,",
                 ],
                 &[
-                    "We've no less days to sing God's praise",
-                    "Than when we'd first begun.",
+                    "We've [G]no less [G7]days to [C]sing God's [G]praise",
+                    "Than [Em]when we'd [D]first be[G]gun.",
                 ],
             ],
         ),
@@ -181,12 +194,12 @@ fn holy_holy_holy() -> SongInput {
             "Verse 1",
             &[
                 &[
-                    "Holy, holy, holy! Lord God Almighty!",
-                    "Early in the morning our song shall rise to Thee;",
+                    "[D]Holy, holy, [Bm]holy! [D]Lord God Al[A]mighty!",
+                    "[D]Early in the [Bm]morning our [E]song shall rise to [A]Thee;",
                 ],
                 &[
-                    "Holy, holy, holy, merciful and mighty!",
-                    "God in three Persons, blessed Trinity!",
+                    "[D]Holy, holy, [Bm]holy, [G]merciful and [D]mighty!",
+                    "[G]God in three [D]Persons, [A7]blessed [D]Trinity!",
                 ],
             ],
         ),
@@ -195,12 +208,12 @@ fn holy_holy_holy() -> SongInput {
             "Verse 2",
             &[
                 &[
-                    "Holy, holy, holy! All the saints adore Thee,",
-                    "Casting down their golden crowns around the glassy sea;",
+                    "[D]Holy, holy, [Bm]holy! [D]All the saints a[A]dore Thee,",
+                    "[D]Casting down their [Bm]golden crowns a[E]round the glassy [A]sea;",
                 ],
                 &[
-                    "Cherubim and seraphim falling down before Thee,",
-                    "Which wert, and art, and evermore shalt be.",
+                    "[D]Cherubim and [Bm]seraphim [G]falling down be[D]fore Thee,",
+                    "[G]Which wert, and [D]art, and [A7]evermore shalt [D]be.",
                 ],
             ],
         ),
@@ -209,12 +222,12 @@ fn holy_holy_holy() -> SongInput {
             "Verse 3",
             &[
                 &[
-                    "Holy, holy, holy! Though the darkness hide Thee,",
-                    "Though the eye of sinful man Thy glory may not see;",
+                    "[D]Holy, holy, [Bm]holy! [D]Though the darkness [A]hide Thee,",
+                    "[D]Though the eye of [Bm]sinful man Thy [E]glory may not [A]see;",
                 ],
                 &[
-                    "Only Thou art holy; there is none beside Thee,",
-                    "Perfect in power, in love, and purity.",
+                    "[D]Only Thou art [Bm]holy; there is [G]none beside [D]Thee,",
+                    "[G]Perfect in [D]power, in [A7]love, and [D]purity.",
                 ],
             ],
         ),
@@ -223,12 +236,12 @@ fn holy_holy_holy() -> SongInput {
             "Verse 4",
             &[
                 &[
-                    "Holy, holy, holy! Lord God Almighty!",
-                    "All Thy works shall praise Thy name, in earth, and sky, and sea;",
+                    "[D]Holy, holy, [Bm]holy! [D]Lord God Al[A]mighty!",
+                    "[D]All Thy works shall [Bm]praise Thy name, in [E]earth, and sky, and [A]sea;",
                 ],
                 &[
-                    "Holy, holy, holy; merciful and mighty!",
-                    "God in three Persons, blessed Trinity!",
+                    "[D]Holy, holy, [Bm]holy; [G]merciful and [D]mighty!",
+                    "[G]God in three [D]Persons, [A7]blessed [D]Trinity!",
                 ],
             ],
         ),
@@ -271,6 +284,26 @@ mod tests {
             [
                 "Verse 1", "Verse 1", "Chorus", "Verse 2", "Verse 2", "Chorus", "Verse 3",
                 "Verse 3", "Chorus"
+            ]
+        );
+        assert_eq!(song.key.as_deref(), Some("C"));
+        let first = &song.sections[0].slides[0].lines[0];
+        assert_eq!(first.text, "When peace like a river attendeth my way,");
+        assert_eq!(
+            first.chords,
+            [
+                ChordMark {
+                    at: 5,
+                    chord: "C".into()
+                },
+                ChordMark {
+                    at: 26,
+                    chord: "F".into()
+                },
+                ChordMark {
+                    at: 37,
+                    chord: "C".into()
+                },
             ]
         );
     }

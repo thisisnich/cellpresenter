@@ -1,7 +1,7 @@
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useMemo, useState } from "react";
 import { sectionKind } from "../../domain/sections";
-import { longestSlide, songForText, toSongInput, type SongMeta } from "../../domain/songEditing";
+import { longestSlide, sectionBackgroundsOf, songForText, toSongInput, type SongMeta } from "../../domain/songEditing";
 import { parseSongText, songToText } from "../../domain/songText";
 import type { Song } from "../../generated/Song";
 import { t } from "../../i18n";
@@ -16,7 +16,7 @@ import { SlidePreview } from "../SlidePreview";
 
 const KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B", "Am", "Bm", "Cm", "Dm", "Em", "Fm", "Gm"];
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
-const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, backgroundId: null };
+const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, sectionBackgrounds: {} };
 
 // Edit a song as text, with a live preview of the slides it makes.
 export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorParams>) {
@@ -44,7 +44,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           artist: song.artist ?? "",
           key: song.key ?? "",
           capo: song.capo,
-          backgroundId: song.background_id,
+          sectionBackgrounds: sectionBackgroundsOf(song),
         });
         setText(songToText(songForText(song)));
         setLinesPerSlide(longestSlide(song));
@@ -63,10 +63,10 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
         return (section?.slides ?? []).map((lines, i) => ({
           section: name,
           text: lines.map((l) => l.text).join("\n"),
-          background: mediaUrl(old?.slides[i]?.background_id),
+          background: mediaUrl(old?.slides[i]?.background_id ?? meta.sectionBackgrounds[name]),
         }));
       }),
-    [parsed, stored, mediaUrl],
+    [parsed, stored, mediaUrl, meta.sectionBackgrounds],
   );
 
   const edit = <K extends keyof SongMeta>(field: K, value: SongMeta[K]) => {
@@ -158,16 +158,46 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             className="h-9 rounded-cp border-cp bg-cp-bg px-2.5 font-mono"
           />
         </label>
-        <div className="flex min-w-56 flex-1 flex-col gap-1">
-          <label htmlFor="song-background" className="cp-label">
-            {t("background.label")}
-          </label>
-          <BackgroundPicker id="song-background" value={meta.backgroundId} onChange={(id) => edit("backgroundId", id)} />
-        </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-wrap">
-        <label className="flex min-h-64 min-w-0 flex-[1_1_380px] flex-col">
+      {parsed.sections.length > 0 && (
+        <details className="border-b-cp px-4 py-2" open={Object.values(meta.sectionBackgrounds).some(Boolean) || undefined}>
+          <summary className="cp-label cursor-pointer py-1">
+            {t("editor.sectionBackgrounds")}
+            {(() => {
+              const set = parsed.sections.filter((s) => meta.sectionBackgrounds[s.name]).length;
+              return set > 0 ? ` · ${t("editor.backgroundsSet", { count: set })}` : "";
+            })()}
+          </summary>
+          <div className="mt-1.5 grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-x-4 gap-y-2">
+            {parsed.sections.map((section, i) => (
+              <div key={section.name} className="flex items-center gap-2">
+                <label
+                  htmlFor={`section-bg-${i}`}
+                  className="w-20 shrink-0 truncate rounded-cp-sm px-1.5 py-0.5 text-[11px] font-semibold text-white"
+                  style={{ background: sectionColor(section.name) }}
+                  title={section.name}
+                >
+                  {section.name}
+                </label>
+                <div className="min-w-0 flex-1">
+                  <BackgroundPicker
+                    id={`section-bg-${i}`}
+                    value={meta.sectionBackgrounds[section.name] ?? null}
+                    onChange={(id) => edit("sectionBackgrounds", { ...meta.sectionBackgrounds, [section.name]: id })}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="m-0 mt-2 text-[12px] text-cp-muted">{t("editor.sectionBackgroundsHint")}</p>
+        </details>
+      )}
+
+      {/* A wrapping row sizes to its content, so cap each side at the row's
+          height: wide, the preview scrolls; narrow, the whole row does. */}
+      <div className="flex min-h-0 flex-1 flex-wrap overflow-y-auto">
+        <label className="flex max-h-full min-h-64 min-w-0 flex-[1_1_380px] flex-col">
           <span className="sr-only">{t("editor.lyrics")}</span>
           <textarea
             value={text}
@@ -178,7 +208,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           />
         </label>
 
-        <section aria-label={t("editor.preview")} className="flex min-w-0 flex-[1_1_320px] flex-col overflow-hidden border-l-cp">
+        <section aria-label={t("editor.preview")} className="flex max-h-full min-w-0 flex-[1_1_320px] flex-col overflow-hidden border-l-cp">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-cp px-3 py-2">
             <span className="cp-label">{t("editor.previewCount", { count: played.length })}</span>
             <div className="flex flex-wrap gap-1">
@@ -193,7 +223,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
               <div key={i} className="overflow-hidden rounded-cp border-cp">
-                <SlidePreview text={slide.text} background={backgroundFor(slide.background, mediaUrl(meta.backgroundId), state?.background)} />
+                <SlidePreview text={slide.text} background={backgroundFor(slide.background, state?.background)} />
                 <div className="px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
                   {i + 1} · {slide.section}
                 </div>

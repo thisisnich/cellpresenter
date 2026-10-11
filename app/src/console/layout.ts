@@ -66,6 +66,22 @@ export function buildDefaultLayout(api: DockviewApi): void {
   api.getPanel("slides")?.api.setActive();
 }
 
+/** Bring a panel to the front, re-adding it if it was closed. */
+export function focusPanel(api: DockviewApi, id: "slides" | "chords"): void {
+  const panel = api.getPanel(id);
+  if (panel) {
+    panel.api.setActive();
+    return;
+  }
+  const other = api.getPanel(id === "slides" ? "chords" : "slides");
+  api.addPanel({
+    id,
+    component: id,
+    title: t(id === "slides" ? "panel.slides" : "panel.chords"),
+    ...(other ? { position: { referencePanel: other, direction: "within" as const } } : {}),
+  });
+}
+
 /** Restore the saved layout, falling back to the default. */
 export function restoreLayout(api: DockviewApi): void {
   try {

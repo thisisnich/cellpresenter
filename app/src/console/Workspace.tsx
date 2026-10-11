@@ -25,7 +25,16 @@ const components = {
 
 // The dockable workspace. Panels are plain components; the layout is
 // restored on start and saved whenever the operator rearranges it.
-export function Workspace({ theme, onReady }: { theme: Theme; onReady: (api: DockviewApi) => void }) {
+export function Workspace({
+  theme,
+  onReady,
+  onActivePanel,
+}: {
+  theme: Theme;
+  onReady: (api: DockviewApi) => void;
+  /** Called with the id of the panel the operator is looking at. */
+  onActivePanel?: (id: string | null) => void;
+}) {
   const dockTheme = useMemo<DockviewTheme>(
     () => ({
       name: "cellpresenter",
@@ -48,6 +57,8 @@ export function Workspace({ theme, onReady }: { theme: Theme; onReady: (api: Doc
           window.clearTimeout(timer);
           timer = window.setTimeout(() => saveLayout(api), 400);
         });
+        api.onDidActivePanelChange((e) => onActivePanel?.(e.panel?.id ?? null));
+        onActivePanel?.(api.activePanel?.id ?? null);
         onReady(api);
       }}
     />

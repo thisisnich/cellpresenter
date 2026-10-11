@@ -38,6 +38,9 @@ pub struct SongSlide {
 pub struct SongSection {
     pub id: String,
     pub name: String,
+    /// Background cue (a media id) for every slide in the section that has
+    /// no cue of its own.
+    pub background_id: Option<String>,
     pub slides: Vec<SongSlide>,
 }
 
@@ -53,8 +56,6 @@ pub struct Song {
     pub copyright: Option<String>,
     /// Section ids in play order; `None` plays sections in order.
     pub arrangement: Option<Vec<String>>,
-    /// Background image (a media id); `None` uses the default background.
-    pub background_id: Option<String>,
     pub sections: Vec<SongSection>,
     #[ts(type = "number")]
     pub updated_at: i64,
@@ -90,8 +91,6 @@ pub struct SongInput {
     pub copyright: Option<String>,
     #[serde(default)]
     pub arrangement: Option<Vec<String>>,
-    #[serde(default)]
-    pub background_id: Option<String>,
     pub sections: Vec<SectionInput>,
 }
 
@@ -101,6 +100,8 @@ pub struct SectionInput {
     #[serde(default)]
     pub id: Option<String>,
     pub name: String,
+    #[serde(default)]
+    pub background_id: Option<String>,
     pub slides: Vec<SlideInput>,
 }
 
@@ -130,14 +131,19 @@ impl Song {
         self.sections.iter().collect()
     }
 
-    /// The slides a display shows for this song, in play order. `url_of`
-    /// turns a slide's background cue (a media id) into an image URL.
+    /// The slides a display shows for this song, in play order. A slide's
+    /// background cue is its own, else its section's; `url_of` turns that
+    /// media id into an image URL.
     pub fn live_slides(&self, url_of: impl Fn(&str) -> Option<String>) -> Vec<Slide> {
         self.played_sections()
             .into_iter()
             .flat_map(|section| {
                 section.slides.iter().map(|slide| Slide {
-                    background: slide.background_id.as_deref().and_then(&url_of),
+                    background: slide
+                        .background_id
+                        .as_deref()
+                        .or(section.background_id.as_deref())
+                        .and_then(&url_of),
                     slide_id: Some(slide.id.clone()),
                     section: section.name.clone(),
                     text: slide
@@ -167,6 +173,7 @@ mod tests {
         SongSection {
             id: id.into(),
             name: name.into(),
+            background_id: None,
             slides: slides
                 .iter()
                 .enumerate()
@@ -189,7 +196,6 @@ mod tests {
             ccli_number: None,
             copyright: None,
             arrangement: arrangement.map(|a| a.into_iter().map(String::from).collect()),
-            background_id: None,
             sections: vec![
                 section("v1", "Verse 1", &[&["a", "b"]]),
                 section("c", "Chorus", &[&["c"]]),
@@ -216,5 +222,30 @@ mod tests {
     #[test]
     fn an_arrangement_of_only_unknown_ids_falls_back_to_order() {
         assert_eq!(song(Some(vec!["gone"])).live_slides(|_| None).len(), 2);
+    }
+
+    #[test]
+    fn a_slide_cue_beats_its_section_background() {
+        let mut s = song(None);
+        s.sections[0].background_id = Some("hills".into());
+        s.sections[0].slides.push(SongSlide {
+            id: "own".into(),
+            lines: vec![line("d")],
+            background_id: Some("sea".into()),
+        });
+        let url = |id: &str| Some(format!("/media/{id}.jpg"));
+        let backgrounds: Vec<_> = s
+            .live_slides(url)
+            .into_iter()
+            .map(|s| s.background)
+            .collect();
+        assert_eq!(
+            backgrounds,
+            [
+                Some("/media/hills.jpg".into()),
+                Some("/media/sea.jpg".into()),
+                None
+            ]
+        );
     }
 }

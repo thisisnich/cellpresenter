@@ -1,8 +1,10 @@
 import type { DockviewApi } from "dockview-react";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { DEFAULT_THEME } from "../theme/tokens";
-import { Header } from "./Header";
-import { resetLayout } from "./layout";
+import { Header, type Mode } from "./Header";
+import { focusPanel, resetLayout } from "./layout";
+import { useConsole } from "./ConsoleContext";
+import { openEditor } from "./openEditor";
 import { useTransportKeys } from "../lib/transportKeys";
 import { ConsoleProvider } from "./ConsoleContext";
 import { LiveProvider, useLive } from "./LiveContext";
@@ -15,20 +17,54 @@ function TransportKeys() {
   return null;
 }
 
+function modeOf(panelId: string | null): Mode | null {
+  if (panelId === "slides") return "show";
+  if (panelId === "chords") return "chords";
+  if (panelId?.startsWith("editor:")) return "edit";
+  return null;
+}
+
+function Shell() {
+  const dock = useRef<DockviewApi | null>(null);
+  const [activePanel, setActivePanel] = useState<string | null>(null);
+  const { state } = useLive();
+  const { selection } = useConsole();
+
+  const changeMode = (mode: Mode) => {
+    const api = dock.current;
+    if (!api) return;
+    if (mode === "show") focusPanel(api, "slides");
+    else if (mode === "chords") focusPanel(api, "chords");
+    else {
+      // Edit the song being previewed, else the song on air, else a new one.
+      if (selection?.kind === "song") openEditor(api, selection.songId);
+      else if (state?.song_id) openEditor(api, state.song_id, state.title);
+      else openEditor(api, null);
+    }
+  };
+
+  return (
+    <div className="flex h-screen flex-col bg-cp-bg font-ui text-cp-text">
+      <Header
+        mode={modeOf(activePanel)}
+        onMode={changeMode}
+        onResetLayout={() => dock.current && resetLayout(dock.current)}
+      />
+      <div className="min-h-0 flex-1">
+        <Workspace theme={DEFAULT_THEME} onReady={(api) => (dock.current = api)} onActivePanel={setActivePanel} />
+      </div>
+      <TransportBar />
+    </div>
+  );
+}
+
 // Operator console: header, dockable workspace, transport bar.
 export default function ConsoleApp() {
-  const dock = useRef<DockviewApi | null>(null);
   return (
     <LiveProvider>
       <ConsoleProvider>
         <TransportKeys />
-        <div className="flex h-screen flex-col bg-cp-bg font-ui text-cp-text">
-          <Header onResetLayout={() => dock.current && resetLayout(dock.current)} />
-          <div className="min-h-0 flex-1">
-            <Workspace theme={DEFAULT_THEME} onReady={(api) => (dock.current = api)} />
-          </div>
-          <TransportBar />
-        </div>
+        <Shell />
       </ConsoleProvider>
     </LiveProvider>
   );

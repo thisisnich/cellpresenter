@@ -9,8 +9,9 @@ export interface SongMeta {
   artist: string;
   key: string;
   capo: number;
-  /** Background image (media id); null uses the default background. */
-  backgroundId: string | null;
+  /** Background image (media id) per section name; missing or null keeps
+   *  whatever background is showing. */
+  sectionBackgrounds: Record<string, string | null>;
 }
 
 /** A random v4 UUID. Works on plain-http LAN pages, unlike randomUUID(). */
@@ -29,6 +30,11 @@ export function songForText(song: Song): TextSongInput {
     sections: song.sections.map((s) => ({ name: s.name, slides: s.slides.map((sl) => ({ lines: sl.lines })) })),
     arrangement: (song.arrangement ?? []).map((id) => nameOf.get(id)).filter((n): n is string => Boolean(n)),
   };
+}
+
+/** Each section's background, by name, as the editor holds them. */
+export function sectionBackgroundsOf(song: Song): Record<string, string | null> {
+  return Object.fromEntries(song.sections.map((s) => [s.name, s.background_id]));
 }
 
 /** The longest slide in a song, so re-editing doesn't re-split its slides. */
@@ -51,6 +57,7 @@ export function toSongInput(parsed: ParsedSong, meta: SongMeta, existing?: Song)
     return {
       id,
       name: section.name,
+      background_id: meta.sectionBackgrounds[section.name] ?? null,
       // Slides keep their id and background cue by position.
       slides: section.slides.map((lines, i) => ({
         id: old?.slides[i]?.id ?? null,
@@ -70,7 +77,6 @@ export function toSongInput(parsed: ParsedSong, meta: SongMeta, existing?: Song)
     ccli_number: existing?.ccli_number ?? null,
     copyright: existing?.copyright ?? null,
     arrangement: naturalOrder ? null : arrangement,
-    background_id: meta.backgroundId,
     sections,
   };
 }

@@ -14,14 +14,18 @@ export function playedSections(song: Song): Song["sections"] {
 
 /**
  * A song's slides in play order (its arrangement, else section order).
- * `urlOf` turns a slide's background cue (a media id) into an image URL.
+ * A slide's background cue is its own, else its section's; `urlOf` turns
+ * that media id into an image URL.
  */
 export function playedSlides(song: Song, urlOf: (mediaId: string) => string | null = () => null): Slide[] {
   return playedSections(song).flatMap((section) =>
     section.slides.map((slide) => ({
       section: section.name,
       text: slide.lines.map((l) => l.text).join("\n"),
-      background: slide.background_id ? urlOf(slide.background_id) : null,
+      background: (() => {
+        const cue = slide.background_id ?? section.background_id;
+        return cue ? urlOf(cue) : null;
+      })(),
       slide_id: slide.id,
     })),
   );

@@ -1,12 +1,14 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { SheetSlide } from "../domain/chordSheet";
 import { sectionKind } from "../domain/sections";
 import { t } from "../i18n";
+import { ChordShapes } from "./ChordShapes";
 
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
 
 // The whole song as a chord sheet: chords above the syllable they start on,
-// sections labelled, the live slide highlighted and kept in view.
+// sections labelled, the live slide highlighted and kept in view. Tap a
+// chord to see the ways to play it.
 export function ChordSheet({
   slides,
   current,
@@ -20,6 +22,12 @@ export function ChordSheet({
   lyricsOnly?: boolean;
 }) {
   const live = useRef<HTMLElement | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  // The song's chords in the order they first appear, for the shapes strip.
+  const songChords = useMemo(
+    () => [...new Set(slides.flatMap((s) => s.lines.flatMap((l) => l.chunks.flatMap((c) => (c.chord ? [c.chord] : [])))))],
+    [slides],
+  );
   useEffect(() => {
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     live.current?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
@@ -56,7 +64,18 @@ export function ChordSheet({
                 {line.chunks.map((chunk, k) => (
                   <span key={k} className="inline-flex flex-col">
                     {!lyricsOnly && line.hasChords && (
-                      <b className="min-h-[1.2em] pr-[0.4em] font-mono text-[0.85em] text-cp-live">{chunk.chord ?? ""}</b>
+                      <b className="min-h-[1.2em] pr-[0.4em] font-mono text-[0.85em] text-cp-live">
+                        {chunk.chord && (
+                          <button
+                            type="button"
+                            onClick={() => setOpen(chunk.chord ?? null)}
+                            title={t("chords.showShapes", { chord: chunk.chord })}
+                            className="cursor-pointer rounded-cp-sm font-bold underline decoration-dotted underline-offset-2 hover:bg-cp-surface-hi"
+                          >
+                            {chunk.chord}
+                          </button>
+                        )}
+                      </b>
                     )}
                     <span className="whitespace-pre">{chunk.text || (chunk.chord && !lyricsOnly ? " " : "")}</span>
                   </span>
@@ -66,6 +85,7 @@ export function ChordSheet({
           </section>
         );
       })}
+      {open && <ChordShapes chord={open} songChords={songChords} onPick={setOpen} onClose={() => setOpen(null)} />}
     </div>
   );
 }

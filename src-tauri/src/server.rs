@@ -145,7 +145,7 @@ impl ServerState {
         };
         let song = match song {
             Some(song) => {
-                let (slides, _) = self.song_content(&song).await.unwrap_or_default();
+                let slides = self.song_content(&song).await.unwrap_or_default();
                 Some((song, slides))
             }
             None => None,
@@ -213,8 +213,8 @@ impl ServerState {
         Ok(match item {
             SetlistItem::Song { song_id, .. } => match self.db.get_song(song_id).await? {
                 Some(song) => {
-                    let (slides, cue) = self.song_content(&song).await?;
-                    Some((Some(song.id), song.title, slides, cue))
+                    let slides = self.song_content(&song).await?;
+                    Some((Some(song.id), song.title, slides, None))
                 }
                 None => None,
             },
@@ -238,9 +238,9 @@ impl ServerState {
         })
     }
 
-    /// A song's slides (each carrying its own background cue, if any) and
-    /// the song's background cue.
-    async fn song_content(&self, song: &Song) -> DbResult<(Vec<Slide>, Option<String>)> {
+    /// A song's slides, each carrying its background cue (its own or its
+    /// section's), if any.
+    async fn song_content(&self, song: &Song) -> DbResult<Vec<Slide>> {
         let urls: HashMap<String, String> = self
             .db
             .list_media()
@@ -248,12 +248,7 @@ impl ServerState {
             .into_iter()
             .map(|m| (m.id, m.url))
             .collect();
-        let slides = song.live_slides(|id| urls.get(id).cloned());
-        let cue = song
-            .background_id
-            .as_ref()
-            .and_then(|id| urls.get(id).cloned());
-        Ok((slides, cue))
+        Ok(song.live_slides(|id| urls.get(id).cloned()))
     }
 
     /// Put item `index` of `setlist` on air. None if it can't be shown.
@@ -511,9 +506,9 @@ async fn live_show_song(
     Json(args): Json<ShowSong>,
 ) -> ApiResult<LiveState> {
     let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
-    let (slides, cue) = s.song_content(&song).await?;
+    let slides = s.song_content(&song).await?;
     Ok(Json(s.mutate(|l| {
-        l.show(Some(song.id), song.title, slides, args.slide_index, cue);
+        l.show(Some(song.id), song.title, slides, args.slide_index, None);
         l.setlist_id = None;
         l.item_id = None;
     })))
@@ -551,7 +546,7 @@ async fn update_song(
     let song = s.db.update_song(&id, &input).await?.ok_or(NOT_FOUND)?;
     // If this song is on air, show the edit straight away.
     if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
-        let (slides, _) = s.song_content(&song).await?;
+        let slides = s.song_content(&song).await?;
         let (song_id, title) = (song.id.clone(), song.title.clone());
         s.mutate(|l| {
             let index = l.slide_index;
@@ -765,7 +760,7 @@ async fn set_slide_background(
     let song = s.db.get_song(&song_id).await?.ok_or(NOT_FOUND)?;
     // If the song is on air, its slides pick up the new cue.
     if s.snapshot().song_id.as_deref() == Some(song_id.as_str()) {
-        let (slides, _) = s.song_content(&song).await?;
+        let slides = s.song_content(&song).await?;
         s.mutate(|l| {
             let index = l.slide_index;
             let (id, title) = (song.id.clone(), song.title.clone());
@@ -1435,7 +1430,7 @@ mod tests {
         .await;
         assert_eq!(snapshot().background.as_deref(), Some(sea.url.as_str()));
 
-        // A song's own background is cued when the song goes on air.
+        // A section's background is cued when its slides go on air.
         let holy = songs
             .iter()
             .find(|s| s.title == "Holy, Holy, Holy")
@@ -1443,7 +1438,7 @@ mod tests {
             .id
             .clone();
         let edit = format!(
-            r#"{{"title":"Holy","background_id":"{}","sections":[{{"name":"V","slides":[{{"lines":[{{"text":"x"}}]}}]}}]}}"#,
+            r#"{{"title":"Holy","sections":[{{"name":"V","background_id":"{}","slides":[{{"lines":[{{"text":"x"}}]}}]}}]}}"#,
             hills.id
         );
         call(

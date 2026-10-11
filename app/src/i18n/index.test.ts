@@ -8,8 +8,8 @@ describe("t", () => {
   });
 
   it("fills placeholders and leaves unknown ones alone", () => {
-    expect(t("display.slideCount", { current: 2, total: 5 })).toBe("2 / 5");
-    expect(t("display.slideCount", { current: 2 })).toBe("2 / {total}");
+    expect(t("slides.goTo", { number: 2, section: "Chorus" })).toBe("Show slide 2: Chorus");
+    expect(t("slides.goTo", { number: 2 })).toBe("Show slide 2: {section}");
   });
 
   it("has no empty strings", () => {

@@ -52,7 +52,6 @@ struct SongRow {
     ccli_number: Option<String>,
     copyright: Option<String>,
     arrangement: Option<String>,
-    background_id: Option<String>,
     updated_at: i64,
 }
 
@@ -60,6 +59,7 @@ struct SongRow {
 struct SectionRow {
     id: String,
     name: String,
+    background_id: Option<String>,
 }
 
 #[derive(FromRow)]
@@ -159,7 +159,7 @@ impl Db {
 
     pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {
         let rows: Vec<SongRow> = sqlx::query_as(
-            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, background_id, updated_at
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
              FROM songs WHERE library_id = ? AND deleted_at IS NULL
              ORDER BY title COLLATE NOCASE",
         )
@@ -180,7 +180,7 @@ impl Db {
 
     pub async fn get_song(&self, id: &str) -> DbResult<Option<Song>> {
         let row: Option<SongRow> = sqlx::query_as(
-            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, background_id, updated_at
+            "SELECT id, title, artist, song_key, capo, ccli_number, copyright, arrangement, updated_at
              FROM songs WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
         )
         .bind(id)
@@ -190,7 +190,7 @@ impl Db {
         let Some(row) = row else { return Ok(None) };
 
         let sections: Vec<SectionRow> = sqlx::query_as(
-            "SELECT id, name FROM sections WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
+            "SELECT id, name, background_id FROM sections WHERE song_id = ? AND deleted_at IS NULL ORDER BY position",
         )
         .bind(id)
         .fetch_all(&self.pool)
@@ -229,7 +229,6 @@ impl Db {
             capo: row.capo.clamp(0, 11) as u8,
             ccli_number: row.ccli_number,
             copyright: row.copyright,
-            background_id: row.background_id,
             arrangement,
             sections: sections
                 .into_iter()
@@ -237,6 +236,7 @@ impl Db {
                     slides: slides_by_section.remove(&s.id).unwrap_or_default(),
                     id: s.id,
                     name: s.name,
+                    background_id: s.background_id,
                 })
                 .collect(),
             updated_at: row.updated_at,
@@ -248,8 +248,8 @@ impl Db {
         let now = now_ms();
         let mut tx = self.pool.begin().await?;
         sqlx::query(
-            "INSERT INTO songs (id, library_id, title, artist, song_key, capo, ccli_number, copyright, background_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO songs (id, library_id, title, artist, song_key, capo, ccli_number, copyright, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(&self.library_id)
@@ -259,7 +259,6 @@ impl Db {
         .bind(i64::from(input.capo.min(11)))
         .bind(&input.ccli_number)
         .bind(&input.copyright)
-        .bind(&input.background_id)
         .bind(now)
         .bind(now)
         .execute(&mut *tx)
@@ -275,7 +274,7 @@ impl Db {
         let now = now_ms();
         let mut tx = self.pool.begin().await?;
         let updated = sqlx::query(
-            "UPDATE songs SET title = ?, artist = ?, song_key = ?, capo = ?, ccli_number = ?, copyright = ?, background_id = ?, updated_at = ?
+            "UPDATE songs SET title = ?, artist = ?, song_key = ?, capo = ?, ccli_number = ?, copyright = ?, updated_at = ?
              WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
         )
         .bind(input.title.trim())
@@ -284,7 +283,6 @@ impl Db {
         .bind(i64::from(input.capo.min(11)))
         .bind(&input.ccli_number)
         .bind(&input.copyright)
-        .bind(&input.background_id)
         .bind(now)
         .bind(id)
         .bind(&self.library_id)
@@ -397,23 +395,25 @@ impl Db {
                 .claim_id(tx, &section.id, &own_sections, "sections")
                 .await?;
             if own_sections.contains(&section_id) {
-                sqlx::query("UPDATE sections SET name = ?, position = ?, updated_at = ?, deleted_at = NULL WHERE id = ?")
+                sqlx::query("UPDATE sections SET name = ?, position = ?, background_id = ?, updated_at = ?, deleted_at = NULL WHERE id = ?")
                     .bind(section.name.trim())
                     .bind(position as i64)
+                    .bind(&section.background_id)
                     .bind(now)
                     .bind(&section_id)
                     .execute(&mut **tx)
                     .await?;
             } else {
                 sqlx::query(
-                    "INSERT INTO sections (id, library_id, song_id, name, position, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO sections (id, library_id, song_id, name, position, background_id, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&section_id)
                 .bind(&self.library_id)
                 .bind(song_id)
                 .bind(section.name.trim())
                 .bind(position as i64)
+                .bind(&section.background_id)
                 .bind(now)
                 .bind(now)
                 .execute(&mut **tx)
@@ -935,12 +935,12 @@ mod tests {
             ccli_number: None,
             copyright: None,
             arrangement: None,
-            background_id: None,
             sections: sections
                 .iter()
                 .map(|(name, id, lines)| SectionInput {
                     id: id.map(String::from),
                     name: (*name).into(),
+                    background_id: None,
                     slides: vec![SlideInput {
                         id: None,
                         background_id: None,

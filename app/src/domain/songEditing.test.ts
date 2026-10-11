@@ -3,7 +3,7 @@ import type { Song } from "../generated/Song";
 import { longestSlide, newId, songForText, toSongInput } from "./songEditing";
 import { parseSongText, songToText } from "./songText";
 
-const meta = { title: " It Is Well ", artist: "", key: "C", capo: 0, backgroundId: null };
+const meta = { title: " It Is Well ", artist: "", key: "C", capo: 0, sectionBackgrounds: { Chorus: "hills" } };
 
 const stored: Song = {
   id: "song",
@@ -14,11 +14,10 @@ const stored: Song = {
   ccli_number: null,
   copyright: "Public domain",
   arrangement: ["v1", "c", "v2", "c"],
-  background_id: null,
   sections: [
-    { id: "v1", name: "Verse 1", slides: [{ id: "v1a", lines: [{ text: "a", chords: [] }], background_id: null }] },
-    { id: "c", name: "Chorus", slides: [{ id: "ca", lines: [{ text: "b", chords: [] }], background_id: "pic" }] },
-    { id: "v2", name: "Verse 2", slides: [{ id: "v2a", lines: [{ text: "c", chords: [] }, { text: "d", chords: [] }], background_id: null }] },
+    { id: "v1", name: "Verse 1", background_id: null, slides: [{ id: "v1a", lines: [{ text: "a", chords: [] }], background_id: null }] },
+    { id: "c", name: "Chorus", background_id: null, slides: [{ id: "ca", lines: [{ text: "b", chords: [] }], background_id: "pic" }] },
+    { id: "v2", name: "Verse 2", background_id: null, slides: [{ id: "v2a", lines: [{ text: "c", chords: [] }, { text: "d", chords: [] }], background_id: null }] },
   ],
   updated_at: 0,
 };
@@ -40,6 +39,7 @@ describe("toSongInput", () => {
     expect(input.sections.map((s) => s.id)).toEqual(["v1", "c", "v2"]);
     expect(input.sections[1].slides[0]).toEqual({ id: "ca", lines: [{ text: "b edited", chords: [] }], background_id: "pic" });
     expect(input.arrangement).toEqual(["v1", "c", "v2", "c"]);
+    expect(input.sections.map((s) => s.background_id)).toEqual([null, "hills", null]);
   });
 
   it("gives new sections fresh ids and drops a plain in-order arrangement", () => {

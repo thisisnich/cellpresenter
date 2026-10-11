@@ -16,10 +16,9 @@ const song: Song = {
   ccli_number: null,
   copyright: null,
   arrangement: ["v", "c", "v"],
-  background_id: null,
   sections: [
-    { id: "v", name: "Verse 1", slides: [{ id: "v1", lines: [line("Amazing grace", [[0, "G"], [8, "C"]])], background_id: null }] },
-    { id: "c", name: "Chorus", slides: [{ id: "c1", lines: [line("no chords here")], background_id: null }] },
+    { id: "v", name: "Verse 1", background_id: null, slides: [{ id: "v1", lines: [line("Amazing grace", [[0, "G"], [8, "C"]])], background_id: null }] },
+    { id: "c", name: "Chorus", background_id: null, slides: [{ id: "c1", lines: [line("no chords here")], background_id: null }] },
   ],
   updated_at: 0,
 };

@@ -12,10 +12,9 @@ const song = (arrangement: string[] | null): Song => ({
   ccli_number: null,
   copyright: null,
   arrangement,
-  background_id: null,
   sections: [
-    { id: "v", name: "Verse 1", slides: [{ id: "v1", lines: [line("a"), line("b")], background_id: null }] },
-    { id: "c", name: "Chorus", slides: [{ id: "c1", lines: [line("c")], background_id: "m1" }] },
+    { id: "v", name: "Verse 1", background_id: null, slides: [{ id: "v1", lines: [line("a"), line("b")], background_id: null }] },
+    { id: "c", name: "Chorus", background_id: null, slides: [{ id: "c1", lines: [line("c")], background_id: "m1" }] },
   ],
   updated_at: 0,
 });
@@ -30,6 +29,13 @@ describe("playedSlides", () => {
     const slides = playedSlides(song(null), (id) => `/media/${id}.jpg`);
     expect(slides.map((s) => s.background)).toEqual([null, "/media/m1.jpg"]);
     expect(slides[1].slide_id).toBe("c1");
+  });
+
+  it("uses the section's background for slides without their own cue", () => {
+    const s = song(null);
+    s.sections[0].background_id = "hills";
+    s.sections[1].background_id = "hills";
+    expect(playedSlides(s, (id) => `/media/${id}.jpg`).map((x) => x.background)).toEqual(["/media/hills.jpg", "/media/m1.jpg"]);
   });
 
   it("falls back to section order", () => {

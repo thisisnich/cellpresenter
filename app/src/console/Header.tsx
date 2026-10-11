@@ -14,13 +14,19 @@ function useClock(): string {
   return now;
 }
 
-const MODES = [
-  { key: "mode.show", enabled: true },
-  { key: "mode.edit", enabled: false },
-  { key: "mode.chords", enabled: false },
-] as const;
+export type Mode = "show" | "edit" | "chords";
+const MODES = ["show", "edit", "chords"] as const;
 
-export function Header({ onResetLayout }: { onResetLayout: () => void }) {
+export function Header({
+  mode,
+  onMode,
+  onResetLayout,
+}: {
+  /** Which part of the workspace is in front. */
+  mode: Mode | null;
+  onMode: (mode: Mode) => void;
+  onResetLayout: () => void;
+}) {
   const { status } = useLive();
   const clock = useClock();
   const [pin, setPin] = useState<string | null>(null);
@@ -36,18 +42,16 @@ export function Header({ onResetLayout }: { onResetLayout: () => void }) {
       <div className="flex flex-wrap items-center gap-4">
         <span className="text-sm font-bold tracking-tight">{t("app.name")}</span>
         <div className="flex rounded-cp border-cp bg-cp-bg p-0.5" role="group">
-          {MODES.map((mode) => (
+          {MODES.map((m) => (
             <button
-              key={mode.key}
+              key={m}
               type="button"
-              disabled={!mode.enabled}
-              title={mode.enabled ? undefined : t("mode.comingSoon")}
-              aria-pressed={mode.enabled}
-              className={`rounded-cp-sm px-3.5 py-1 ${
-                mode.enabled ? "bg-cp-surface-hi font-semibold" : "text-cp-muted disabled:cursor-not-allowed"
-              }`}
+              onClick={() => onMode(m)}
+              title={t(`mode.${m}Help`)}
+              aria-pressed={mode === m}
+              className={`rounded-cp-sm px-3.5 py-1 ${mode === m ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:text-cp-text"}`}
             >
-              {t(mode.key)}
+              {t(`mode.${m}`)}
             </button>
           ))}
         </div>
