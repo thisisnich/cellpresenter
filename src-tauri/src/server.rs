@@ -24,6 +24,7 @@ use crate::db::{Db, DbResult, NewMedia};
 use crate::live::{Command, LiveState, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
+use crate::outputs::{OutputChoice, Outputs, Screens};
 use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
 
@@ -63,6 +64,7 @@ pub struct ServerState {
     pins: Arc<PinGuard>,
     port: u16,
     media: MediaStore,
+    outputs: Option<Arc<dyn Outputs>>,
 }
 
 impl ServerState {
@@ -77,7 +79,14 @@ impl ServerState {
             pins: Arc::new(pins),
             port,
             media,
+            outputs: None,
         }
+    }
+
+    /// Let the console move the Display window between screens.
+    pub fn with_outputs(mut self, outputs: Arc<dyn Outputs>) -> Self {
+        self.outputs = Some(outputs);
+        self
     }
 
     fn snapshot(&self) -> LiveState {
@@ -794,6 +803,35 @@ async fn set_section_background(
     Ok(Json(s.refresh_song_on_air(&song_id).await?))
 }
 
+// ---------- screens ----------
+
+const NO_SCREENS: ApiError = ApiError(StatusCode::NOT_IMPLEMENTED, "no_screens");
+
+/// The computer's screens and where the Display window is. 501 when the
+/// server runs without the desktop app's windows.
+async fn list_screens(State(s): State<ServerState>) -> ApiResult<Screens> {
+    let outputs = s.outputs.ok_or(NO_SCREENS)?;
+    Ok(Json(outputs.screens()))
+}
+
+/// Put the Display window fullscreen on a screen, or back in a window.
+async fn set_output(
+    State(s): State<ServerState>,
+    Json(choice): Json<OutputChoice>,
+) -> ApiResult<Screens> {
+    let outputs = s.outputs.ok_or(NO_SCREENS)?;
+    if let Some(i) = choice.screen {
+        if i as usize >= outputs.screens().screens.len() {
+            return Err(NOT_FOUND);
+        }
+    }
+    outputs.show_on(choice.screen).map_err(|e| {
+        eprintln!("cellpresenter: can't move the display: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "output_failed")
+    })?;
+    Ok(Json(outputs.screens()))
+}
+
 // ---------- WebSocket ----------
 
 async fn ws_handler(ws: WebSocketUpgrade, State(s): State<ServerState>) -> Response {
@@ -918,6 +956,7 @@ pub fn router(state: ServerState) -> Router {
             "/songs/{song_id}/sections/{section_id}/background",
             axum::routing::put(set_section_background),
         )
+        .route("/screens/output", post(set_output))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",
@@ -941,6 +980,7 @@ pub fn router(state: ServerState) -> Router {
         .route("/songs/{id}", get(get_song))
         .route("/setlists", get(list_setlists))
         .route("/media", get(list_media))
+        .route("/screens", get(list_screens))
         .route("/setlists/{id}", get(get_setlist))
         .merge(control)
         .fallback(|| async { StatusCode::NOT_FOUND });
@@ -982,9 +1022,11 @@ mod tests {
             9100,
             test_media(),
         );
-        let router =
-            router(state.clone()).layer(MockConnectInfo(peer.parse::<SocketAddr>().unwrap()));
-        (router, state)
+        (router_for(state.clone(), peer), state)
+    }
+
+    fn router_for(state: ServerState, peer: &str) -> Router {
+        router(state).layer(MockConnectInfo(peer.parse::<SocketAddr>().unwrap()))
     }
 
     async fn call(
@@ -1560,6 +1602,69 @@ mod tests {
                 .0,
             StatusCode::NOT_FOUND
         );
+    }
+
+    /// Two pretend screens; remembers where the display was put.
+    struct FakeScreens(std::sync::Mutex<Option<u32>>);
+
+    impl Outputs for FakeScreens {
+        fn screens(&self) -> Screens {
+            let screen = |index: u32, name: &str, primary| crate::outputs::Screen {
+                index,
+                name: name.into(),
+                width: 1920,
+                height: 1080,
+                primary,
+            };
+            Screens {
+                screens: vec![screen(0, "Laptop", true), screen(1, "Projector", false)],
+                output: *self.0.lock().unwrap(),
+            }
+        }
+        fn show_on(&self, screen: Option<u32>) -> Result<(), String> {
+            *self.0.lock().unwrap() = screen;
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn the_console_moves_the_display_between_screens() {
+        let (router, _) = app(LOCAL).await;
+        // Without the desktop app's windows there's nothing to pick.
+        assert_eq!(
+            call(&router, "GET", "/api/screens", None, None).await.0,
+            StatusCode::NOT_IMPLEMENTED
+        );
+
+        let (_, state) = app(PHONE).await;
+        let state = state.with_outputs(Arc::new(FakeScreens(Default::default())));
+        let phone = router_for(state.clone(), PHONE);
+        let (status, body) = call(&phone, "GET", "/api/screens", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("Projector"));
+
+        let pick = Some(r#"{"screen":1}"#);
+        assert_eq!(
+            call(&phone, "POST", "/api/screens/output", pick, None)
+                .await
+                .0,
+            StatusCode::UNAUTHORIZED
+        );
+        let (status, body) = call(&phone, "POST", "/api/screens/output", pick, Some("4321")).await;
+        assert_eq!(status, StatusCode::OK);
+        let screens: Screens = serde_json::from_str(&body).unwrap();
+        assert_eq!(screens.output, Some(1));
+
+        let missing = Some(r#"{"screen":5}"#);
+        assert_eq!(
+            call(&phone, "POST", "/api/screens/output", missing, Some("4321"))
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
+        let window = Some(r#"{"screen":null}"#);
+        let (_, body) = call(&phone, "POST", "/api/screens/output", window, Some("4321")).await;
+        assert_eq!(serde_json::from_str::<Screens>(&body).unwrap().output, None);
     }
 
     #[tokio::test]

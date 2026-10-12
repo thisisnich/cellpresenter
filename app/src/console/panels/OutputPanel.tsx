@@ -1,8 +1,8 @@
 import { t } from "../../i18n";
 import { backgroundFor } from "../../display/SlideBackground";
-import { STAGE_HEIGHT, STAGE_WIDTH } from "../../display/Stage";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { nextIndex, useLive } from "../LiveContext";
+import { ScreenPicker } from "../ScreenPicker";
 import { SlidePreview } from "../SlidePreview";
 
 // What the screens show right now, and what comes next.
@@ -32,11 +32,9 @@ export function OutputPanel() {
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto bg-cp-panel p-3.5 font-ui text-[13px] text-cp-text">
       <section className="flex flex-col gap-1.5">
-        <div className="flex justify-between">
-          <span className="cp-label text-cp-live">{t("output.live")}</span>
-          <span className="font-mono text-[11px] text-cp-muted">
-            {STAGE_WIDTH}×{STAGE_HEIGHT}
-          </span>
+        <div className="flex items-center justify-between gap-2">
+          <span className="cp-label whitespace-nowrap text-cp-live">{t("output.live")}</span>
+          <ScreenPicker />
         </div>
         <div className="overflow-hidden rounded-cp-sm border-cp">
           <SlidePreview

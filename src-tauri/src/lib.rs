@@ -3,6 +3,7 @@ mod db;
 mod live;
 mod media;
 mod network;
+mod outputs;
 mod seed;
 mod server;
 mod setlist;
@@ -16,6 +17,7 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use auth::PinGuard;
 use db::Db;
 use media::MediaStore;
+use outputs::{Outputs, Screen, Screens};
 use server::{ServerState, WebAsset};
 
 const DEV_WEBVIEW_URL: &str = "http://localhost:5173";
@@ -34,17 +36,165 @@ fn app_url(port: u16, path: &str) -> WebviewUrl {
     WebviewUrl::External(format!("{base}{path}").parse().expect("valid webview url"))
 }
 
+const DISPLAY: &str = "display";
+
 fn open_windows(app: &AppHandle, port: u16) -> tauri::Result<()> {
     WebviewWindowBuilder::new(app, "console", app_url(port, "/"))
         .title("CellPresenter Console")
         .inner_size(1280.0, 800.0)
         .min_inner_size(800.0, 600.0)
         .build()?;
-    WebviewWindowBuilder::new(app, "display", app_url(port, "/display"))
+    open_display(app, port)?;
+    Ok(())
+}
+
+fn open_display(app: &AppHandle, port: u16) -> tauri::Result<tauri::WebviewWindow> {
+    WebviewWindowBuilder::new(app, DISPLAY, app_url(port, "/display"))
         .title("CellPresenter Display")
         .inner_size(960.0, 540.0)
-        .build()?;
-    Ok(())
+        .build()
+}
+
+/// The Display window on real screens, for the console's screen picker.
+struct WindowOutputs {
+    app: AppHandle,
+    port: u16,
+}
+
+impl Outputs for WindowOutputs {
+    fn screens(&self) -> Screens {
+        let monitors = self.app.available_monitors().unwrap_or_default();
+        let primary = self.app.primary_monitor().ok().flatten();
+        let same = |a: &tauri::Monitor, b: &tauri::Monitor| {
+            a.position() == b.position() && a.size() == b.size()
+        };
+        let app = self.app.clone();
+        let output = on_main_thread(&self.app, move || {
+            let window = app.get_webview_window(DISPLAY)?;
+            if !is_fullscreen(&window) {
+                return None;
+            }
+            window.current_monitor().ok().flatten()
+        })
+        .flatten()
+        .and_then(|m| monitors.iter().position(|x| same(x, &m)))
+        .map(|i| i as u32);
+        Screens {
+            screens: monitors
+                .iter()
+                .enumerate()
+                .map(|(i, m)| Screen {
+                    index: i as u32,
+                    name: m
+                        .name()
+                        .cloned()
+                        .unwrap_or_else(|| format!("Screen {}", i + 1)),
+                    width: m.size().width,
+                    height: m.size().height,
+                    primary: primary.as_ref().is_some_and(|p| same(p, m)),
+                })
+                .collect(),
+            output,
+        }
+    }
+
+    fn show_on(&self, screen: Option<u32>) -> Result<(), String> {
+        let monitor = match screen {
+            Some(i) => Some(
+                self.app
+                    .available_monitors()
+                    .map_err(|e| e.to_string())?
+                    .into_iter()
+                    .nth(i as usize)
+                    .ok_or("no such screen")?,
+            ),
+            None => None,
+        };
+        let (app, port) = (self.app.clone(), self.port);
+        // Windows are created and moved on the main thread.
+        self.app
+            .run_on_main_thread(move || {
+                let window = match app.get_webview_window(DISPLAY) {
+                    Some(w) => w,
+                    None => match open_display(&app, port) {
+                        Ok(w) => w,
+                        Err(e) => return eprintln!("cellpresenter: can't open the display: {e}"),
+                    },
+                };
+                if let Err(e) = place_display(&window, screen, monitor.as_ref()) {
+                    eprintln!("cellpresenter: can't move the display: {e}");
+                }
+            })
+            .map_err(|e| e.to_string())
+    }
+}
+
+/// Run `f` on the main thread (where windows live) and wait for its answer.
+fn on_main_thread<T: Send + 'static>(
+    app: &AppHandle,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(f());
+    })
+    .ok()?;
+    rx.recv_timeout(std::time::Duration::from_secs(2)).ok()
+}
+
+/// Whether the window fills a screen. On Linux this asks GTK, because the
+/// fullscreen-on-a-monitor call below goes around Tauri's own bookkeeping.
+fn is_fullscreen(window: &tauri::WebviewWindow) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::WidgetExt;
+        window
+            .gtk_window()
+            .ok()
+            .and_then(|w| w.window())
+            .is_some_and(|w| w.state().contains(gtk::gdk::WindowState::FULLSCREEN))
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        window.is_fullscreen().unwrap_or(false)
+    }
+}
+
+/// Fullscreen on `monitor`, or back to a normal window.
+fn place_display(
+    window: &tauri::WebviewWindow,
+    index: Option<u32>,
+    monitor: Option<&tauri::Monitor>,
+) -> tauri::Result<()> {
+    window.show()?;
+    let Some(monitor) = monitor else {
+        #[cfg(target_os = "linux")]
+        {
+            use gtk::prelude::GtkWindowExt;
+            window.gtk_window()?.unfullscreen();
+        }
+        window.set_fullscreen(false)?;
+        return window.set_focus();
+    };
+    // Wayland doesn't let apps place windows, but GTK can still ask for
+    // fullscreen on a given monitor; tao lists monitors in GDK's order.
+    #[cfg(target_os = "linux")]
+    {
+        use gtk::prelude::{GtkWindowExt, WidgetExt};
+        let _ = monitor;
+        let gtk_window = window.gtk_window()?;
+        if let Some(screen) = WidgetExt::screen(&gtk_window) {
+            gtk_window.fullscreen_on_monitor(&screen, index.unwrap_or(0) as i32);
+        }
+        Ok(())
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = index;
+        window.set_fullscreen(false)?;
+        window.set_position(*monitor.position())?;
+        window.set_fullscreen(true)
+    }
 }
 
 /// Open the song library in the app's data folder, adding starter songs to a
@@ -96,7 +246,11 @@ pub fn run() {
                 .join("media");
             let media = MediaStore::new(media_dir.clone())
                 .map_err(|e| report(format!("can't create {}: {e}", media_dir.display())))?;
-            let state = ServerState::new(assets, db, pins, port, media);
+            let outputs = Arc::new(WindowOutputs {
+                app: handle.clone(),
+                port,
+            });
+            let state = ServerState::new(assets, db, pins, port, media).with_outputs(outputs);
             tauri::async_runtime::block_on(async {
                 state.restore_live().await;
             });

@@ -169,6 +169,12 @@ export const en = {
   "slides.goTo": "Show slide {number}: {section}",
 
   "output.live": "Live output",
+  "screens.label": "Show the display on",
+  "screens.window": "Display in a window",
+  "screens.fullscreenOn": "Fullscreen on screen {number} · {size} · {name}",
+  "screens.main": "main screen",
+  "screens.help": "Pick the projector or TV to show the display fullscreen there",
+  "screens.failed": "Couldn't move the display. Try again, or drag the Display window there.",
   "output.next": "Next · {section}",
   "output.blackedOut": "Screen is blacked out",
 

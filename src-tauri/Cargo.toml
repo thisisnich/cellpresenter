@@ -2,6 +2,8 @@
 name = "cellpresenter"
 version = "0.1.0"
 description = "CellPresenter desktop — local-first worship lyrics presentation"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/thisisnich/cellpresenter"
 edition = "2021"
 
 [lib]
@@ -42,3 +44,8 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.miniz_oxide]
 opt-level = 3
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# The Display window goes fullscreen on a chosen monitor through GTK, which
+# also works on Wayland. Same version Tauri uses.
+gtk = "0.18"

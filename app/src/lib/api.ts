@@ -7,6 +7,7 @@ import type { LiveState } from "../generated/LiveState";
 import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { PinInfo } from "../generated/PinInfo";
+import type { Screens } from "../generated/Screens";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
 import type { SetlistSummary } from "../generated/SetlistSummary";
@@ -83,6 +84,9 @@ export const api = {
   network: () => request<NetworkInfo>("/api/network"),
   /** Resolves if this device may control slides (PIN accepted or local). */
   checkControl: () => request<void>("/api/control/check"),
+
+  screens: () => request<Screens>("/api/screens"),
+  showDisplayOn: (screen: number | null) => request<Screens>("/api/screens/output", json("POST", { screen })),
 
   liveState: () => request<LiveState>("/api/live/state"),
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),
