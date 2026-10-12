@@ -1,23 +1,27 @@
 import type { DockviewApi } from "dockview-react";
 import { t } from "../i18n";
 
-// The default workspace (design A1 "Slide Grid"): setlist on the left, slides
-// in the centre, output on the right. Operators can rearrange it; the result
-// is saved per machine and "Reset layout" brings this back.
+import type { Page } from "./pages";
+
+// Each console page has its own default layout. Operators can rearrange a
+// page; the result is saved per machine and per page, and Reset brings the
+// default back.
+//   Show:   setlist + library | slides (notes) | output (stage, media)
+//   Edit:   library | song editors | media
+//   Chords: setlist | chords | output
 
 // Bump the version when panels change, so old saved layouts are dropped.
-const STORAGE_KEY = "cellpresenter.layout.v5";
+const storageKey = (page: Page) => `cellpresenter.layout.v6.${page}`;
 
-export function buildDefaultLayout(api: DockviewApi): void {
+export function buildDefaultLayout(api: DockviewApi, page: Page): void {
   api.clear();
+  if (page === "show") buildShow(api);
+  else if (page === "edit") buildEdit(api);
+  else buildChords(api);
+}
+
+function buildShow(api: DockviewApi): void {
   api.addPanel({ id: "slides", component: "slides", title: t("panel.slides") });
-  api.addPanel({
-    id: "chords",
-    component: "chords",
-    title: t("panel.chords"),
-    position: { referencePanel: "slides", direction: "within" },
-    inactive: true,
-  });
   api.addPanel({
     id: "notes",
     component: "placeholder",
@@ -26,7 +30,6 @@ export function buildDefaultLayout(api: DockviewApi): void {
     position: { referencePanel: "slides", direction: "within" },
     inactive: true,
   });
-
   api.addPanel({
     id: "setlist",
     component: "setlist",
@@ -40,7 +43,6 @@ export function buildDefaultLayout(api: DockviewApi): void {
     title: t("panel.library"),
     position: { referencePanel: "setlist", direction: "below" },
   });
-
   api.addPanel({
     id: "output",
     component: "output",
@@ -64,6 +66,47 @@ export function buildDefaultLayout(api: DockviewApi): void {
     inactive: true,
   });
   api.getPanel("slides")?.api.setActive();
+}
+
+function buildEdit(api: DockviewApi): void {
+  api.addPanel({
+    id: "start",
+    component: "placeholder",
+    title: t("panel.start"),
+    params: { message: "edit.start" },
+  });
+  api.addPanel({
+    id: "library",
+    component: "library",
+    title: t("panel.library"),
+    position: { referencePanel: "start", direction: "left" },
+    initialWidth: 280,
+  });
+  api.addPanel({
+    id: "media",
+    component: "media",
+    title: t("panel.media"),
+    position: { referencePanel: "start", direction: "right" },
+    initialWidth: 300,
+  });
+}
+
+function buildChords(api: DockviewApi): void {
+  api.addPanel({ id: "chords", component: "chords", title: t("panel.chords") });
+  api.addPanel({
+    id: "setlist",
+    component: "setlist",
+    title: t("panel.setlist"),
+    position: { referencePanel: "chords", direction: "left" },
+    initialWidth: 260,
+  });
+  api.addPanel({
+    id: "output",
+    component: "output",
+    title: t("panel.output"),
+    position: { referencePanel: "chords", direction: "right" },
+    initialWidth: 300,
+  });
 }
 
 // Panels the Layout menu can add. Any of them can be open more than once
@@ -91,26 +134,10 @@ export function addPanel(api: DockviewApi, kind: PanelKind): void {
   });
 }
 
-/** Bring a panel to the front, re-adding it if it was closed. */
-export function focusPanel(api: DockviewApi, id: "slides" | "chords"): void {
-  const panel = api.getPanel(id);
-  if (panel) {
-    panel.api.setActive();
-    return;
-  }
-  const other = api.getPanel(id === "slides" ? "chords" : "slides");
-  api.addPanel({
-    id,
-    component: id,
-    title: t(id === "slides" ? "panel.slides" : "panel.chords"),
-    ...(other ? { position: { referencePanel: other, direction: "within" as const } } : {}),
-  });
-}
-
 /** Restore the saved layout, falling back to the default. */
-export function restoreLayout(api: DockviewApi): void {
+export function restoreLayout(api: DockviewApi, page: Page): void {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(storageKey(page));
     if (saved) {
       api.fromJSON(JSON.parse(saved));
       return;
@@ -118,22 +145,22 @@ export function restoreLayout(api: DockviewApi): void {
   } catch {
     // Unreadable or incompatible layout: start fresh below.
   }
-  buildDefaultLayout(api);
+  buildDefaultLayout(api, page);
 }
 
-export function saveLayout(api: DockviewApi): void {
+export function saveLayout(api: DockviewApi, page: Page): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(api.toJSON()));
+    localStorage.setItem(storageKey(page), JSON.stringify(api.toJSON()));
   } catch {
     // Storage full or blocked: the layout just won't persist.
   }
 }
 
-export function resetLayout(api: DockviewApi): void {
+export function resetLayout(api: DockviewApi, page: Page): void {
   try {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKey(page));
   } catch {
     // Ignore; the default layout is rebuilt either way.
   }
-  buildDefaultLayout(api);
+  buildDefaultLayout(api, page);
 }

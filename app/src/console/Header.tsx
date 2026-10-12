@@ -3,6 +3,7 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { DisplayLink } from "./DisplayLink";
 import { PANEL_KINDS, type PanelKind } from "./layout";
+import { PAGES, type Page } from "./pages";
 import { useLive } from "./LiveContext";
 
 function useClock(): string {
@@ -15,18 +16,16 @@ function useClock(): string {
   return now;
 }
 
-export type Mode = "show" | "edit" | "chords";
-const MODES = ["show", "edit", "chords"] as const;
 
 export function Header({
-  mode,
-  onMode,
+  page,
+  onPage,
   onResetLayout,
   onAddPanel,
 }: {
-  /** Which part of the workspace is in front. */
-  mode: Mode | null;
-  onMode: (mode: Mode) => void;
+  /** The console page in front. */
+  page: Page;
+  onPage: (page: Page) => void;
   onResetLayout: () => void;
   onAddPanel: (kind: PanelKind) => void;
 }) {
@@ -46,14 +45,14 @@ export function Header({
       <div className="flex flex-wrap items-center gap-4">
         <span className="text-sm font-bold tracking-tight">{t("app.name")}</span>
         <div className="flex rounded-cp border-cp bg-cp-bg p-0.5" role="group">
-          {MODES.map((m) => (
+          {PAGES.map((m) => (
             <button
               key={m}
               type="button"
-              onClick={() => onMode(m)}
+              onClick={() => onPage(m)}
               title={t(`mode.${m}Help`)}
-              aria-pressed={mode === m}
-              className={`rounded-cp-sm px-3.5 py-1 ${mode === m ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:text-cp-text"}`}
+              aria-pressed={page === m}
+              className={`rounded-cp-sm px-3.5 py-1 ${page === m ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:text-cp-text"}`}
             >
               {t(`mode.${m}`)}
             </button>

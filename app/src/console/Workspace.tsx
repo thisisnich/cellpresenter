@@ -3,6 +3,7 @@ import "dockview-react/dist/styles/dockview.css";
 import { useMemo } from "react";
 import type { Theme } from "../theme/tokens";
 import { restoreLayout, saveLayout } from "./layout";
+import { PageContext, type Page } from "./pages";
 import { ChordsPanel } from "./panels/ChordsPanel";
 import { EditorPanel } from "./panels/EditorPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
@@ -23,18 +24,9 @@ const components = {
   placeholder: PlaceholderPanel,
 };
 
-// The dockable workspace. Panels are plain components; the layout is
-// restored on start and saved whenever the operator rearranges it.
-export function Workspace({
-  theme,
-  onReady,
-  onActivePanel,
-}: {
-  theme: Theme;
-  onReady: (api: DockviewApi) => void;
-  /** Called with the id of the panel the operator is looking at. */
-  onActivePanel?: (id: string | null) => void;
-}) {
+// One page's dockable workspace. Panels are plain components; the page's
+// layout is restored on start and saved whenever the operator rearranges it.
+export function Workspace({ theme, page, onReady }: { theme: Theme; page: Page; onReady: (api: DockviewApi) => void }) {
   const dockTheme = useMemo<DockviewTheme>(
     () => ({
       name: "cellpresenter",
@@ -46,21 +38,21 @@ export function Workspace({
   );
 
   return (
-    <DockviewReact
-      className="h-full"
-      theme={dockTheme}
-      components={components}
-      onReady={({ api }) => {
-        restoreLayout(api);
-        let timer: number | undefined;
-        api.onDidLayoutChange(() => {
-          window.clearTimeout(timer);
-          timer = window.setTimeout(() => saveLayout(api), 400);
-        });
-        api.onDidActivePanelChange((e) => onActivePanel?.(e.panel?.id ?? null));
-        onActivePanel?.(api.activePanel?.id ?? null);
-        onReady(api);
-      }}
-    />
+    <PageContext.Provider value={page}>
+      <DockviewReact
+        className="h-full"
+        theme={dockTheme}
+        components={components}
+        onReady={({ api }) => {
+          restoreLayout(api, page);
+          let timer: number | undefined;
+          api.onDidLayoutChange(() => {
+            window.clearTimeout(timer);
+            timer = window.setTimeout(() => saveLayout(api, page), 400);
+          });
+          onReady(api);
+        }}
+      />
+    </PageContext.Provider>
   );
 }

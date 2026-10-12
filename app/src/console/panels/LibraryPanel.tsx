@@ -1,17 +1,19 @@
-import type { IDockviewPanelProps } from "dockview-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { SongSummary } from "../../generated/SongSummary";
 import { t } from "../../i18n";
 import { api } from "../../lib/api";
 import { onLibraryChanged } from "../../lib/libraryEvents";
-import { openEditor } from "../openEditor";
+import { usePage, usePages } from "../pages";
 import { newId } from "../../domain/songEditing";
 import { useConsole } from "../ConsoleContext";
 import { useLive } from "../LiveContext";
 
-// Every song in the library, searchable. Click a song to preview it in the
-// Slides panel; + adds it to the open setlist.
-export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
+// Every song in the library, searchable. On the Show page, click a song to
+// preview it in the Slides panel; on the Edit page, click to edit it.
+// + adds it to the open setlist.
+export function LibraryPanel() {
+  const page = usePage();
+  const { editSong } = usePages();
   const { state } = useLive();
   const { select, selection, setlist, saveSetlist } = useConsole();
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
@@ -40,7 +42,7 @@ export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
   return (
     <div className="flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text">
       <div className="flex flex-col gap-2 border-b-cp p-3">
-        <button type="button" onClick={() => openEditor(containerApi, null)} className="cp-btn w-full">
+        <button type="button" onClick={() => editSong(null)} className="cp-btn w-full">
           {t("library.newSong")}
         </button>
         <label htmlFor="library-search" className="sr-only">
@@ -79,7 +81,7 @@ export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
             >
               <button
                 type="button"
-                onClick={() => select({ kind: "song", songId: song.id })}
+                onClick={() => (page === "edit" ? editSong(song.id, song.title) : select({ kind: "song", songId: song.id }))}
                 aria-current={onAir ? "true" : undefined}
                 className={`grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 px-2 py-2 text-left ${onAir ? "font-semibold" : ""}`}
               >
@@ -100,7 +102,7 @@ export function LibraryPanel({ containerApi }: IDockviewPanelProps) {
               )}
               <button
                 type="button"
-                onClick={() => openEditor(containerApi, song.id, song.title)}
+                onClick={() => editSong(song.id, song.title)}
                 aria-label={t("library.edit", { title: song.title })}
                 title={t("library.edit", { title: song.title })}
                 className="px-2 text-cp-muted opacity-60 group-hover:opacity-100 hover:text-cp-text focus-visible:opacity-100"

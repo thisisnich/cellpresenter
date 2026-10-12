@@ -5,7 +5,7 @@ export interface EditorParams {
   songId: string | null;
 }
 
-/** Open (or focus) a song editor tab next to the Slides panel. */
+/** Open (or focus) a song editor tab, next to the other editors. */
 export function openEditor(api: DockviewApi, songId: string | null, title?: string): void {
   const id = songId ? `editor:${songId}` : `editor:new:${Date.now()}`;
   const existing = api.getPanel(id);
@@ -13,7 +13,7 @@ export function openEditor(api: DockviewApi, songId: string | null, title?: stri
     existing.api.setActive();
     return;
   }
-  const reference = api.getPanel("slides");
+  const reference = api.panels.find((p) => p.id.startsWith("editor:")) ?? api.getPanel("start") ?? api.activePanel;
   api.addPanel<EditorParams>({
     id,
     component: "editor",

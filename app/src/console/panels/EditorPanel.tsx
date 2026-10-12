@@ -11,6 +11,7 @@ import { useLive } from "../LiveContext";
 import type { EditorParams } from "../openEditor";
 import { BackgroundPicker } from "../BackgroundPicker";
 import { useConsole } from "../ConsoleContext";
+import { usePages } from "../pages";
 import { SlidePreview } from "../SlidePreview";
 
 const KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B", "Am", "Bm", "Cm", "Dm", "Em", "Fm", "Gm"];
@@ -20,6 +21,7 @@ const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, sectionB
 // Edit a song as text, with a live preview of the slides it makes.
 export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorParams>) {
   const { showSong } = useLive();
+  const { setPage } = usePages();
   const { mediaUrl } = useConsole();
   const [songId, setSongId] = useState(params.songId);
   const [stored, setStored] = useState<Song | null>(null);
@@ -96,7 +98,10 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       panel.setTitle(t("editor.tabTitle", { title: song.title }));
       setDirty(false);
       notifyLibraryChanged();
-      if (andShow) await showSong(song.id);
+      if (andShow) {
+        await showSong(song.id);
+        setPage("show");
+      }
     } catch (err) {
       setError(err instanceof ApiError && err.code === "pin_required" ? t("editor.needPin") : t("editor.saveFailed"));
     } finally {
