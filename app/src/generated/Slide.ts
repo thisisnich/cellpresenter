@@ -21,4 +21,13 @@ background: string | null,
  * The stored song slide this came from (None for announcements), so the
  * console can attach a background cue to it.
  */
-slide_id: string | null, };
+slide_id: string | null, 
+/**
+ * The song section this slide belongs to (None for announcements).
+ */
+section_id: string | null, 
+/**
+ * True when `background` is the section's background rather than a
+ * cue on this slide, so removing it means clearing the section's.
+ */
+section_cue: boolean, };

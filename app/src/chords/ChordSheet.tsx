@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { SheetSlide } from "../domain/chordSheet";
 import { sectionKind } from "../domain/sections";
 import { t } from "../i18n";
+import { useStripPrefs } from "./prefs";
 import { ChordShapes } from "./ChordShapes";
+import { ChordStrip } from "./ChordStrip";
 
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
 
@@ -14,15 +16,19 @@ export function ChordSheet({
   current,
   fontScale = 1,
   lyricsOnly = false,
+  surface = "bg-cp-bg",
 }: {
   slides: SheetSlide[];
   /** Index of the live slide, or -1. */
   current: number;
   fontScale?: number;
   lyricsOnly?: boolean;
+  /** Background class of the view, for the pinned chord strip. */
+  surface?: string;
 }) {
   const live = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [strip, setStrip] = useStripPrefs();
   // The song's chords in the order they first appear, for the shapes strip.
   const songChords = useMemo(
     () => [...new Set(slides.flatMap((s) => s.lines.flatMap((l) => l.chunks.flatMap((c) => (c.chord ? [c.chord] : [])))))],
@@ -35,6 +41,22 @@ export function ChordSheet({
 
   return (
     <div className="flex flex-col gap-1 pb-[40vh]" style={{ fontSize: `${17 * fontScale}px` }}>
+      {!lyricsOnly && songChords.length > 0 &&
+        (strip.shown ? (
+          <ChordStrip
+            chords={songChords}
+            picked={strip.shapes}
+            pinned={strip.pinned}
+            surface={surface}
+            onOpen={setOpen}
+            onPin={(pinned) => setStrip({ pinned })}
+            onHide={() => setStrip({ shown: false })}
+          />
+        ) : (
+          <button type="button" onClick={() => setStrip({ shown: true })} className="self-start rounded-cp-sm px-3 py-1 text-[12px] text-cp-muted hover:bg-cp-surface-hi">
+            {t("chords.showDiagrams")}
+          </button>
+        ))}
       {slides.map((slide, i) => {
         const startsSection = i === 0 || slide.section !== slides[i - 1].section;
         const isLive = i === current;
@@ -85,7 +107,16 @@ export function ChordSheet({
           </section>
         );
       })}
-      {open && <ChordShapes chord={open} songChords={songChords} onPick={setOpen} onClose={() => setOpen(null)} />}
+      {open && (
+        <ChordShapes
+          chord={open}
+          songChords={songChords}
+          picked={strip.shapes[open]}
+          onPick={setOpen}
+          onPickShape={(shape) => setStrip({ shapes: { ...strip.shapes, [open]: shape } })}
+          onClose={() => setOpen(null)}
+        />
+      )}
     </div>
   );
 }

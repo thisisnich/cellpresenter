@@ -114,6 +114,12 @@ export const api = {
       json("PUT", { media_id: mediaId }),
     ),
 
+  setSectionBackground: (songId: string, sectionId: string, mediaId: string | null) =>
+    request<Song>(
+      `/api/songs/${encodeURIComponent(songId)}/sections/${encodeURIComponent(sectionId)}/background`,
+      json("PUT", { media_id: mediaId }),
+    ),
+
   listSetlists: () => request<SetlistSummary[]>("/api/setlists"),
   getSetlist: (id: string) => request<Setlist>(`/api/setlists/${encodeURIComponent(id)}`),
   createSetlist: (input: SetlistInput) => request<Setlist>("/api/setlists", json("POST", input)),

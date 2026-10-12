@@ -61,3 +61,27 @@ export function useViewPrefs() {
   );
   return [prefs, update] as const;
 }
+
+interface StripPrefs {
+  /** Show the strip of chord diagrams above the song. */
+  shown: boolean;
+  /** Keep the strip in view while the song scrolls. */
+  pinned: boolean;
+  /** The shape picked for each chord name ("x32010"); the easiest otherwise. */
+  shapes: Record<string, string>;
+}
+const STRIP_KEY = "cellpresenter.chords.strip";
+
+export function useStripPrefs() {
+  const [prefs, setPrefs] = useState<StripPrefs>(() => load(STRIP_KEY, { shown: true, pinned: true, shapes: {} }));
+  const update = useCallback(
+    (change: Partial<StripPrefs>) =>
+      setPrefs((p) => {
+        const next = { ...p, ...change };
+        save(STRIP_KEY, next);
+        return next;
+      }),
+    [],
+  );
+  return [prefs, update] as const;
+}

@@ -57,7 +57,7 @@ export default function DisplayApp() {
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-black">
-      <Stage>
+      <Stage backdrop={state && shown ? <SlideBackground url={background} /> : null}>
         {/* Sizes here are stage pixels (1920 wide), so messages stay readable
             when the stage is scaled down to a phone. Blacked out = nothing. */}
         {!state && (
@@ -65,7 +65,6 @@ export default function DisplayApp() {
             {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
           </p>
         )}
-        {state && shown && <SlideBackground url={background} />}
         {state && shown && !state.text_hidden && state.slides.length > 0 && (
           <LyricSlide text={active} textScale={textScale} />
         )}

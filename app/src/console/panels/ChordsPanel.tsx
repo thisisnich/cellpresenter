@@ -28,9 +28,9 @@ export function ChordsPanel() {
         <h1 className="m-0 text-lg font-semibold">{song.title}</h1>
         <ChordControls songKey={song.key} semitones={prefs.semitones} capo={prefs.capo} onChange={setPrefs} compact />
       </div>
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2">
         {!hasChords(song) && <p className="m-0 px-3 pb-2 text-cp-muted">{t("chords.noChords")}</p>}
-        <ChordSheet slides={sheet} current={aligned ? state.slide_index : -1} fontScale={0.95} />
+        <ChordSheet slides={sheet} current={aligned ? state.slide_index : -1} fontScale={0.95} surface="bg-cp-panel" />
       </div>
     </div>
   );

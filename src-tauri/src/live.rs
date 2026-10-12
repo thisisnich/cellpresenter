@@ -17,6 +17,13 @@ pub struct Slide {
     /// console can attach a background cue to it.
     #[serde(default)]
     pub slide_id: Option<String>,
+    /// The song section this slide belongs to (None for announcements).
+    #[serde(default)]
+    pub section_id: Option<String>,
+    /// True when `background` is the section's background rather than a
+    /// cue on this slide, so removing it means clearing the section's.
+    #[serde(default)]
+    pub section_cue: bool,
 }
 
 /// Live presentation state. The server owns it; every client renders from it.
@@ -187,6 +194,8 @@ mod tests {
                 text: format!("line {i}"),
                 background: None,
                 slide_id: None,
+                section_id: None,
+                section_cue: false,
             })
             .collect();
         s.show(Some("song".into()), "Song".into(), slides, 0, None);
@@ -265,6 +274,8 @@ mod tests {
             text: section.into(),
             background: cue.map(String::from),
             slide_id: None,
+            section_id: None,
+            section_cue: false,
         }
     }
 

@@ -50,6 +50,6 @@ describe("announcementSlides", () => {
       "Potluck next Friday\nBring a dish",
       "7 pm",
     ]);
-    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null, slide_id: null }]);
+    expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null, slide_id: null, section_id: null, section_cue: false }]);
   });
 });

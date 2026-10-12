@@ -60,7 +60,7 @@ export default function ChordsApp() {
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-2 py-3">
+      <div className="flex-1 overflow-y-auto px-2 pb-3">
         {!state && <p className="p-4 text-cp-muted">{t("connection.connecting")}</p>}
         {state && !state.song_id && state.slides.length > 0 && (
           // An announcement: just its words.

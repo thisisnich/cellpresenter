@@ -27,6 +27,8 @@ export function playedSlides(song: Song, urlOf: (mediaId: string) => string | nu
         return cue ? urlOf(cue) : null;
       })(),
       slide_id: slide.id,
+      section_id: section.id,
+      section_cue: !slide.background_id && Boolean(section.background_id),
     })),
   );
 }
@@ -38,6 +40,6 @@ export function announcementSlides(title: string, text: string): Slide[] {
     .split("\n\n")
     .map((block) => block.replace(/^\n+|\n+$/g, "").trimEnd())
     .filter((block) => block.trim() !== "")
-    .map((block) => ({ section: title, text: block, background: null, slide_id: null }));
-  return slides.length > 0 ? slides : [{ section: title, text: title, background: null, slide_id: null }];
+    .map((block) => ({ section: title, text: block, background: null, slide_id: null, section_id: null, section_cue: false }));
+  return slides.length > 0 ? slides : [{ section: title, text: title, background: null, slide_id: null, section_id: null, section_cue: false }];
 }

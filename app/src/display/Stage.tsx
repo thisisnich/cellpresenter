@@ -4,11 +4,13 @@ import type { ReactNode } from "react";
 // The stage is a fixed-resolution virtual canvas. Every display (projector,
 // TV, phone) lays lyrics out in this same 1920x1080 space and scales the whole
 // thing uniformly to fit — so line breaks, wrapping, and proportions are
-// identical on every screen. Black letterbox bars absorb any aspect mismatch.
+// identical on every screen. The backdrop (a background picture) fills the
+// whole screen instead, cropped to fit, so a screen that isn't 16:9 shows no
+// bars around it.
 export const STAGE_WIDTH = 1920;
 export const STAGE_HEIGHT = 1080;
 
-export function Stage({ children }: { children: ReactNode }) {
+export function Stage({ children, backdrop }: { children: ReactNode; backdrop?: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
@@ -34,6 +36,7 @@ export function Stage({ children }: { children: ReactNode }) {
       ref={ref}
       className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black"
     >
+      {backdrop}
       <div
         className="relative flex shrink-0 items-center justify-center"
         style={{

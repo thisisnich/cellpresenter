@@ -297,6 +297,37 @@ impl Db {
         self.get_song(id).await
     }
 
+    /// Set or clear a section's background. False if the section isn't
+    /// part of that song.
+    pub async fn set_section_background(
+        &self,
+        song_id: &str,
+        section_id: &str,
+        media_id: Option<&str>,
+    ) -> DbResult<bool> {
+        let now = now_ms();
+        let updated = sqlx::query(
+            "UPDATE sections SET background_id = ?, updated_at = ?
+             WHERE id = ? AND song_id = ? AND library_id = ? AND deleted_at IS NULL",
+        )
+        .bind(media_id)
+        .bind(now)
+        .bind(section_id)
+        .bind(song_id)
+        .bind(&self.library_id)
+        .execute(&self.pool)
+        .await?
+        .rows_affected();
+        if updated > 0 {
+            sqlx::query("UPDATE songs SET updated_at = ? WHERE id = ?")
+                .bind(now)
+                .bind(song_id)
+                .execute(&self.pool)
+                .await?;
+        }
+        Ok(updated > 0)
+    }
+
     /// Set or clear one slide's background cue. False if the slide isn't
     /// part of that song.
     pub async fn set_slide_background(

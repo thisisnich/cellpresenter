@@ -1,6 +1,5 @@
-// A background image filling the stage, darkened slightly so white lyrics
-// stay readable on any picture. Lives inside the Stage, so it crops the
-// same way on every screen.
+// A background image filling its box (the whole screen on a display),
+// cropped to fit and darkened slightly so white lyrics stay readable.
 export function SlideBackground({ url }: { url: string | null | undefined }) {
   if (!url) return null;
   return (

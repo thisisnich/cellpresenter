@@ -144,7 +144,9 @@ impl Song {
                         .as_deref()
                         .or(section.background_id.as_deref())
                         .and_then(&url_of),
+                    section_cue: slide.background_id.is_none() && section.background_id.is_some(),
                     slide_id: Some(slide.id.clone()),
+                    section_id: Some(section.id.clone()),
                     section: section.name.clone(),
                     text: slide
                         .lines
@@ -247,5 +249,9 @@ mod tests {
                 None
             ]
         );
+        let slides = s.live_slides(url);
+        assert!(slides[0].section_cue);
+        assert!(!slides[1].section_cue);
+        assert_eq!(slides[0].section_id.as_deref(), Some("v1"));
     }
 }

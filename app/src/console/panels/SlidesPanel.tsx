@@ -46,6 +46,16 @@ export function SlidesPanel() {
       setCueError(t("slides.cueFailed"));
     }
   };
+  const clearSectionBackground = async (sectionId: string) => {
+    if (!songId) return;
+    try {
+      await api.setSectionBackground(songId, sectionId, null);
+      setCueError(null);
+      notifyLibraryChanged(); // refresh previews; live slides update on the server
+    } catch {
+      setCueError(t("slides.cueFailed"));
+    }
+  };
 
   const title = previewing ? (content?.title ?? "") : state.title;
   const slides = previewing ? (content?.slides ?? []) : state.slides;
@@ -150,8 +160,16 @@ export function SlidesPanel() {
                   {t("slides.cue")}
                   <button
                     type="button"
-                    onClick={() => slide.slide_id && void setCue(slide.slide_id, null)}
-                    aria-label={t("slides.removeCue", { number: i + 1 })}
+                    onClick={() =>
+                      slide.section_cue
+                        ? slide.section_id && void clearSectionBackground(slide.section_id)
+                        : slide.slide_id && void setCue(slide.slide_id, null)
+                    }
+                    aria-label={
+                      slide.section_cue
+                        ? t("slides.removeSectionCue", { section: slide.section })
+                        : t("slides.removeCue", { number: i + 1 })
+                    }
                     className="rounded-cp-sm px-1 hover:bg-white/20"
                   >
                     ✕

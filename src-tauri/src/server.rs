@@ -230,6 +230,21 @@ impl ServerState {
         })
     }
 
+    /// The song after a cue change. If it is on air, its live slides pick
+    /// up the change without moving.
+    async fn refresh_song_on_air(&self, song_id: &str) -> Result<Song, ApiError> {
+        let song = self.db.get_song(song_id).await?.ok_or(NOT_FOUND)?;
+        if self.snapshot().song_id.as_deref() == Some(song_id) {
+            let slides = self.song_content(&song).await?;
+            self.mutate(|l| {
+                let index = l.slide_index;
+                let (id, title) = (song.id.clone(), song.title.clone());
+                l.show(Some(id), title, slides, index, None);
+            });
+        }
+        Ok(song)
+    }
+
     /// URL of a background image, if the media id names one.
     async fn background_url(&self, media_id: Option<&str>) -> DbResult<Option<String>> {
         Ok(match media_id {
@@ -757,17 +772,26 @@ async fn set_slide_background(
     {
         return Err(NOT_FOUND);
     }
-    let song = s.db.get_song(&song_id).await?.ok_or(NOT_FOUND)?;
-    // If the song is on air, its slides pick up the new cue.
-    if s.snapshot().song_id.as_deref() == Some(song_id.as_str()) {
-        let slides = s.song_content(&song).await?;
-        s.mutate(|l| {
-            let index = l.slide_index;
-            let (id, title) = (song.id.clone(), song.title.clone());
-            l.show(Some(id), title, slides, index, None);
-        });
+    Ok(Json(s.refresh_song_on_air(&song_id).await?))
+}
+
+/// Set or clear a section's background (every slide in it without its own cue).
+async fn set_section_background(
+    State(s): State<ServerState>,
+    Path((song_id, section_id)): Path<(String, String)>,
+    Json(choice): Json<BackgroundChoice>,
+) -> ApiResult<Song> {
+    if let Some(id) = choice.media_id.as_deref() {
+        s.db.get_media(id).await?.ok_or(NOT_FOUND)?;
     }
-    Ok(Json(song))
+    if !s
+        .db
+        .set_section_background(&song_id, &section_id, choice.media_id.as_deref())
+        .await?
+    {
+        return Err(NOT_FOUND);
+    }
+    Ok(Json(s.refresh_song_on_air(&song_id).await?))
 }
 
 // ---------- WebSocket ----------
@@ -889,6 +913,10 @@ pub fn router(state: ServerState) -> Router {
         .route(
             "/songs/{song_id}/slides/{slide_id}/background",
             axum::routing::put(set_slide_background),
+        )
+        .route(
+            "/songs/{song_id}/sections/{section_id}/background",
+            axum::routing::put(set_section_background),
         )
         .route("/setlists", post(create_setlist))
         .route(
@@ -1458,6 +1486,21 @@ mod tests {
         )
         .await;
         assert_eq!(snapshot().background.as_deref(), Some(hills.url.as_str()));
+        assert!(snapshot().slides[0].section_cue);
+
+        // The section's background can be removed from the console.
+        let section = snapshot().slides[0].section_id.clone().unwrap();
+        let path = format!("/api/songs/{holy}/sections/{section}/background");
+        let (status, _) = call(&router, "PUT", &path, Some(r#"{"media_id":null}"#), None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(snapshot().slides[0].background, None);
+        let wrong = format!("/api/songs/{grace}/sections/{section}/background");
+        assert_eq!(
+            call(&router, "PUT", &wrong, Some(r#"{"media_id":null}"#), None)
+                .await
+                .0,
+            StatusCode::NOT_FOUND
+        );
 
         // Clear text lasts until the next slide; clear background empties the layer.
         call(

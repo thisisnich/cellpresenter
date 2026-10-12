@@ -1,19 +1,25 @@
 import { useEffect } from "react";
-import { guitarShapes } from "../domain/guitarShapes";
+import { guitarShapes, shapeName } from "../domain/guitarShapes";
 import { t } from "../i18n";
 import { ChordDiagram } from "./ChordDiagram";
 
 // Every way to play one chord, easiest first. Opens when a chord is tapped
 // in the sheet; the strip at the top jumps between the song's chords.
+// Tapping a shape makes it the one shown above the song on this device.
 export function ChordShapes({
   chord,
   songChords,
+  picked,
   onPick,
+  onPickShape,
   onClose,
 }: {
   chord: string;
   songChords: string[];
+  /** Name of the shape picked for this chord, if any. */
+  picked?: string;
   onPick: (chord: string) => void;
+  onPickShape: (shape: string) => void;
   onClose: () => void;
 }) {
   const shapes = guitarShapes(chord);
@@ -57,9 +63,22 @@ export function ChordShapes({
             <p className="m-0 text-cp-muted">{t("chords.noShapes")}</p>
           ) : (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] justify-items-center gap-4">
-              {shapes.map((shape) => (
-                <ChordDiagram key={shape.frets.join(",")} shape={shape} />
-              ))}
+              {shapes.map((shape, i) => {
+                const name = shapeName(shape);
+                const on = picked ? picked === name : i === 0;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    onClick={() => onPickShape(name)}
+                    aria-pressed={on}
+                    className="rounded-cp p-1.5"
+                    style={{ boxShadow: on ? "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" : undefined }}
+                  >
+                    <ChordDiagram shape={shape} />
+                  </button>
+                );
+              })}
             </div>
           )}
           <p className="m-0 mt-3 text-[12px] text-cp-muted">{t("chords.shapesHint")}</p>

@@ -12,13 +12,13 @@ const GAP_Y = (H - TOP - 6) / FRETS;
 
 // One guitar chord box: strings run top to bottom, low E on the left.
 // Dots are fingers, o is an open string, x is not played.
-export function ChordDiagram({ shape, label }: { shape: GuitarShape; label?: string }) {
+export function ChordDiagram({ shape, label, size = 1 }: { shape: GuitarShape; label?: string; size?: number }) {
   const x = (string: number) => LEFT + string * GAP_X;
   const y = (fret: number) => TOP + (fret - shape.baseFret + 0.5) * GAP_Y;
   const name = shapeName(shape);
   return (
     <figure className="m-0 flex flex-col items-center gap-1">
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img" aria-label={t("chords.shapeLabel", { shape: name })} className="text-cp-text">
+      <svg viewBox={`0 0 ${W} ${H}`} width={W * size} height={H * size} role="img" aria-label={t("chords.shapeLabel", { shape: name })} className="text-cp-text">
         {shape.baseFret === 1 ? (
           <rect x={x(0)} y={TOP - 3} width={x(5) - x(0)} height={3} fill="currentColor" />
         ) : (
@@ -54,7 +54,7 @@ export function ChordDiagram({ shape, label }: { shape: GuitarShape; label?: str
           ),
         )}
       </svg>
-      <figcaption className="font-mono text-[11px] text-cp-muted">{label ?? name}</figcaption>
+      {label !== "" && <figcaption className="font-mono text-[11px] text-cp-muted">{label ?? name}</figcaption>}
     </figure>
   );
 }
