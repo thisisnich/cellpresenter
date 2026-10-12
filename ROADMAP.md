@@ -21,11 +21,13 @@ Goal: run a cell group night on the new app instead of the web app. ~200–240 h
 | 4. Content + live state | Paste lyrics → slides (explicit lines, font fits the longest line) · setlists + announcements · song arrangements · image backgrounds · live state holds pointers, not content | **done**: song editor (paste → slides), arrangements, fit-to-width, setlists + announcements, preview before going live, Next runs through the setlist, image backgrounds (per song, per announcement, default) with Clear text / Clear background |
 | 5. Screens + search | Live/Next previews · phone remote page · audience phone view · chords view for musicians · song search (own library, paste/URL import, public-domain hymns) | Live/Next previews, audience view, **phone remote** and **chords view done** (tap a chord for its guitar shapes); song search next |
 
+Releases: v0.1.0 ships as a preview before step 5 is finished (AGPL-3.0, installers for Mac, Windows and Linux built by the Release workflow). Song search and import follow in v0.2.
+
 **Test for R1:** build a setlist from pasted chord sheets, run it from the console and a phone, and a musician's phone shows lyrics + chords in the transposed key.
 
 ## R2 — "Share with the team"
 
-Accounts + cloud library (text and thumbnails always synced; full media stays on the home laptop) · setlist share links with chords · remote live control (sign-in + per-session room code; LAN stays the default) · ChordPro / OpenLyrics / plain-text import · Operate / Prepare modes · first-run guide · open-source licence + contributor docs.
+Accounts + cloud library (text and thumbnails always synced; full media stays on the home laptop) · setlist share links with chords · remote live control (sign-in + per-session room code; LAN stays the default) · ChordPro / OpenLyrics / plain-text import · Operate / Prepare modes · first-run guide · contributor docs.
 
 ## R3 — "Other churches"
 
