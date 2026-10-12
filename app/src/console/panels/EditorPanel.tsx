@@ -9,7 +9,6 @@ import { api, ApiError } from "../../lib/api";
 import { notifyLibraryChanged } from "../../lib/libraryEvents";
 import { useLive } from "../LiveContext";
 import type { EditorParams } from "../openEditor";
-import { backgroundFor } from "../../display/SlideBackground";
 import { BackgroundPicker } from "../BackgroundPicker";
 import { useConsole } from "../ConsoleContext";
 import { SlidePreview } from "../SlidePreview";
@@ -20,7 +19,7 @@ const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, sectionB
 
 // Edit a song as text, with a live preview of the slides it makes.
 export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorParams>) {
-  const { state, showSong } = useLive();
+  const { showSong } = useLive();
   const { mediaUrl } = useConsole();
   const [songId, setSongId] = useState(params.songId);
   const [stored, setStored] = useState<Song | null>(null);
@@ -223,7 +222,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
               <div key={i} className="overflow-hidden rounded-cp border-cp">
-                <SlidePreview text={slide.text} background={backgroundFor(slide.background, state?.background)} />
+                <SlidePreview text={slide.text} background={slide.background} transparent />
                 <div className="px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
                   {i + 1} · {slide.section}
                 </div>

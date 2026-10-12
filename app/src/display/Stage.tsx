@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 export const STAGE_WIDTH = 1920;
 export const STAGE_HEIGHT = 1080;
 
-export function Stage({ children, backdrop }: { children: ReactNode; backdrop?: ReactNode }) {
+export function Stage({ children, backdrop, clear = false }: { children: ReactNode; backdrop?: ReactNode; clear?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(1);
 
@@ -34,7 +34,7 @@ export function Stage({ children, backdrop }: { children: ReactNode; backdrop?: 
   return (
     <div
       ref={ref}
-      className="absolute inset-0 flex items-center justify-center overflow-hidden bg-black"
+      className={`absolute inset-0 flex items-center justify-center overflow-hidden ${clear ? "" : "bg-black"}`}
     >
       {backdrop}
       <div

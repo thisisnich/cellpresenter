@@ -27,6 +27,10 @@ export interface ThemeColors {
   danger: string;
   dangerBg: string;
   dangerLine: string;
+  /** Checkerboard on slide thumbnails with no background of their own
+   *  (transparent: whatever background is up stays). */
+  checkerA: string;
+  checkerB: string;
   /** Song section colours (slide labels, arrangement chips). */
   sectionVerse: string;
   sectionChorus: string;
@@ -66,6 +70,8 @@ export const DEFAULT_THEME: Theme = {
     danger: "#FF8A8E",
     dangerBg: "#3A1D1F",
     dangerLine: "#5A2A2C",
+    checkerA: "#141517",
+    checkerB: "#202226",
     sectionVerse: "#2563EB",
     sectionChorus: "#7C3AED",
     sectionBridge: "#C2410C",

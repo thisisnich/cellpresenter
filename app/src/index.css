@@ -24,6 +24,13 @@
   --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", monospace;
 }
 
+/* Transparent: a slide with no background keeps whatever is showing. */
+@utility cp-checker {
+  background-color: var(--cp-checker-a);
+  background-image: conic-gradient(var(--cp-checker-b) 25%, transparent 0 50%, var(--cp-checker-b) 0 75%, transparent 0);
+  background-size: 16px 16px;
+}
+
 @utility border-cp {
   border: var(--cp-border-width) solid var(--cp-line);
 }

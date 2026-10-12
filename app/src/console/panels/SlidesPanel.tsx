@@ -7,7 +7,6 @@ import { notifyLibraryChanged } from "../../lib/libraryEvents";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { isMediaDrag, MEDIA_DRAG_TYPE } from "../dragMedia";
 import { nextIndex, useLive } from "../LiveContext";
-import { backgroundFor } from "../../display/SlideBackground";
 import { SlidePreview } from "../SlidePreview";
 
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
@@ -144,7 +143,7 @@ export function SlidesPanel() {
                 className="flex w-full flex-col overflow-hidden rounded-cp bg-cp-chrome text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cp-live"
                 style={{ border: `${width} solid ${dropAt === i ? "var(--cp-next)" : ring}` }}
               >
-                <SlidePreview text={slide.text} background={backgroundFor(slide.background, itemCue, state.background)} />
+                <SlidePreview text={slide.text} background={slide.background ?? (i === 0 ? itemCue : null)} transparent />
                 <span
                   className="flex items-center justify-between gap-1.5 px-2 py-1 text-[11px] font-semibold text-white"
                   style={{ background: sectionColor(slide.section) }}
