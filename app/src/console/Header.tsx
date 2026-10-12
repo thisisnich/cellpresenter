@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { t } from "../i18n";
 import { api } from "../lib/api";
 import { DisplayLink } from "./DisplayLink";
+import { PANEL_KINDS, type PanelKind } from "./layout";
 import { useLive } from "./LiveContext";
 
 function useClock(): string {
@@ -21,12 +22,15 @@ export function Header({
   mode,
   onMode,
   onResetLayout,
+  onAddPanel,
 }: {
   /** Which part of the workspace is in front. */
   mode: Mode | null;
   onMode: (mode: Mode) => void;
   onResetLayout: () => void;
+  onAddPanel: (kind: PanelKind) => void;
 }) {
+  const [layoutOpen, setLayoutOpen] = useState(false);
   const { status } = useLive();
   const clock = useClock();
   const [pin, setPin] = useState<string | null>(null);
@@ -55,9 +59,40 @@ export function Header({
             </button>
           ))}
         </div>
-        <button type="button" onClick={onResetLayout} className="rounded-cp border-cp px-2.5 py-1 text-cp-muted hover:text-cp-text">
-          {t("layout.reset")}
-        </button>
+        <div className="flex items-center gap-1.5" role="group" aria-label={t("layout.label")}>
+          <button
+            type="button"
+            onClick={() => setLayoutOpen((o) => !o)}
+            aria-expanded={layoutOpen}
+            className={`rounded-cp border-cp px-2.5 py-1 ${layoutOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+          >
+            {t("layout.label")} {layoutOpen ? "‹" : "›"}
+          </button>
+          {layoutOpen && (
+            <>
+              <label className="sr-only" htmlFor="add-panel">
+                {t("layout.add")}
+              </label>
+              <select
+                id="add-panel"
+                value=""
+                onChange={(e) => e.target.value && onAddPanel(e.target.value as PanelKind)}
+                title={t("layout.addHelp")}
+                className="h-[30px] rounded-cp border-cp bg-cp-bg px-2 text-cp-text"
+              >
+                <option value="">{t("layout.add")}</option>
+                {PANEL_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>
+                    {t(`panel.${kind}`)}
+                  </option>
+                ))}
+              </select>
+              <button type="button" onClick={onResetLayout} title={t("layout.resetHelp")} className="rounded-cp border-cp px-2.5 py-1 text-cp-muted hover:text-cp-text">
+                {t("layout.reset")}
+              </button>
+            </>
+          )}
+        </div>
       </div>
       <div className="flex items-center gap-4 text-cp-muted">
         {pin && (

@@ -9,7 +9,11 @@ export const en = {
   "mode.showHelp": "Slides of what's on air or being previewed",
   "mode.editHelp": "Edit the song being previewed or on air",
   "mode.chordsHelp": "The song on air with chords",
-  "layout.reset": "Reset layout",
+  "layout.label": "Layout",
+  "layout.add": "+ Add panel",
+  "layout.addHelp": "Add a panel as a new tab, e.g. one you closed or a second Chords view",
+  "layout.reset": "Reset",
+  "layout.resetHelp": "Put every panel back where it started",
   "header.copied": "Copied",
   "header.remotePin": "Remote PIN",
 

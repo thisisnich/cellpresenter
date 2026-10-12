@@ -66,6 +66,31 @@ export function buildDefaultLayout(api: DockviewApi): void {
   api.getPanel("slides")?.api.setActive();
 }
 
+// Panels the Layout menu can add. Any of them can be open more than once
+// (two Chords tabs, say); the first copy keeps the plain id.
+export const PANEL_KINDS = ["slides", "chords", "setlist", "library", "output", "media", "notes", "stage"] as const;
+export type PanelKind = (typeof PANEL_KINDS)[number];
+
+const PLACEHOLDERS: Partial<Record<PanelKind, string>> = { notes: "notes.comingSoon", stage: "stage.comingSoon" };
+
+/** The kind of panel an id belongs to: "chords:2" → "chords". */
+export const kindOf = (id: string | null | undefined): string | null => id?.split(":")[0] ?? null;
+
+/** Add a panel as a new tab in the group the operator is using. */
+export function addPanel(api: DockviewApi, kind: PanelKind): void {
+  let id: string = kind;
+  for (let n = 2; api.getPanel(id); n++) id = `${kind}:${n}`;
+  const message = PLACEHOLDERS[kind];
+  const group = api.activeGroup;
+  api.addPanel({
+    id,
+    component: message ? "placeholder" : kind,
+    title: t(`panel.${kind}`),
+    ...(message ? { params: { message } } : {}),
+    ...(group ? { position: { referenceGroup: group, direction: "within" as const } } : {}),
+  });
+}
+
 /** Bring a panel to the front, re-adding it if it was closed. */
 export function focusPanel(api: DockviewApi, id: "slides" | "chords"): void {
   const panel = api.getPanel(id);

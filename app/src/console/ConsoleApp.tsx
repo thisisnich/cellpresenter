@@ -2,7 +2,7 @@ import type { DockviewApi } from "dockview-react";
 import { useRef, useState } from "react";
 import { DEFAULT_THEME } from "../theme/tokens";
 import { Header, type Mode } from "./Header";
-import { focusPanel, resetLayout } from "./layout";
+import { addPanel, focusPanel, kindOf, resetLayout } from "./layout";
 import { useConsole } from "./ConsoleContext";
 import { openEditor } from "./openEditor";
 import { useTransportKeys } from "../lib/transportKeys";
@@ -18,9 +18,10 @@ function TransportKeys() {
 }
 
 function modeOf(panelId: string | null): Mode | null {
-  if (panelId === "slides") return "show";
-  if (panelId === "chords") return "chords";
-  if (panelId?.startsWith("editor:")) return "edit";
+  const kind = kindOf(panelId);
+  if (kind === "slides") return "show";
+  if (kind === "chords") return "chords";
+  if (kind === "editor") return "edit";
   return null;
 }
 
@@ -49,6 +50,7 @@ function Shell() {
         mode={modeOf(activePanel)}
         onMode={changeMode}
         onResetLayout={() => dock.current && resetLayout(dock.current)}
+        onAddPanel={(kind) => dock.current && addPanel(dock.current, kind)}
       />
       <div className="min-h-0 flex-1">
         <Workspace theme={DEFAULT_THEME} onReady={(api) => (dock.current = api)} onActivePanel={setActivePanel} />

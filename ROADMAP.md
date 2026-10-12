@@ -33,6 +33,16 @@ Accounts + cloud library (text and thumbnails always synced; full media stays on
 
 Remote editing from another PC · team invites · opt-in media upload with temporary cloud copies · self-hostable cloud server (same Rust server, headless, one Docker image) · multiple output looks · undo · auto-update · Mac code signing · templates · timer + operator notes · more languages and scripts.
 
+## Ideas to plan
+
+Written down so they aren't lost; not scheduled yet.
+
+- **Panels in their own windows.** Drag a tab out of the console to open it in a new window, like a browser tab (for example a dedicated Chords window on a second screen). Every panel already gets its data from the embedded server, so a panel can be its own page (`/panel/chords`) in a native window. Dragging a tab past the window edge opens that window. About one or two sessions. Dockview's built-in popout uses `window.open`, which Tauri blocks by default, so our own windows are the sturdier route. A plain "Open in new window" tab action comes first.
+- **Confidence monitor (stage display).** A screen for the band and speaker: current and next slide, chords, clock, timer and notes. Its layout can be rearranged by dragging blocks, like ProPresenter's stage layouts, and saved as presets.
+- **New windows and pages.** Any view can be opened as a window on this computer or as a page on another device, from the Layout menu or the Display link.
+- **Several screens of different sizes.** Configure each output separately: projector, stage monitor, TV or livestream. Each gets its own aspect ratio (16:9, 4:3, 16:10, ultrawide), resolution, look and what it shows, and the app remembers which screen gets which output. This builds on the screen picker and R3's "multiple output looks".
+- **Several languages.** The UI comes in more languages (all text already goes through `t()`). Lyrics can show in two languages at once, e.g. English with Chinese, with a font and size per language. This extends R3's "more languages and scripts".
+
 ## Principles
 
 - **LAN first.** Live control never needs the internet; the cloud is a fallback and a sharing layer.
