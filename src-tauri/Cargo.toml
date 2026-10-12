@@ -17,7 +17,7 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1", features = ["net", "sync", "rt", "fs"] }
+tokio = { version = "1", features = ["net", "sync", "rt", "fs", "time", "macros"] }
 axum = { version = "0.8", features = ["ws"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 uuid = { version = "1.27.0", features = ["v4", "v7", "serde"] }
@@ -25,6 +25,8 @@ ts-rs = "12.0.1"
 if-addrs = "0.15.0"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 sha2 = "0.11.0"
+# Song search: fetches chord sheets and lyrics with the system's own TLS.
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "query"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "time"] }

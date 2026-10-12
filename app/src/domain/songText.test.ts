@@ -91,6 +91,45 @@ Though Satan should buffet
     expect(texts(song, "Verse 1")).toEqual([["a", "b"], ["c", "d"], ["e"]]);
   });
 
+  it("drops a lyric's indent and moves its chords with it", () => {
+    const song = parseSongText("[Bridge]\nA2      E\n  Even when I don't see it", opts);
+    expect(song.sections[0].slides[0][0]).toEqual({
+      text: "Even when I don't see it",
+      chords: [
+        { at: 0, chord: "A2" },
+        { at: 6, chord: "E" },
+      ],
+    });
+  });
+
+  it("squeezes the gaps chord sheets leave between words", () => {
+    const song = parseSongText("[Verse]\n  G            C\nI worship You      I worship You", opts);
+    expect(song.sections[0].slides[0][0]).toEqual({
+      text: "I worship You I worship You",
+      chords: [
+        { at: 2, chord: "G" },
+        { at: 13, chord: "C" },
+      ],
+    });
+  });
+
+  it("sizes slides evenly instead of leaving one stray line", () => {
+    const song = parseSongText("[Verse 1]\na\nb\nc\nd\ne", { linesPerSlide: 4 });
+    expect(texts(song, "Verse 1")).toEqual([["a", "b", "c"], ["d", "e"]]);
+  });
+
+  it("plays a section written out twice in a row twice", () => {
+    const song = parseSongText("[Chorus]\nla\nlo\n\n[Bridge]\nb\n\nb\n\nb\n\n[Chorus]\nla\nlo\n\nla\nlo", opts);
+    expect(song.arrangement).toEqual(["Chorus", "Bridge", "Bridge", "Bridge", "Chorus", "Chorus"]);
+    expect(texts(song, "Bridge")).toEqual([["b"]]);
+    expect(song.sections.map((s) => s.name)).toEqual(["Chorus", "Bridge"]);
+  });
+
+  it("repeats a section marked x2", () => {
+    const song = parseSongText("[Chorus] x2\nla\n\n[Verse 1]\nv\n\n[Chorus x3]", opts);
+    expect(song.arrangement).toEqual(["Chorus", "Chorus", "Verse 1", "Chorus", "Chorus", "Chorus"]);
+  });
+
   it("names header-less lyrics: repeated block is the chorus", () => {
     const song = parseSongText("one\ntwo\n\nchorus line\nchorus two\n\nthree\nfour\n\nchorus line\nchorus two", opts);
     expect(song.arrangement).toEqual(["Verse 1", "Chorus", "Verse 2", "Chorus"]);

@@ -3,6 +3,7 @@ mod db;
 mod live;
 mod media;
 mod network;
+mod online;
 mod outputs;
 mod seed;
 mod server;

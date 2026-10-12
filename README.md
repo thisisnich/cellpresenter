@@ -7,6 +7,7 @@ Free, open-source worship lyrics presenter, made for cell groups and small churc
 ## What it does
 
 - **Songs:** paste lyrics (with or without chords) and they become slides. Sections (verse, chorus, bridge) are colour-coded, and arrangements can repeat them (V1 C V2 C B C).
+- **Find songs online:** search for a song's chords (from Ultimate Guitar) or lyrics (from LRCLIB), or paste an Ultimate Guitar link. The song opens in the editor already split into sections and slides, with repeats worked out, so you only check it and save.
 - **Setlists:** build tonight's list of songs and announcements. Preview a song before it goes live, and Next carries on into the next item.
 - **Backgrounds:** pictures work like in ProPresenter. Click one to put it on screen, or cue it on a slide or a whole section so it switches when that part comes up.
 - **Any screen is a display:** the projector window, a TV, or phones and tablets. Every screen shows the same layout.
@@ -43,7 +44,7 @@ When the app first starts, allow it through the firewall if asked, so phones and
 ## Using it
 
 1. **Open CellPresenter.** Two windows open: the **Console**, where you run everything, and the **Display**, which is what the audience sees. Plug in the projector or TV. Then, at the top of the Console's **Live output** panel, choose **Fullscreen on screen 2** (or whichever screen it is). Choosing it again also brings the Display back if you closed it.
-2. **Add songs.** Click **+ New song** in the Library, paste the lyrics and press **Save**. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`.
+2. **Add songs.** On the **Edit** page, open **Find songs**, search for the title and pick a result. It opens in the editor, split into slides; check it and press **Save**. Or click **+ New song** in the Library and paste the lyrics yourself. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`. To project songs you may need a licence, such as CCLI.
 3. **Make a setlist.** In the Setlist panel press **New**. Add songs from the Library with **+**, and notices with **+ Announcement**.
 4. **Present.** Click a slide to show it. Use **Next / Prev**, the arrow keys or a clicker. **Clear text** and **Clear background** clear the screen, and **Black out** blanks it.
 5. **Connect phones.** Press **Display link** in the top-right corner. Each device must be on the same Wi-Fi as the computer.

@@ -13,7 +13,7 @@ import { useLive } from "../LiveContext";
 // + adds it to the open setlist.
 export function LibraryPanel() {
   const page = usePage();
-  const { editSong } = usePages();
+  const { editSong, findOnline } = usePages();
   const { state } = useLive();
   const { select, selection, setlist, saveSetlist } = useConsole();
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
@@ -115,6 +115,11 @@ export function LibraryPanel() {
             </div>
           );
         })}
+        {query.trim() && (
+          <button type="button" onClick={() => findOnline(query.trim())} className="mt-1 rounded-cp px-2 py-2 text-left text-cp-muted hover:bg-cp-surface hover:text-cp-text">
+            {t("library.findOnline", { query: query.trim() })}
+          </button>
+        )}
       </div>
     </div>
   );

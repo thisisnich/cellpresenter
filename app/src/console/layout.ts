@@ -7,11 +7,11 @@ import type { Page } from "./pages";
 // page; the result is saved per machine and per page, and Reset brings the
 // default back.
 //   Show:   setlist + library | slides (notes) | output (stage, media)
-//   Edit:   library | song editors | media
+//   Edit:   library, find songs | song editors | media
 //   Chords: setlist | chords | output
 
 // Bump the version when panels change, so old saved layouts are dropped.
-const storageKey = (page: Page) => `cellpresenter.layout.v6.${page}`;
+const storageKey = (page: Page) => `cellpresenter.layout.v7.${page}`;
 
 export function buildDefaultLayout(api: DockviewApi, page: Page): void {
   api.clear();
@@ -80,7 +80,14 @@ function buildEdit(api: DockviewApi): void {
     component: "library",
     title: t("panel.library"),
     position: { referencePanel: "start", direction: "left" },
-    initialWidth: 280,
+    initialWidth: 300,
+  });
+  api.addPanel({
+    id: "search",
+    component: "search",
+    title: t("panel.search"),
+    position: { referencePanel: "library", direction: "within" },
+    inactive: true,
   });
   api.addPanel({
     id: "media",
@@ -111,7 +118,7 @@ function buildChords(api: DockviewApi): void {
 
 // Panels the Layout menu can add. Any of them can be open more than once
 // (two Chords tabs, say); the first copy keeps the plain id.
-export const PANEL_KINDS = ["slides", "chords", "setlist", "library", "output", "media", "notes", "stage"] as const;
+export const PANEL_KINDS = ["slides", "chords", "setlist", "library", "search", "output", "media", "notes", "stage"] as const;
 export type PanelKind = (typeof PANEL_KINDS)[number];
 
 const PLACEHOLDERS: Partial<Record<PanelKind, string>> = { notes: "notes.comingSoon", stage: "stage.comingSoon" };

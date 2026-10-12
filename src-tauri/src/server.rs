@@ -24,6 +24,7 @@ use crate::db::{Db, DbResult, NewMedia};
 use crate::live::{Command, LiveState, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
+use crate::online::{self, OnlineError, OnlineSong, SearchResults, Source};
 use crate::outputs::{OutputChoice, Outputs, Screens};
 use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
@@ -832,6 +833,44 @@ async fn set_output(
     Ok(Json(outputs.screens()))
 }
 
+// ---------- online song search ----------
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+}
+
+#[derive(Deserialize)]
+struct OnlineSongQuery {
+    source: Source,
+    id: String,
+}
+
+async fn search_online(Query(query): Query<SearchQuery>) -> ApiResult<SearchResults> {
+    let q = query.q.trim();
+    if q.is_empty() || q.len() > 200 {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "bad_query"));
+    }
+    Ok(Json(online::search(q).await))
+}
+
+async fn fetch_online(Query(query): Query<OnlineSongQuery>) -> ApiResult<OnlineSong> {
+    online::fetch(query.source, &query.id)
+        .await
+        .map(Json)
+        .map_err(|e| match e {
+            OnlineError::BadId => ApiError(StatusCode::BAD_REQUEST, "bad_id"),
+            OnlineError::NotFound => NOT_FOUND,
+            OnlineError::Unavailable(why) => {
+                eprintln!(
+                    "cellpresenter: can't fetch {:?} {}: {why}",
+                    query.source, query.id
+                );
+                ApiError(StatusCode::BAD_GATEWAY, "unavailable")
+            }
+        })
+}
+
 // ---------- WebSocket ----------
 
 async fn ws_handler(ws: WebSocketUpgrade, State(s): State<ServerState>) -> Response {
@@ -957,6 +996,9 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        // Reaching out to the internet is for whoever runs the show.
+        .route("/online/search", get(search_online))
+        .route("/online/song", get(fetch_online))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",

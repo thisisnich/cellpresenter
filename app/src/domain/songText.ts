@@ -60,19 +60,32 @@ function normalizeSectionName(word: string, number?: string): string {
   return number ? `${base} ${number}` : base;
 }
 
-/** If the line is a section header, its normalized name. */
-export function sectionHeader(line: string): string | null {
+interface Header {
+  name: string;
+  /** "[Chorus x2]": the section is played this many times. */
+  times: number;
+}
+
+const timesOf = (mark: string | undefined) => (mark ? Math.min(9, Number(/\d+/.exec(mark)?.[0] ?? 1)) : 1);
+
+function parseHeader(line: string): Header | null {
   const s = line.trim();
   if (!s) return null;
-  const bracket = /^\[([^\]]+)\]$/.exec(s);
+  const bracket = /^\[([^\]]+)\]\s*(\(?x\d+\)?)?$/i.exec(s);
   if (bracket) {
     const inner = bracket[1].trim();
     if (parseChord(inner)) return null; // "[G]" is a chord, not a header
     const known = HEADER_RE.exec(inner);
-    return known ? normalizeSectionName(known[1], known[2]) : titleCase(inner);
+    if (!known) return { name: titleCase(inner), times: timesOf(bracket[2]) };
+    return { name: normalizeSectionName(known[1], known[2]), times: timesOf(known[3] ?? bracket[2]) };
   }
   const known = HEADER_RE.exec(s);
-  return known ? normalizeSectionName(known[1], known[2]) : null;
+  return known ? { name: normalizeSectionName(known[1], known[2]), times: timesOf(known[3]) } : null;
+}
+
+/** If the line is a section header, its normalized name. */
+export function sectionHeader(line: string): string | null {
+  return parseHeader(line)?.name ?? null;
 }
 
 /** Chords on a chord-only line, with the column each starts at. */
@@ -106,13 +119,36 @@ export function inlineChords(line: string): TextLine {
 
 function attachChords(lyric: string, above: ChordAt[]): TextLine {
   const inline = inlineChords(lyric);
-  const chords = [...above, ...inline.chords].sort((a, b) => a.at - b.at);
-  return { text: inline.text, chords };
+  // Chord sheets space words out to make room for chords and indent lines;
+  // slides want plain text. Drop the indent and squeeze gaps to one space,
+  // moving each chord along with the letter it sat on.
+  const source = inline.text;
+  const moved: number[] = []; // moved[i]: where source[i] ends up
+  let text = "";
+  for (let i = 0; i < source.length; i++) {
+    moved.push(text.length);
+    const space = source[i] === " ";
+    if (space && (text.length === 0 || source[i + 1] === " ")) continue;
+    text += source[i];
+  }
+  moved.push(text.length);
+  const chords = [...above, ...inline.chords]
+    .map((c) => ({ ...c, at: c.at < source.length ? moved[c.at] : text.length + (c.at - source.length) }))
+    .sort((a, b) => a.at - b.at);
+  return { text, chords };
 }
 
+/** Split a block into as few slides as fit `max` lines, sized evenly so no
+ *  slide is left with a single stray line (5 lines at 4 → 3 + 2). */
 function splitBlock(lines: TextLine[], max: number): TextLine[][] {
+  const count = Math.ceil(lines.length / max);
   const out: TextLine[][] = [];
-  for (let i = 0; i < lines.length; i += max) out.push(lines.slice(i, i + max));
+  let start = 0;
+  for (let i = 0; i < count; i++) {
+    const size = Math.ceil((lines.length - start) / (count - i));
+    out.push(lines.slice(start, start + size));
+    start += size;
+  }
   return out;
 }
 
@@ -120,6 +156,7 @@ const blockKey = (lines: TextLine[]) => lines.map((l) => l.text.trim().toLowerCa
 
 interface RawSection {
   name: string | null; // null = no header (auto-named later)
+  times: number;
   blocks: TextLine[][];
 }
 
@@ -134,15 +171,15 @@ export function parseSongText(input: string, options: ParseOptions): ParsedSong 
 
   const endBlock = () => {
     if (block.length) {
-      if (!current) raw.push((current = { name: null, blocks: [] }));
+      if (!current) raw.push((current = { name: null, times: 1, blocks: [] }));
       current.blocks.push(block);
     }
     block = [];
     pendingChords = null;
   };
-  const startSection = (name: string | null) => {
+  const startSection = (name: string | null, times = 1) => {
     endBlock();
-    raw.push((current = { name, blocks: [] }));
+    raw.push((current = { name, times, blocks: [] }));
   };
 
   for (const rawLine of input.replace(/\r\n?/g, "\n").replace(/\t/g, "    ").split("\n")) {
@@ -160,9 +197,9 @@ export function parseSongText(input: string, options: ParseOptions): ParsedSong 
       else if (/^eo[cvb]$|^end_of_/.test(d)) endBlock();
       continue;
     }
-    const header = sectionHeader(line);
+    const header = parseHeader(line);
     if (header) {
-      startSection(header);
+      startSection(header.name, header.times);
       continue;
     }
     if (!line.trim()) {
@@ -190,14 +227,11 @@ export function parseSongText(input: string, options: ParseOptions): ParsedSong 
   const sections = new Map<string, TextSection>();
   const contentOf = new Map<string, string>();
 
-  const addOccurrence = (name: string, blocks: TextLine[][]) => {
+  const addOccurrence = (name: string, blocks: TextLine[][]): string => {
     if (blocks.length === 0) {
-      if (sections.has(name)) result.arrangement.push(name);
-      else {
-        sections.set(name, { name, slides: [] }); // header with nothing yet
-        result.arrangement.push(name);
-      }
-      return;
+      if (!sections.has(name)) sections.set(name, { name, slides: [] }); // header with nothing yet
+      result.arrangement.push(name);
+      return name;
     }
     const key = blocks.map(blockKey).join("\n\n");
     let finalName = name;
@@ -212,11 +246,19 @@ export function parseSongText(input: string, options: ParseOptions): ParsedSong 
       contentOf.set(finalName, key);
     }
     result.arrangement.push(finalName);
+    return finalName;
   };
 
   for (const s of raw) {
     if (s.name !== null) {
-      addOccurrence(s.name, s.blocks);
+      // A section written out twice in a row (common in chord sheets) is
+      // one section played twice.
+      const keys = s.blocks.map(blockKey);
+      const repeated = keys.length > 1 && keys.every((k) => k === keys[0]);
+      const blocks = repeated ? [s.blocks[0]] : s.blocks;
+      const plays = (repeated ? keys.length : 1) * s.times;
+      const name = addOccurrence(s.name, blocks);
+      for (let i = 1; i < plays; i++) result.arrangement.push(name);
       continue;
     }
     for (const b of s.blocks) {

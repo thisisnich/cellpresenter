@@ -6,8 +6,10 @@ import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
 import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
+import type { OnlineSong } from "../generated/OnlineSong";
 import type { PinInfo } from "../generated/PinInfo";
 import type { Screens } from "../generated/Screens";
+import type { SearchResults } from "../generated/SearchResults";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
 import type { SetlistSummary } from "../generated/SetlistSummary";
@@ -16,6 +18,7 @@ import type { ShowSong } from "../generated/ShowSong";
 import type { Song } from "../generated/Song";
 import type { SongInput } from "../generated/SongInput";
 import type { SongSummary } from "../generated/SongSummary";
+import type { Source } from "../generated/Source";
 
 export type LiveCommand = Command;
 
@@ -99,6 +102,11 @@ export const api = {
   updateSong: (id: string, input: SongInput) =>
     request<Song>(`/api/songs/${encodeURIComponent(id)}`, json("PUT", input)),
   deleteSong: (id: string) => request<void>(`/api/songs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  /** Search song sites (chord sheets and lyrics) through the server. */
+  searchOnline: (query: string) => request<SearchResults>(`/api/online/search?q=${encodeURIComponent(query)}`),
+  onlineSong: (source: Source, id: string) =>
+    request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
 
   listMedia: () => request<Media[]>("/api/media"),
   /** Upload an image file; big photos are scaled down on the server. */

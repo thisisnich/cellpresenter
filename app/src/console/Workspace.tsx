@@ -12,6 +12,7 @@ import { OutputPanel } from "./panels/OutputPanel";
 import { PlaceholderPanel } from "./panels/PlaceholderPanel";
 import { SetlistPanel } from "./panels/SetlistPanel";
 import { SlidesPanel } from "./panels/SlidesPanel";
+import { SongSearchPanel } from "./panels/SongSearchPanel";
 
 const components = {
   setlist: SetlistPanel,
@@ -22,6 +23,7 @@ const components = {
   slides: SlidesPanel,
   output: OutputPanel,
   placeholder: PlaceholderPanel,
+  search: SongSearchPanel,
 };
 
 // One page's dockable workspace. Panels are plain components; the page's

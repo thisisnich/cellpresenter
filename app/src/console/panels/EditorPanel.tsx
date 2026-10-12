@@ -26,10 +26,14 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
   const [songId, setSongId] = useState(params.songId);
   const [stored, setStored] = useState<Song | null>(null);
   const [loading, setLoading] = useState(Boolean(params.songId));
-  const [meta, setMeta] = useState<SongMeta>(EMPTY_META);
-  const [text, setText] = useState("");
+  // A draft (a song found online) starts out unsaved.
+  const { draft } = params;
+  const [meta, setMeta] = useState<SongMeta>(() =>
+    draft ? { ...EMPTY_META, title: draft.title, artist: draft.artist, key: draft.key, capo: draft.capo } : EMPTY_META,
+  );
+  const [text, setText] = useState(draft?.text ?? "");
   const [linesPerSlide, setLinesPerSlide] = useState(2);
-  const [dirty, setDirty] = useState(false);
+  const [dirty, setDirty] = useState(Boolean(draft));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"discard" | "delete" | null>(null);
@@ -94,7 +98,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       const song = songId ? await api.updateSong(songId, input) : await api.createSong(input);
       setStored(song);
       setSongId(song.id);
-      panel.updateParameters({ songId: song.id });
+      panel.updateParameters({ songId: song.id, draft: undefined });
       panel.setTitle(t("editor.tabTitle", { title: song.title }));
       setDirty(false);
       notifyLibraryChanged();
@@ -128,6 +132,11 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
 
   return (
     <div className="flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text">
+      {draft?.source && !songId && (
+        <p className="m-0 border-b-cp bg-cp-surface px-3 py-2 text-cp-muted">
+          {t("editor.fromOnline", { site: t(`search.source.${draft.source}`) })}
+        </p>
+      )}
       <div className="flex flex-wrap items-end gap-3 border-b-cp p-3">
         <label className="flex min-w-48 flex-[2] flex-col gap-1">
           <span className="cp-label">{t("editor.title")}</span>
