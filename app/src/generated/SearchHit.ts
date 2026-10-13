@@ -6,18 +6,6 @@ import type { Source } from "./Source";
  */
 export type SearchHit = { source: Source, 
 /**
- * What `fetch` takes: a tab's path on Ultimate Guitar, a track id on LRCLIB.
+ * What `fetch` takes: a track id on LRCLIB.
  */
-id: string, title: string, artist: string | null, 
-/**
- * The key the sheet is written in, if the site says.
- */
-key: string | null, 
-/**
- * Average rating out of 5, and how many people rated it.
- */
-rating: number | null, votes: number | null, 
-/**
- * Which of several sheets for the same song (Ultimate Guitar numbers them).
- */
-version: number | null, };
+id: string, title: string, artist: string | null, };

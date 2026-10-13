@@ -7,7 +7,7 @@ Free, open-source worship lyrics presenter, made for cell groups and small churc
 ## What it does
 
 - **Songs:** paste lyrics (with or without chords) and they become slides. Sections (verse, chorus, bridge) are colour-coded, and arrangements can repeat them (V1 C V2 C B C).
-- **Find songs online:** search for a song's chords (from Ultimate Guitar) or lyrics (from LRCLIB), or paste an Ultimate Guitar link. The song opens in the editor already split into sections and slides, with repeats worked out, so you only check it and save.
+- **Find songs online:** search for a song's lyrics (from LRCLIB), or paste a link to a chord sheet on Ultimate Guitar. The song opens in the editor already split into sections and slides, with repeats worked out, so you only check it and save.
 - **Setlists:** build tonight's list of songs and announcements. Preview a song before it goes live, and Next carries on into the next item.
 - **Backgrounds:** pictures work like in ProPresenter. Click one to put it on screen, or cue it on a slide or a whole section so it switches when that part comes up.
 - **Any screen is a display:** the projector window, a TV, or phones and tablets. Every screen shows the same layout.
@@ -44,7 +44,11 @@ When the app first starts, allow it through the firewall if asked, so phones and
 ## Using it
 
 1. **Open CellPresenter.** Two windows open: the **Console**, where you run everything, and the **Display**, which is what the audience sees. Plug in the projector or TV. Then, at the top of the Console's **Live output** panel, choose **Fullscreen on screen 2** (or whichever screen it is). Choosing it again also brings the Display back if you closed it.
-2. **Add songs.** On the **Edit** page, open **Find songs**, search for the title and pick a result. It opens in the editor, split into slides; check it and press **Save**. Or click **+ New song** in the Library and paste the lyrics yourself. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`. To project songs you may need a licence, such as CCLI.
+2. **Add songs.** On the **Edit** page, open **Find songs**:
+   - **Lyrics:** type the title, press **Search** and pick a result.
+   - **Chords:** press **Search on Ultimate Guitar**, find the song in your browser, copy the page's link and paste it into the search box.
+
+   The song opens in the editor, split into slides; check it and press **Save**. Or click **+ New song** in the Library and paste the song yourself, for example a ChordPro download from CCLI SongSelect. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`.
 3. **Make a setlist.** In the Setlist panel press **New**. Add songs from the Library with **+**, and notices with **+ Announcement**.
 4. **Present.** Click a slide to show it. Use **Next / Prev**, the arrow keys or a clicker. **Clear text** and **Clear background** clear the screen, and **Black out** blanks it.
 5. **Connect phones.** Press **Display link** in the top-right corner. Each device must be on the same Wi-Fi as the computer.
@@ -53,6 +57,12 @@ When the app first starts, allow it through the firewall if asked, so phones and
    - **Chords:** musicians get lyrics with chords that follow along.
 
 If phones can't connect, the Wi-Fi may stop devices from reaching each other. This is common on guest, school and office networks. Try a phone hotspot, or [Tailscale](https://tailscale.com).
+
+## Song licences
+
+Songs belong to their writers and publishers. Projecting a song at church usually needs a licence, such as a [CCLI](https://ccli.com) Church Copyright Licence; check what applies where you are. Only import songs you have the rights to use.
+
+CellPresenter isn't affiliated with Ultimate Guitar or LRCLIB. It fetches only the song you pick, when you pick it; it never searches Ultimate Guitar itself, and it ships no song content except public-domain hymns. Ultimate Guitar's terms allow personal, non-commercial use of its content, so whether you may use a sheet from there is between you and them.
 
 ## Your data
 

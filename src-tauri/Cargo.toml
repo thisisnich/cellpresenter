@@ -27,6 +27,8 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 sha2 = "0.11.0"
 # Song search: fetches chord sheets and lyrics with the system's own TLS.
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset", "http2", "query"] }
+# Opens Ultimate Guitar's search in the system browser.
+open = "5"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "time"] }

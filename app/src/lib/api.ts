@@ -9,7 +9,7 @@ import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
 import type { PinInfo } from "../generated/PinInfo";
 import type { Screens } from "../generated/Screens";
-import type { SearchResults } from "../generated/SearchResults";
+import type { SearchHit } from "../generated/SearchHit";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
 import type { SetlistSummary } from "../generated/SetlistSummary";
@@ -103,8 +103,10 @@ export const api = {
     request<Song>(`/api/songs/${encodeURIComponent(id)}`, json("PUT", input)),
   deleteSong: (id: string) => request<void>(`/api/songs/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
-  /** Search song sites (chord sheets and lyrics) through the server. */
-  searchOnline: (query: string) => request<SearchResults>(`/api/online/search?q=${encodeURIComponent(query)}`),
+  /** Search for lyrics (LRCLIB) through the server. */
+  searchLyrics: (query: string) => request<SearchHit[]>(`/api/online/search?q=${encodeURIComponent(query)}`),
+  /** Open Ultimate Guitar's search in this computer's browser (the computer only). */
+  openUgSearch: (query: string) => request<void>("/api/online/open-ug-search", json("POST", { q: query })),
   onlineSong: (source: Source, id: string) =>
     request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
 

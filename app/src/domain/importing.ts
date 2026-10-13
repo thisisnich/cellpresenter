@@ -87,3 +87,11 @@ export function songLink(input: string): { source: Source; id: string } | null {
   const path = /^\/tab\/([\w-]+\/[\w-]+)\/?$/.exec(url.pathname);
   return path ? { source: "ultimate_guitar", id: path[1] } : null;
 }
+
+/** Ultimate Guitar's search page for a title, to open in a browser. */
+export function ugSearchUrl(query: string): string {
+  const url = new URL("https://www.ultimate-guitar.com/search.php");
+  url.searchParams.set("search_type", "title");
+  url.searchParams.set("value", query.trim());
+  return url.toString();
+}

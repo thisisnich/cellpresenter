@@ -1,6 +1,9 @@
-//! Finding songs online: chord sheets from Ultimate Guitar and plain lyrics
-//! from LRCLIB. The server only fetches and unpacks what the sites send; the
-//! web app turns the text into sections and slides (`domain/importing.ts`).
+//! Finding songs online: plain lyrics searched on LRCLIB (an open lyrics
+//! service built for apps), and a chord sheet fetched from an Ultimate Guitar
+//! link the user pastes. Ultimate Guitar's search page is off limits to
+//! programs (its robots.txt), so people search it in their own browser.
+//! The server only fetches and unpacks what the sites send; the web app turns
+//! the text into sections and slides (`domain/importing.ts`).
 //!
 //! Requests only ever go to these fixed sites, built from ids the server
 //! checks, so a client can't use this to reach anything else.
@@ -20,7 +23,7 @@ const USER_AGENT: &str = concat!(
     env!("CARGO_PKG_VERSION"),
     " (+https://github.com/thisisnich/cellpresenter)"
 );
-/// Results kept per site, best first.
+/// Results kept, best first.
 const MAX_HITS: usize = 20;
 
 /// Where a song comes from.
@@ -39,25 +42,10 @@ pub enum Source {
 #[ts(export)]
 pub struct SearchHit {
     pub source: Source,
-    /// What `fetch` takes: a tab's path on Ultimate Guitar, a track id on LRCLIB.
+    /// What `fetch` takes: a track id on LRCLIB.
     pub id: String,
     pub title: String,
     pub artist: Option<String>,
-    /// The key the sheet is written in, if the site says.
-    pub key: Option<String>,
-    /// Average rating out of 5, and how many people rated it.
-    pub rating: Option<f32>,
-    pub votes: Option<u32>,
-    /// Which of several sheets for the same song (Ultimate Guitar numbers them).
-    pub version: Option<u32>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
-#[ts(export)]
-pub struct SearchResults {
-    pub hits: Vec<SearchHit>,
-    /// Sites that couldn't be reached; their results are missing.
-    pub failed: Vec<Source>,
 }
 
 /// A song as a site has it: the text is the site's own, cleaned up by the
@@ -119,23 +107,19 @@ async fn get_text(url: &str, query: &[(&str, &str)]) -> Result<String, OnlineErr
         .map_err(|e| OnlineError::Unavailable(e.to_string()))
 }
 
-/// Search every site at once. A site that fails is listed in `failed`.
-pub async fn search(query: &str) -> SearchResults {
-    let (ug, lrc) = tokio::join!(search_ug(query), search_lrclib(query));
-    let mut results = SearchResults {
-        hits: Vec::new(),
-        failed: Vec::new(),
-    };
-    for (source, found) in [(Source::UltimateGuitar, ug), (Source::Lrclib, lrc)] {
-        match found {
-            Ok(hits) => results.hits.extend(hits),
-            Err(e) => {
-                eprintln!("cellpresenter: song search on {source:?} failed: {e:?}");
-                results.failed.push(source);
-            }
-        }
-    }
-    results
+/// Search LRCLIB for lyrics.
+pub async fn search(query: &str) -> Result<Vec<SearchHit>, OnlineError> {
+    let body = get_text(&format!("{LRCLIB}search"), &[("q", query)]).await?;
+    let tracks: Value =
+        serde_json::from_str(&body).map_err(|e| OnlineError::Unavailable(e.to_string()))?;
+    Ok(lrclib_hits(&tracks))
+}
+
+/// Ultimate Guitar's own search page for `query`, to open in a browser.
+pub fn ug_search_url(query: &str) -> String {
+    reqwest::Url::parse_with_params(UG_SEARCH, [("search_type", "title"), ("value", query)])
+        .expect("valid search url")
+        .to_string()
 }
 
 pub async fn fetch(source: Source, id: &str) -> Result<OnlineSong, OnlineError> {
@@ -159,12 +143,6 @@ pub async fn fetch(source: Source, id: &str) -> Result<OnlineSong, OnlineError> 
 }
 
 // ---------- Ultimate Guitar ----------
-
-async fn search_ug(query: &str) -> Result<Vec<SearchHit>, OnlineError> {
-    let page = get_text(UG_SEARCH, &[("search_type", "title"), ("value", query)]).await?;
-    let store = ug_store(&page)?;
-    Ok(ug_hits(&store))
-}
 
 /// A tab's path, like "leeland/way-maker-chords-2806757": artist and tab.
 fn valid_ug_path(path: &str) -> bool {
@@ -194,37 +172,6 @@ fn page_data(store: &Value) -> &Value {
     &store["store"]["page"]["data"]
 }
 
-/// Chord sheets from a search page, most votes first. Tabs, bass and paid
-/// "Pro" versions are left out.
-fn ug_hits(store: &Value) -> Vec<SearchHit> {
-    let mut hits: Vec<SearchHit> = page_data(store)["results"]
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .filter(|r| r["type"].as_str() == Some("Chords"))
-        .filter_map(|r| {
-            let path = r["tab_url"].as_str()?.strip_prefix(UG_TABS)?;
-            if !valid_ug_path(path) {
-                return None;
-            }
-            Some(SearchHit {
-                source: Source::UltimateGuitar,
-                id: path.to_string(),
-                title: r["song_name"].as_str()?.to_string(),
-                artist: non_empty(&r["artist_name"]),
-                key: non_empty(&r["tonality_name"]),
-                rating: r["rating"].as_f64().map(|x| x as f32),
-                votes: r["votes"].as_u64().map(|x| x as u32),
-                version: r["version"].as_u64().map(|x| x as u32),
-            })
-        })
-        .collect();
-    hits.sort_by_key(|h| std::cmp::Reverse(h.votes.unwrap_or(0)));
-    hits.truncate(MAX_HITS);
-    hits
-}
-
 fn ug_song(page: &str, path: &str, url: String) -> Result<OnlineSong, OnlineError> {
     let store = ug_store(page)?;
     let data = page_data(&store);
@@ -248,13 +195,6 @@ fn ug_song(page: &str, path: &str, url: String) -> Result<OnlineSong, OnlineErro
 }
 
 // ---------- LRCLIB ----------
-
-async fn search_lrclib(query: &str) -> Result<Vec<SearchHit>, OnlineError> {
-    let body = get_text(&format!("{LRCLIB}search"), &[("q", query)]).await?;
-    let tracks: Value =
-        serde_json::from_str(&body).map_err(|e| OnlineError::Unavailable(e.to_string()))?;
-    Ok(lrclib_hits(&tracks))
-}
 
 /// Tracks with lyrics, one per title and artist (the same song is often
 /// listed once per album).
@@ -286,10 +226,6 @@ fn lrclib_hits(tracks: &Value) -> Vec<SearchHit> {
                 id: id.to_string(),
                 title,
                 artist,
-                key: None,
-                rating: None,
-                votes: None,
-                version: None,
             })
         })
         .take(MAX_HITS)
@@ -374,6 +310,14 @@ mod tests {
     }
 
     #[test]
+    fn ug_search_url_is_escaped() {
+        assert_eq!(
+            ug_search_url("way maker & co"),
+            "https://www.ultimate-guitar.com/search.php?search_type=title&value=way+maker+%26+co"
+        );
+    }
+
+    #[test]
     fn unescapes_html_entities() {
         assert_eq!(
             unescape_html("&quot;a&quot; &amp; b&#039;s &#x27;c&#x27; &lt;3 &bogus; & done"),
@@ -389,34 +333,6 @@ mod tests {
         assert!(!valid_ug_path("a/b/c"));
         assert!(!valid_ug_path("a/b?x=1"));
         assert!(!valid_ug_path("a/"));
-    }
-
-    #[test]
-    fn ug_search_keeps_chord_sheets_by_votes() {
-        let html = page(json!({ "results": [
-            { "song_name": "Way Maker", "artist_name": "Sinach", "type": null, "votes": 166,
-              "tab_url": "https://www.ultimate-guitar.com/pro/?tab_id=1" },
-            { "song_name": "Way Maker", "artist_name": "Sinach", "type": "Chords", "version": 1,
-              "votes": 360, "rating": 4.8, "tonality_name": "",
-              "tab_url": "https://tabs.ultimate-guitar.com/tab/sinach/way-maker-chords-1959569" },
-            { "song_name": "Way Maker", "artist_name": "Leeland", "type": "Chords", "version": 1,
-              "votes": 1046, "rating": 4.9, "tonality_name": "E",
-              "tab_url": "https://tabs.ultimate-guitar.com/tab/leeland/way-maker-chords-2806757" },
-            { "song_name": "Way Maker", "artist_name": "Sinach", "type": "Bass Tabs", "votes": 4,
-              "tab_url": "https://tabs.ultimate-guitar.com/tab/sinach/way-maker-bass-3320315" },
-        ]}));
-        let hits = ug_hits(&ug_store(&html).unwrap());
-        let ids: Vec<_> = hits.iter().map(|h| h.id.as_str()).collect();
-        assert_eq!(
-            ids,
-            [
-                "leeland/way-maker-chords-2806757",
-                "sinach/way-maker-chords-1959569"
-            ]
-        );
-        assert_eq!(hits[0].key.as_deref(), Some("E"));
-        assert_eq!(hits[1].key, None);
-        assert_eq!(hits[0].votes, Some(1046));
     }
 
     #[test]

@@ -19,7 +19,7 @@ Goal: run a cell group night on the new app instead of the web app. ~200–240 h
 | 2. Backend core + workspace | Split backend into a tested reducer · Dockview workspace shell with the A1 default layout and theme tokens (colours, radius, borders as CSS variables) · transpose + capo (TS) · smarter caching | **done** |
 | 3. Song library | SQLite with sync-ready ids (UUIDv7, `updated_at`, soft delete, `library_id`) · versioned live updates · PIN for controls · keyboard + clicker control · generated TS types | **done** |
 | 4. Content + live state | Paste lyrics → slides (explicit lines, font fits the longest line) · setlists + announcements · song arrangements · image backgrounds · live state holds pointers, not content | **done**: song editor (paste → slides), arrangements, fit-to-width, setlists + announcements, preview before going live, Next runs through the setlist, image backgrounds (per song, per announcement, default) with Clear text / Clear background |
-| 5. Screens + search | Live/Next previews · phone remote page · audience phone view · chords view for musicians · song search (own library, paste/URL import, public-domain hymns) | Live/Next previews, audience view, **phone remote**, **chords view** (tap a chord for its guitar shapes) and **song search done**: Find songs searches Ultimate Guitar (chords) and LRCLIB (lyrics) or opens a pasted Ultimate Guitar link; imports are cleaned up and split into sections, repeats and evenly sized slides |
+| 5. Screens + search | Live/Next previews · phone remote page · audience phone view · chords view for musicians · song search (own library, paste/URL import, public-domain hymns) | Live/Next previews, audience view, **phone remote**, **chords view** (tap a chord for its guitar shapes) and **song search done**: Find songs searches LRCLIB for lyrics and imports a pasted Ultimate Guitar link (Ultimate Guitar itself is searched in the browser: its robots.txt bars programs from its search page); imports are cleaned up and split into sections, repeats and evenly sized slides |
 
 Releases: v0.1.0 ships as a preview before step 5 is finished (AGPL-3.0, installers for Mac, Windows and Linux built by the Release workflow). Song search and import ship in v0.2.
 
@@ -32,7 +32,7 @@ The bar: a volunteer at another church installs it and runs a Sunday with no hel
 | Release | Items |
 |---|---|
 | v0.2 | Song search and import (**done**) |
-| v0.3 | Copyright footer on slides (CCLI number + copyright; the fields already exist in the library) · text style (font, size, colour, shadow, position, margins) · Back up / Restore library buttons · ChordPro and OpenLyrics file import · recycle bin for deleted songs and setlists |
+| v0.3 | Copyright footer on slides (CCLI number + copyright; the fields already exist in the library) · text style (font, size, colour, shadow, position, margins) · Back up / Restore library buttons · ChordPro and OpenLyrics file import (opens CCLI SongSelect downloads, since SongSelect no longer offers an integration) · recycle bin for deleted songs and setlists |
 | v0.4 | Scripture: public-domain translations (KJV, WEB) bundled, search by reference, verses split into slides |
 | v0.5 | Auto-update (Tauri updater, signed) · Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
 | v1.0 | First-run guide · Notes and Stage panels built or hidden (no "coming soon") · polish · **launch video** made with [`/brag`](https://github.com/latent-spaces/brag) (a Claude Code skill that reads the repo and renders a ~20 s video with music and captions) for the README, release notes and socials |
@@ -50,6 +50,9 @@ Remote editing from another PC · team invites · opt-in media upload with tempo
 ## Ideas to plan
 
 Written down so they aren't lost; not scheduled yet.
+
+- **F for fullscreen on the Display.** Pressing F in the Display window toggles fullscreen (like F11 or YouTube's F), hiding the taskbar and title bar; Esc leaves it. Small; do it alongside v0.3.
+- **Licensed song sources.** Bundled public-domain hymns, and any song service that offers an official API or licence for apps.
 
 - **Panels in their own windows.** Drag a tab out of the console to open it in a new window, like a browser tab (for example a dedicated Chords window on a second screen). Every panel already gets its data from the embedded server, so a panel can be its own page (`/panel/chords`) in a native window. Dragging a tab past the window edge opens that window. About one or two sessions. Dockview's built-in popout uses `window.open`, which Tauri blocks by default, so our own windows are the sturdier route. A plain "Open in new window" tab action comes first.
 - **Confidence monitor (stage display).** A screen for the band and speaker: current and next slide, chords, clock, timer and notes. Its layout can be rearranged by dragging blocks, like ProPresenter's stage layouts, and saved as presets.

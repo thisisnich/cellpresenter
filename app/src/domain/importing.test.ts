@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OnlineSong } from "../generated/OnlineSong";
-import { cleanChordSheet, draftFrom, songLink, tidySongText } from "./importing";
+import { cleanChordSheet, draftFrom, songLink, tidySongText, ugSearchUrl } from "./importing";
 import { parseSongText } from "./songText";
 
 // Shaped like a real Ultimate Guitar sheet.
@@ -103,5 +103,13 @@ describe("songLink", () => {
     expect(songLink("https://www.ultimate-guitar.com/search.php?value=x")).toBeNull();
     expect(songLink("https://evil.com/tab/a/b")).toBeNull();
     expect(songLink("way maker")).toBeNull();
+  });
+});
+
+describe("ugSearchUrl", () => {
+  it("searches by title", () => {
+    expect(ugSearchUrl(" way maker & co ")).toBe(
+      "https://www.ultimate-guitar.com/search.php?search_type=title&value=way+maker+%26+co",
+    );
   });
 });

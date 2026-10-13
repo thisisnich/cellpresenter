@@ -24,7 +24,7 @@ use crate::db::{Db, DbResult, NewMedia};
 use crate::live::{Command, LiveState, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
-use crate::online::{self, OnlineError, OnlineSong, SearchResults, Source};
+use crate::online::{self, OnlineError, OnlineSong, SearchHit, Source};
 use crate::outputs::{OutputChoice, Outputs, Screens};
 use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
@@ -846,29 +846,56 @@ struct OnlineSongQuery {
     id: String,
 }
 
-async fn search_online(Query(query): Query<SearchQuery>) -> ApiResult<SearchResults> {
-    let q = query.q.trim();
+fn search_words(q: &str) -> Result<&str, ApiError> {
+    let q = q.trim();
     if q.is_empty() || q.len() > 200 {
         return Err(ApiError(StatusCode::BAD_REQUEST, "bad_query"));
     }
-    Ok(Json(online::search(q).await))
+    Ok(q)
+}
+
+fn online_error(e: OnlineError, what: &str) -> ApiError {
+    match e {
+        OnlineError::BadId => ApiError(StatusCode::BAD_REQUEST, "bad_id"),
+        OnlineError::NotFound => NOT_FOUND,
+        OnlineError::Unavailable(why) => {
+            eprintln!("cellpresenter: {what} failed: {why}");
+            ApiError(StatusCode::BAD_GATEWAY, "unavailable")
+        }
+    }
+}
+
+/// Lyrics search (LRCLIB).
+async fn search_online(Query(query): Query<SearchQuery>) -> ApiResult<Vec<SearchHit>> {
+    let q = search_words(&query.q)?;
+    online::search(q)
+        .await
+        .map(Json)
+        .map_err(|e| online_error(e, "lyrics search"))
 }
 
 async fn fetch_online(Query(query): Query<OnlineSongQuery>) -> ApiResult<OnlineSong> {
     online::fetch(query.source, &query.id)
         .await
         .map(Json)
-        .map_err(|e| match e {
-            OnlineError::BadId => ApiError(StatusCode::BAD_REQUEST, "bad_id"),
-            OnlineError::NotFound => NOT_FOUND,
-            OnlineError::Unavailable(why) => {
-                eprintln!(
-                    "cellpresenter: can't fetch {:?} {}: {why}",
-                    query.source, query.id
-                );
-                ApiError(StatusCode::BAD_GATEWAY, "unavailable")
-            }
-        })
+        .map_err(|e| online_error(e, &format!("fetching {:?} {}", query.source, query.id)))
+}
+
+/// Open Ultimate Guitar's search in this computer's browser. Only for the
+/// computer itself: a phone opens the page on its own.
+async fn open_ug_search(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(query): Json<SearchQuery>,
+) -> Result<StatusCode, ApiError> {
+    if !peer.ip().is_loopback() {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    let url = online::ug_search_url(search_words(&query.q)?);
+    open::that_detached(&url).map_err(|e| {
+        eprintln!("cellpresenter: can't open the browser: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
+    })?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 // ---------- WebSocket ----------
@@ -999,6 +1026,7 @@ pub fn router(state: ServerState) -> Router {
         // Reaching out to the internet is for whoever runs the show.
         .route("/online/search", get(search_online))
         .route("/online/song", get(fetch_online))
+        .route("/online/open-ug-search", post(open_ug_search))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",
