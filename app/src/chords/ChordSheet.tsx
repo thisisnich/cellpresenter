@@ -17,6 +17,7 @@ export function ChordSheet({
   fontScale = 1,
   lyricsOnly = false,
   surface = "bg-cp-bg",
+  onPick,
 }: {
   slides: SheetSlide[];
   /** Index of the live slide, or -1. */
@@ -25,6 +26,8 @@ export function ChordSheet({
   lyricsOnly?: boolean;
   /** Background class of the view, for the pinned chord strip. */
   surface?: string;
+  /** Clicking a slide puts it live (where this device may control). */
+  onPick?: (index: number) => void;
 }) {
   const live = useRef<HTMLElement | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -68,7 +71,12 @@ export function ChordSheet({
               live.current = el;
             } : undefined}
             aria-current={isLive ? "true" : undefined}
-            className={`rounded-cp px-3 py-2 ${isLive ? "bg-cp-surface-hi" : ""}`}
+            // A chord name still opens its shapes; anywhere else picks the slide.
+            onClick={onPick ? (e) => !(e.target as Element).closest("button") && onPick(i) : undefined}
+            onKeyDown={onPick ? (e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onPick(i)) : undefined}
+            tabIndex={onPick ? 0 : undefined}
+            title={onPick && !isLive ? t("chords.goToSlide") : undefined}
+            className={`rounded-cp px-3 py-2 ${isLive ? "bg-cp-surface-hi" : onPick ? "cursor-pointer hover:bg-cp-surface" : ""}`}
             style={isLive ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
           >
             {startsSection && (

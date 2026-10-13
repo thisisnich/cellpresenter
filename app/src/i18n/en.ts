@@ -165,6 +165,7 @@ export const en = {
   "chords.textSize": "Text size",
   "chords.smaller": "Smaller text",
   "chords.bigger": "Bigger text",
+  "chords.goToSlide": "Show this slide",
   "chords.lyricsOnly": "Lyrics only",
   "chords.noChords": "This song has no chords yet. Add them in the song editor (chords above the words, or inline like [C]this).",
   "chords.pin": "Pin",

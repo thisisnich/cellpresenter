@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { hasChords, keyInfo, sheetOf } from "../domain/chordSheet";
 import { t } from "../i18n";
+import { api, controlPinSet } from "../lib/api";
 import { useLiveState } from "../lib/useLiveState";
 import { ChordControls } from "./ChordControls";
 import { ChordSheet } from "./ChordSheet";
 import { useSongPrefs, useViewPrefs } from "./prefs";
+import { TextSizeButtons } from "./TextSizeButtons";
 import { useLiveSong } from "./useLiveSong";
 
 // Musicians' view (/chords): the song on air as a chord sheet that follows
@@ -20,6 +22,9 @@ export default function ChordsApp() {
   // Only trust the slide index once the sheet matches what's on air.
   const aligned = state && sheet.length === state.slides.length;
   const info = song ? keyInfo(song.key, prefs) : null;
+  // On the computer running the app (or with the PIN) a click picks the
+  // slide; musicians' phones only follow.
+  const canControl = ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname) || controlPinSet();
 
   return (
     <main className="flex h-dvh flex-col bg-cp-bg font-ui text-cp-text">
@@ -33,6 +38,7 @@ export default function ChordsApp() {
         </div>
         <div className="flex items-center gap-2">
           <span className={`size-2 rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} aria-label={t(`connection.${status}`)} />
+          <TextSizeButtons scale={view.fontScale} onChange={(fontScale) => setView({ fontScale })} />
           <button type="button" onClick={() => setShowSettings((s) => !s)} aria-expanded={showSettings} className="cp-btn h-10 px-3">
             {t("chords.settings")}
           </button>
@@ -42,17 +48,6 @@ export default function ChordsApp() {
       {showSettings && (
         <div className="flex flex-wrap items-end gap-4 border-b-cp bg-cp-panel px-3 py-3">
           {song && <ChordControls songKey={song.key} semitones={prefs.semitones} capo={prefs.capo} onChange={setPrefs} />}
-          <div className="flex flex-col gap-1">
-            <span className="cp-label">{t("chords.textSize")}</span>
-            <span className="flex gap-1">
-              <button type="button" onClick={() => setView({ fontScale: Math.max(0.7, view.fontScale - 0.1) })} className="cp-btn h-11 px-4" aria-label={t("chords.smaller")}>
-                A−
-              </button>
-              <button type="button" onClick={() => setView({ fontScale: Math.min(2.2, view.fontScale + 0.1) })} className="cp-btn h-11 px-4" aria-label={t("chords.bigger")}>
-                A+
-              </button>
-            </span>
-          </div>
           <label className="flex h-11 items-center gap-2">
             <input type="checkbox" checked={view.lyricsOnly} onChange={(e) => setView({ lyricsOnly: e.target.checked })} className="size-5 accent-[var(--cp-live)]" />
             {t("chords.lyricsOnly")}
@@ -70,7 +65,13 @@ export default function ChordsApp() {
         {song && sheet.length > 0 && (
           <>
             {!hasChords(song) && !view.lyricsOnly && <p className="m-0 px-3 pb-2 text-sm text-cp-muted">{t("chords.noChords")}</p>}
-            <ChordSheet slides={sheet} current={aligned ? state.slide_index : -1} fontScale={view.fontScale} lyricsOnly={view.lyricsOnly} />
+            <ChordSheet
+              slides={sheet}
+              current={aligned ? state.slide_index : -1}
+              fontScale={view.fontScale}
+              lyricsOnly={view.lyricsOnly}
+              onPick={aligned && canControl ? (index) => void api.liveCommand({ type: "go_to", index }).catch(() => undefined) : undefined}
+            />
           </>
         )}
       </div>
