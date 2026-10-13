@@ -287,13 +287,59 @@ fn place_display(
     }
 }
 
-/// Open the song library in the app's data folder, adding starter songs to a
-/// brand-new library.
-async fn open_library(app: &AppHandle) -> Result<Db, String> {
-    let dir = app
+/// Where the library, pictures and (for dev builds) backups live.
+///
+/// Development builds use their own `dev` folder, so trying out a change
+/// never alters the library the installed app uses (a newer database
+/// version, test songs). The first time, it starts as a copy of that
+/// library.
+fn data_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let installed = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("no app data folder: {e}"))?;
+    if !cfg!(debug_assertions) {
+        return Ok(installed);
+    }
+    let dev = installed.join("dev");
+    if !dev.join(LIBRARY_FILE).exists() && installed.join(LIBRARY_FILE).exists() {
+        copy_library(&installed, &dev)
+            .map_err(|e| format!("can't copy the library for dev: {e}"))?;
+        println!(
+            "cellpresenter (dev): started from a copy of {}",
+            installed.display()
+        );
+    }
+    Ok(dev)
+}
+
+/// Copy a library (database with its journal files, and pictures).
+fn copy_library(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to.join("media").join("thumbs"))?;
+    for suffix in ["", "-wal", "-shm"] {
+        let name = format!("{LIBRARY_FILE}{suffix}");
+        if from.join(&name).exists() {
+            std::fs::copy(from.join(&name), to.join(&name))?;
+        }
+    }
+    for folder in ["media", "media/thumbs"] {
+        for entry in std::fs::read_dir(from.join(folder))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            if entry.path().is_file() {
+                std::fs::copy(entry.path(), to.join(folder).join(entry.file_name()))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Open the song library in the app's data folder, adding starter songs to a
+/// brand-new library.
+async fn open_library(app: &AppHandle) -> Result<Db, String> {
+    let dir = data_dir(app)?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("can't create {}: {e}", dir.display()))?;
     let path = dir.join(LIBRARY_FILE);
     let db = Db::open(&path)
@@ -347,24 +393,26 @@ pub fn run() {
                 })
             });
             let pins = PinGuard::random();
-            let media_dir = handle
-                .path()
-                .app_data_dir()
-                .map_err(|e| report(format!("no app data folder: {e}")))?
-                .join("media");
+            let data = data_dir(&handle).map_err(report)?;
+            let media_dir = data.join("media");
             let media = MediaStore::new(media_dir.clone())
                 .map_err(|e| report(format!("can't create {}: {e}", media_dir.display())))?;
             let outputs = Arc::new(WindowOutputs {
                 app: handle.clone(),
                 port,
             });
-            // Backups go where people can find them: Documents/CellPresenter Backups.
-            let backup_dir = handle
-                .path()
-                .document_dir()
-                .map(|d| d.join("CellPresenter Backups"))
-                .or_else(|_| handle.path().app_data_dir().map(|d| d.join("backups")))
-                .map_err(|e| report(format!("no folder for backups: {e}")))?;
+            // Backups go where people can find them: Documents/CellPresenter
+            // Backups (a dev build keeps its own beside its library).
+            let backup_dir = if cfg!(debug_assertions) {
+                data.join("backups")
+            } else {
+                handle
+                    .path()
+                    .document_dir()
+                    .map(|d| d.join("CellPresenter Backups"))
+                    .or_else(|_| handle.path().app_data_dir().map(|d| d.join("backups")))
+                    .map_err(|e| report(format!("no folder for backups: {e}")))?
+            };
             let backups = Backups::new(backup_dir.clone())
                 .map_err(|e| report(format!("can't create {}: {e}", backup_dir.display())))?;
             let state = ServerState::new(assets, db, pins, port, media)

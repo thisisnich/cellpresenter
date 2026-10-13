@@ -137,7 +137,12 @@ impl Db {
     }
 
     async fn init(pool: SqlitePool) -> DbResult<Self> {
-        sqlx::migrate!("./migrations").run(&pool).await?;
+        // A newer version may have upgraded this library (after an update
+        // that was then rolled back, say). Our migrations only ever add
+        // tables and columns, so an older app can still use it: let it.
+        let mut migrator = sqlx::migrate!("./migrations");
+        migrator.set_ignore_missing(true);
+        migrator.run(&pool).await?;
         let library_id = Self::ensure_library(&pool).await?;
         Ok(Self { pool, library_id })
     }
@@ -1454,6 +1459,25 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[tokio::test]
+    async fn a_library_from_a_newer_version_still_opens() {
+        let dir = std::env::temp_dir().join(format!("cp-newer-{}", Uuid::new_v4().simple()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("library.db");
+        let db = Db::open(&path).await.unwrap();
+        // A newer version ran a migration this one doesn't know.
+        sqlx::query(
+            "INSERT INTO _sqlx_migrations (version, description, installed_on, success, checksum, execution_time)
+             VALUES (9999, 'from the future', CURRENT_TIMESTAMP, 1, x'00', 0)",
+        )
+        .execute(&db.pool)
+        .await
+        .unwrap();
+        db.close().await;
+        let again = Db::open(&path).await.unwrap();
+        assert!(again.list_songs().await.unwrap().is_empty());
     }
 
     #[tokio::test]

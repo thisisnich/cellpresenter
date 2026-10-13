@@ -102,6 +102,8 @@ npm run tauri dev       # run the app with hot reload
 npm run tauri build     # build installers into src-tauri/target/release/bundle
 ```
 
+Development builds keep their own library, pictures and backups in a `dev` folder inside the data folder (see [Your data](#your-data)), copied from the installed app's library the first time, so trying out changes never touches the library you use.
+
 Checks (CI runs the same):
 
 ```sh
