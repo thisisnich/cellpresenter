@@ -34,10 +34,11 @@ The bar: a volunteer at another church installs it and runs a Sunday with no hel
 | v0.2 | Song search and import (**done**) |
 | v0.3 | Copyright footer on slides (**done**: copyright and CCLI song # in the editor; licence number and first slide / every slide / off in the Screen panel) · text style (**done**: five bundled fonts, bold, ALL CAPS, colour, shadow, top / middle / lower third, margins, in the Screen panel) · backups (**done**: daily automatic backups to Documents/CellPresenter Backups, Back up now, restore from the list or a file, which also moves a library to another computer; copyright line can sit in the bottom corner) · ChordPro and OpenLyrics file import (**done**: ChordPro, SongSelect ChordPro / text / .usr, OpenLyrics, plain text; one file opens in the editor, several are saved; SongSelect no longer offers an integration, so its downloads are the way in) · recycle bin (**done**) |
 | v0.4 | Scripture: public-domain translations (KJV, WEB) bundled, search by reference, verses split into slides |
-| v0.5 | Auto-update (Tauri updater, signed) · Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
+| v0.5 | Auto-update (Tauri updater, signed) |
 | v1.0 | First-run guide · Notes and Stage panels built or hidden (no "coming soon") · polish · **launch video** made with [`/brag`](https://github.com/latent-spaces/brag) (a Claude Code skill that reads the repo and renders a ~20 s video with music and captions) for the README, release notes and socials |
+| v1.1 | Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
 
-After v1.0: countdown timer and messages, confidence monitor, video backgrounds, several outputs at different sizes, then R2.
+Until v1.1 the installers are unsigned, so Mac and Windows warn on first open (the README says how to open them anyway). After v1.0: countdown timer and messages, confidence monitor, video backgrounds, several outputs at different sizes, then R2.
 
 ## R2 — "Share with the team"
 
@@ -45,7 +46,7 @@ Accounts + cloud library (text and thumbnails always synced; full media stays on
 
 ## R3 — "Other churches"
 
-Remote editing from another PC · team invites · opt-in media upload with temporary cloud copies · self-hostable cloud server (same Rust server, headless, one Docker image) · multiple output looks · undo · auto-update · Mac code signing · templates · timer + operator notes · more languages and scripts.
+Remote editing from another PC · team invites · opt-in media upload with temporary cloud copies · self-hostable cloud server (same Rust server, headless, one Docker image) · multiple output looks · undo · templates · timer + operator notes · more languages and scripts.
 
 ## Ideas to plan
 
