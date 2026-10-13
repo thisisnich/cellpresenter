@@ -8,7 +8,7 @@ import { footerLines } from "../domain/credits";
 import { CreditsFooter } from "./CreditsFooter";
 import { DEFAULT_LOOK, LookContext } from "./look";
 import { LyricSlide } from "./LyricSlide";
-import { SlideBackground } from "./SlideBackground";
+import { isVideoUrl, SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 
 // Stateless renderer: everything it shows comes from the live state pushed
@@ -33,7 +33,7 @@ export default function DisplayApp() {
 
   // Load the next slide's background ahead of time so it never pops in.
   useEffect(() => {
-    if (nextBackground) new Image().src = nextBackground;
+    if (nextBackground && !isVideoUrl(nextBackground)) new Image().src = nextBackground;
   }, [nextBackground]);
 
   // `?diag=1` overlays diagnostics so we can confirm every client runs the

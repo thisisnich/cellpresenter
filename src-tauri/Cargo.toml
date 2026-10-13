@@ -33,12 +33,16 @@ open = "5"
 flate2 = "1.1"
 # Checks GitHub for a newer release and installs it (signed updates).
 tauri-plugin-updater = "=2.13.0"
+# Serves media files with Range support, which video players need.
+tower-http = { version = "0.6", features = ["fs"] }
+tower = { version = "0.5.3", features = ["util"] }
+# Reads video uploads as a stream, to disk, instead of into memory.
+futures-util = "0.3"
 # Backups are zip files.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "time"] }
-tower = { version = "0.5.3", features = ["util"] }
 
 # Image decoding and resizing is ~20x slower unoptimised; optimise just those
 # crates in dev builds so uploads stay quick under `tauri dev`.

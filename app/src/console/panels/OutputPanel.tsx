@@ -46,6 +46,7 @@ export function OutputPanel() {
             background={state.background}
             hideText={state.text_hidden}
             footer={footerLines(state.credits, state.look, state.slide_index)}
+            playVideo
           />
         </div>
       </section>

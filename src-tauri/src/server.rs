@@ -781,6 +781,11 @@ async fn delete_setlist(
 struct UploadParams {
     #[serde(default)]
     name: Option<String>,
+    /// A video's size, as the uploading browser measured it.
+    #[serde(default)]
+    width: Option<u32>,
+    #[serde(default)]
+    height: Option<u32>,
 }
 
 /// Upload a background image: the raw file is the request body, its name a
@@ -819,6 +824,86 @@ async fn upload_media(
     Ok((StatusCode::CREATED, Json(media)))
 }
 
+/// Upload a video background. It's stored as sent (no re-encoding), so
+/// it is streamed to disk and hashed on the way rather than held in memory.
+async fn upload_video(
+    State(s): State<ServerState>,
+    Query(params): Query<UploadParams>,
+    body: axum::body::Body,
+) -> Result<(StatusCode, Json<Media>), ApiError> {
+    let tmp = s.media.upload_path();
+    let received = receive_upload(&tmp, body, media::MAX_VIDEO_BYTES).await;
+    let (hash, size, head) = match received {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            return Err(e);
+        }
+    };
+    let Some(ext) = media::video_ext(&head) else {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(ApiError(StatusCode::UNSUPPORTED_MEDIA_TYPE, "not_a_video"));
+    };
+    s.media.store_video(&tmp, &hash, ext).map_err(|e| {
+        eprintln!("cellpresenter: couldn't store video: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage_failed")
+    })?;
+    let name = params
+        .name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "Video".to_string());
+    let media =
+        s.db.add_media(&NewMedia {
+            name: &name,
+            hash: &hash,
+            ext,
+            width: params.width.unwrap_or(0),
+            height: params.height.unwrap_or(0),
+            size_bytes: size,
+        })
+        .await?;
+    Ok((StatusCode::CREATED, Json(media)))
+}
+
+/// Write a request body to `path`, hashing it as it comes: (hash, size,
+/// first bytes).
+async fn receive_upload(
+    path: &std::path::Path,
+    body: axum::body::Body,
+    limit: usize,
+) -> Result<(String, usize, Vec<u8>), ApiError> {
+    use futures_util::StreamExt;
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncWriteExt;
+    let failed = |e: std::io::Error| {
+        eprintln!("cellpresenter: couldn't write upload: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage_failed")
+    };
+    let mut file = tokio::fs::File::create(path).await.map_err(failed)?;
+    let (mut hasher, mut size, mut head) = (Sha256::new(), 0usize, Vec::new());
+    let mut stream = body.into_data_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|_| ApiError(StatusCode::BAD_REQUEST, "upload_interrupted"))?;
+        size += chunk.len();
+        if size > limit {
+            return Err(ApiError(StatusCode::PAYLOAD_TOO_LARGE, "too_large"));
+        }
+        if head.len() < 16 {
+            head.extend_from_slice(&chunk[..chunk.len().min(16 - head.len())]);
+        }
+        hasher.update(&chunk);
+        file.write_all(&chunk).await.map_err(failed)?;
+    }
+    file.flush().await.map_err(failed)?;
+    let hash = hasher
+        .finalize()
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
+    Ok((hash, size, head))
+}
+
 async fn list_media(State(s): State<ServerState>) -> ApiResult<Vec<Media>> {
     Ok(Json(s.db.list_media().await?))
 }
@@ -836,37 +921,44 @@ async fn delete_media(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn serve_media_file(s: &ServerState, name: &str, thumb: bool) -> Response {
+/// A stored picture or video. Byte ranges are answered, which video players
+/// need to start and seek (WebKit won't play an MP4 without them).
+async fn serve_media_file(s: &ServerState, name: &str, thumb: bool, request: Request) -> Response {
+    use tower::ServiceExt;
     let Some(path) = s.media.path(name, thumb) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    match tokio::fs::read(&path).await {
-        Ok(bytes) => {
-            let mime = if name.ends_with(".png") {
-                "image/png"
-            } else {
-                "image/jpeg"
-            };
-            (
-                [
-                    (header::CONTENT_TYPE, mime),
-                    // Named by content hash, so a file never changes.
-                    (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
-                ],
-                bytes,
-            )
-                .into_response()
+    match tower_http::services::ServeFile::new(path)
+        .oneshot(request)
+        .await
+    {
+        Ok(mut res) if res.status().is_success() || res.status() == StatusCode::PARTIAL_CONTENT => {
+            // Named by content hash, so a file never changes.
+            res.headers_mut().insert(
+                header::CACHE_CONTROL,
+                header::HeaderValue::from_static("public, max-age=31536000, immutable"),
+            );
+            res.into_response()
         }
+        Ok(res) => res.into_response(),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn media_file(State(s): State<ServerState>, Path(name): Path<String>) -> Response {
-    serve_media_file(&s, &name, false).await
+async fn media_file(
+    State(s): State<ServerState>,
+    Path(name): Path<String>,
+    request: Request,
+) -> Response {
+    serve_media_file(&s, &name, false, request).await
 }
 
-async fn media_thumb(State(s): State<ServerState>, Path(name): Path<String>) -> Response {
-    serve_media_file(&s, &name, true).await
+async fn media_thumb(
+    State(s): State<ServerState>,
+    Path(name): Path<String>,
+    request: Request,
+) -> Response {
+    serve_media_file(&s, &name, true, request).await
 }
 
 #[derive(Deserialize, TS)]
@@ -1524,6 +1616,10 @@ pub fn router(state: ServerState) -> Router {
         .route(
             "/media",
             post(upload_media).layer(DefaultBodyLimit::max(media::MAX_UPLOAD_BYTES)),
+        )
+        .route(
+            "/media/video",
+            post(upload_video).layer(DefaultBodyLimit::max(media::MAX_VIDEO_BYTES)),
         )
         .route("/media/{id}", axum::routing::delete(delete_media))
         .route("/live/background", post(live_background))
@@ -2207,6 +2303,48 @@ mod tests {
         let (status, body) = call_bytes(router, &format!("/api/media?name={name}"), png).await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         serde_json::from_str(&body).unwrap()
+    }
+
+    #[tokio::test]
+    async fn videos_upload_as_they_are_and_play_in_ranges() {
+        let (router, _) = app(LOCAL).await;
+        // The start of an MP4 file (an ftyp box), then some "frames".
+        let mut mp4 = vec![0, 0, 0, 24];
+        mp4.extend_from_slice(b"ftypisom");
+        mp4.extend((0..10_000u32).map(|i| (i % 251) as u8));
+        let (status, body) = call_bytes(
+            &router,
+            "/api/media/video?name=Waves&width=1920&height=1080",
+            mp4.clone(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let media: Media = serde_json::from_str(&body).unwrap();
+        assert!(media.video && media.url.ends_with(".mp4"));
+        assert_eq!((media.width, media.height), (1920, 1080));
+        assert_eq!(
+            media.thumb_url, media.url,
+            "the console shows a frame of the video itself"
+        );
+
+        // A player asks for byte ranges.
+        let req = HttpRequest::builder()
+            .uri(&media.url)
+            .header(header::RANGE, "bytes=4-11")
+            .body(Body::empty())
+            .unwrap();
+        let res = router.clone().oneshot(req).await.unwrap();
+        assert_eq!(res.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(res.headers()[header::CONTENT_TYPE], "video/mp4");
+        let bytes = to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(&bytes[..], b"ftypisom");
+
+        // The same file again is the same media; anything else is refused.
+        let (_, again) = call_bytes(&router, "/api/media/video?name=Again", mp4).await;
+        assert_eq!(serde_json::from_str::<Media>(&again).unwrap().id, media.id);
+        let (status, _) =
+            call_bytes(&router, "/api/media/video", b"not a video at all".to_vec()).await;
+        assert_eq!(status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
     }
 
     #[tokio::test]

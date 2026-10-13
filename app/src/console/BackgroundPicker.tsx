@@ -1,3 +1,4 @@
+import { MediaThumb } from "./MediaThumb";
 import { t } from "../i18n";
 import { useConsole } from "./ConsoleContext";
 
@@ -16,7 +17,7 @@ export function BackgroundPicker({
   return (
     <div className="flex items-center gap-2">
       <div className="relative aspect-video w-14 shrink-0 overflow-hidden rounded-cp-sm border-cp bg-black">
-        {chosen && <img src={chosen.thumb_url} alt="" className="absolute inset-0 h-full w-full object-cover" />}
+        {chosen && <MediaThumb media={chosen} />}
       </div>
       <select
         id={id}

@@ -20,6 +20,8 @@ const THUMB_W: u32 = 480;
 const THUMB_H: u32 = 270;
 /// Uploads larger than this are refused.
 pub const MAX_UPLOAD_BYTES: usize = 40 * 1024 * 1024;
+/// Video backgrounds are stored as uploaded, up to this size.
+pub const MAX_VIDEO_BYTES: usize = 1024 * 1024 * 1024;
 
 /// A stored background image, as clients see it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -32,8 +34,11 @@ pub struct Media {
     pub height: u32,
     /// Where displays load the full image.
     pub url: String,
-    /// Where the console loads the small preview.
+    /// Where the console loads the small preview (a video's own file: the
+    /// console shows a still frame of it).
     pub thumb_url: String,
+    /// A looping video rather than a picture.
+    pub video: bool,
     #[ts(type = "number")]
     pub created_at: i64,
 }
@@ -44,6 +49,27 @@ pub fn image_url(hash: &str, ext: &str) -> String {
 
 pub fn thumb_url(hash: &str) -> String {
     format!("/media/thumbs/{hash}.jpg")
+}
+
+/// File types kept as video backgrounds.
+pub fn is_video_ext(ext: &str) -> bool {
+    matches!(ext, "mp4" | "webm" | "mov")
+}
+
+/// What kind of video a file is, from its first bytes: MP4 and QuickTime
+/// have an `ftyp` box at byte 4, WebM starts with the EBML magic number.
+pub fn video_ext(head: &[u8]) -> Option<&'static str> {
+    if head.len() >= 12 && &head[4..8] == b"ftyp" {
+        return Some(if &head[8..12] == b"qt  " {
+            "mov"
+        } else {
+            "mp4"
+        });
+    }
+    if head.starts_with(&[0x1A, 0x45, 0xDF, 0xA3]) {
+        return Some("webm");
+    }
+    None
 }
 
 #[derive(Debug, PartialEq)]
@@ -129,7 +155,7 @@ pub fn is_media_file_name(name: &str) -> bool {
         && hash
             .chars()
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
-        && matches!(ext, "jpg" | "png")
+        && (matches!(ext, "jpg" | "png") || is_video_ext(ext))
 }
 
 impl MediaStore {
@@ -160,6 +186,21 @@ impl MediaStore {
         )
     }
 
+    /// Keep an uploaded video (already written to `tmp`) under its hash.
+    pub fn store_video(&self, tmp: &Path, hash: &str, ext: &str) -> std::io::Result<()> {
+        let path = self.dir.join(format!("{hash}.{ext}"));
+        if path.exists() {
+            return std::fs::remove_file(tmp);
+        }
+        std::fs::rename(tmp, path)
+    }
+
+    /// Where an upload is written while it arrives.
+    pub fn upload_path(&self) -> PathBuf {
+        self.dir
+            .join(format!(".upload-{}", uuid::Uuid::new_v4().simple()))
+    }
+
     /// Path of a stored image (`thumb` for its thumbnail), if the name is valid.
     pub fn path(&self, name: &str, thumb: bool) -> Option<PathBuf> {
         if !is_media_file_name(name) {
@@ -177,6 +218,19 @@ impl MediaStore {
 pub mod tests {
     use super::*;
     use image::{Rgb, RgbImage, Rgba, RgbaImage};
+
+    #[test]
+    fn videos_are_told_by_their_first_bytes() {
+        assert_eq!(video_ext(b"\0\0\0\x18ftypisom\0\0"), Some("mp4"));
+        assert_eq!(video_ext(b"\0\0\0\x14ftypqt  \0\0"), Some("mov"));
+        assert_eq!(
+            video_ext(&[0x1A, 0x45, 0xDF, 0xA3, 1, 0, 0, 0]),
+            Some("webm")
+        );
+        assert_eq!(video_ext(b"\x89PNG\r\n\x1a\n...."), None);
+        assert!(is_media_file_name(&format!("{}.webm", "a".repeat(64))));
+        assert!(!is_media_file_name(&format!("{}.exe", "a".repeat(64))));
+    }
 
     pub fn sample_png(w: u32, h: u32, alpha: bool) -> Vec<u8> {
         let img = if alpha {

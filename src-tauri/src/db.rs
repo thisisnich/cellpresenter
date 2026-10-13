@@ -10,7 +10,7 @@ use sqlx::{FromRow, Sqlite, Transaction};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::media::{image_url, thumb_url, Media};
+use crate::media::{image_url, is_video_ext, thumb_url, Media};
 use crate::setlist::{
     Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary, StoredScripture,
 };
@@ -1216,7 +1216,12 @@ impl From<MediaRow> for Media {
     fn from(r: MediaRow) -> Self {
         Media {
             url: image_url(&r.hash, &r.ext),
-            thumb_url: thumb_url(&r.hash),
+            thumb_url: if is_video_ext(&r.ext) {
+                image_url(&r.hash, &r.ext)
+            } else {
+                thumb_url(&r.hash)
+            },
+            video: is_video_ext(&r.ext),
             id: r.id,
             name: r.name,
             hash: r.hash,

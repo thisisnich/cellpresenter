@@ -9,6 +9,11 @@ export type Media = { id: string, name: string, hash: string, width: number, hei
  */
 url: string, 
 /**
- * Where the console loads the small preview.
+ * Where the console loads the small preview (a video's own file: the
+ * console shows a still frame of it).
  */
-thumb_url: string, created_at: number, };
+thumb_url: string, 
+/**
+ * A looping video rather than a picture.
+ */
+video: boolean, created_at: number, };

@@ -4,8 +4,28 @@ import { api, ApiError } from "../../lib/api";
 import { useConsole } from "../ConsoleContext";
 import { MEDIA_DRAG_TYPE } from "../dragMedia";
 import { useLive } from "../LiveContext";
+import { MediaThumb } from "../MediaThumb";
 
-// Background images. Click one to put it on screen now (it stays across
+const isVideoFile = (f: File) => /^video\//.test(f.type) || /\.(mp4|m4v|webm|mov)$/i.test(f.name);
+
+/** A video's size, read by the browser before upload (null if it can't). */
+function videoSize(file: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    const done = (size: { width: number; height: number } | null) => {
+      URL.revokeObjectURL(url);
+      resolve(size);
+    };
+    video.preload = "metadata";
+    video.onloadedmetadata = () => done(video.videoWidth ? { width: video.videoWidth, height: video.videoHeight } : null);
+    video.onerror = () => done(null);
+    window.setTimeout(() => done(null), 5000);
+    video.src = url;
+  });
+}
+
+// Background pictures and videos. Click one to put it on screen now (it stays across
 // slides and songs, like ProPresenter's background layer); drag one onto a
 // slide to cue it there. Upload with the button or by dropping files here.
 export function MediaPanel() {
@@ -18,22 +38,23 @@ export function MediaPanel() {
   const input = useRef<HTMLInputElement>(null);
 
   const upload = async (files: FileList | File[]) => {
-    const images = [...files].filter((f) => f.type.startsWith("image/"));
-    if (images.length === 0) {
+    const usable = [...files].filter((f) => f.type.startsWith("image/") || isVideoFile(f));
+    if (usable.length === 0) {
       setError(t("media.notImages"));
       return;
     }
     setError(null);
-    setUploading((n) => n + images.length);
-    for (const file of images) {
+    setUploading((n) => n + usable.length);
+    for (const file of usable) {
       try {
-        await api.uploadMedia(file);
+        if (isVideoFile(file)) await api.uploadVideo(file, await videoSize(file));
+        else await api.uploadMedia(file);
       } catch (err) {
         const code = err instanceof ApiError ? err.code : "";
         setError(
           code === "too_large"
-            ? t("media.tooLarge", { name: file.name })
-            : code === "not_an_image"
+            ? t(isVideoFile(file) ? "media.videoTooLarge" : "media.tooLarge", { name: file.name })
+            : code === "not_an_image" || code === "not_a_video"
               ? t("media.notAnImage", { name: file.name })
               : t("media.uploadFailed", { name: file.name }),
         );
@@ -78,7 +99,7 @@ export function MediaPanel() {
         <input
           ref={input}
           type="file"
-          accept="image/*"
+          accept="image/*,video/mp4,video/webm,video/quicktime,.mp4,.m4v,.webm,.mov"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -116,7 +137,10 @@ export function MediaPanel() {
                 title={onScreen ? t("media.takeOff") : t("media.show")}
                 className="relative aspect-video cursor-pointer border-0 bg-black p-0"
               >
-                <img src={m.thumb_url} alt={m.name} draggable={false} className="absolute inset-0 h-full w-full object-cover" />
+                <MediaThumb media={m} alt={m.name} />
+                {m.video && (
+                  <span className="absolute right-1.5 bottom-1.5 rounded-cp-sm bg-black/70 px-1 text-[10px] font-semibold text-white">{t("media.video")}</span>
+                )}
                 {onScreen && (
                   <span className="absolute top-1 left-1 rounded-cp-sm bg-cp-live px-1.5 py-0.5 text-[10px] font-bold text-cp-on-live">
                     {t("media.onScreen")}

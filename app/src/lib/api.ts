@@ -168,6 +168,13 @@ export const api = {
       { method: "POST", body: file },
       file.type || "application/octet-stream",
     ),
+  /** Upload a video background (stored as is, up to 1 GB). */
+  uploadVideo: (file: File, size: { width: number; height: number } | null) =>
+    request<Media>(
+      `/api/media/video?name=${encodeURIComponent(file.name)}${size ? `&width=${size.width}&height=${size.height}` : ""}`,
+      { method: "POST", body: file },
+      file.type || "application/octet-stream",
+    ),
   deleteMedia: (id: string) => request<void>(`/api/media/${encodeURIComponent(id)}`, { method: "DELETE" }),
   /** Put an image on the background layer now (null clears it). */
   liveBackground: (mediaId: string | null) => request<LiveState>("/api/live/background", json("POST", { media_id: mediaId })),

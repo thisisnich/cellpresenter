@@ -18,6 +18,7 @@ export function SlidePreview({
   transparent = false,
   footer = null,
   look,
+  playVideo = false,
 }: {
   text: string;
   textScale?: number;
@@ -33,6 +34,8 @@ export function SlidePreview({
   footer?: string[] | null;
   /** A look to try out instead of the screens' current one. */
   look?: Look;
+  /** Play a video background (the live preview); thumbnails show a still. */
+  playVideo?: boolean;
 }) {
   const checker = transparent && !background && !blank;
   const preview = (
@@ -42,7 +45,7 @@ export function SlidePreview({
           blankLabel && <p className="text-5xl text-white/40">{blankLabel}</p>
         ) : (
           <>
-            <SlideBackground url={background} />
+            <SlideBackground url={background} still={!playVideo} />
             {!hideText && <LyricSlide text={text} textScale={textScale} />}
             {!hideText && footer && <CreditsFooter lines={footer} />}
           </>
