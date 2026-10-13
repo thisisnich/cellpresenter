@@ -25,6 +25,20 @@ Releases: v0.1.0 ships as a preview before step 5 is finished (AGPL-3.0, install
 
 **Test for R1:** build a setlist from pasted chord sheets, run it from the console and a phone, and a musician's phone shows lyrics + chords in the transposed key.
 
+## v1.0 — "Another church can run it without us"
+
+The bar: a volunteer at another church installs it and runs a Sunday with no help. Roughly 80–120 h after R1, so early to mid 2027.
+
+| Release | Items |
+|---|---|
+| v0.2 | Song search and import (**done**) |
+| v0.3 | Copyright footer on slides (CCLI number + copyright; the fields already exist in the library) · text style (font, size, colour, shadow, position, margins) · Back up / Restore library buttons · ChordPro and OpenLyrics file import · recycle bin for deleted songs and setlists |
+| v0.4 | Scripture: public-domain translations (KJV, WEB) bundled, search by reference, verses split into slides |
+| v0.5 | Auto-update (Tauri updater, signed) · Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
+| v1.0 | First-run guide · Notes and Stage panels built or hidden (no "coming soon") · polish · **launch video** made with [`/brag`](https://github.com/latent-spaces/brag) (a Claude Code skill that reads the repo and renders a ~20 s video with music and captions) for the README, release notes and socials |
+
+After v1.0: countdown timer and messages, confidence monitor, video backgrounds, several outputs at different sizes, then R2.
+
 ## R2 — "Share with the team"
 
 Accounts + cloud library (text and thumbnails always synced; full media stays on the home laptop) · setlist share links with chords · remote live control (sign-in + per-session room code; LAN stays the default) · ChordPro / OpenLyrics / plain-text import · Operate / Prepare modes · first-run guide · contributor docs.
