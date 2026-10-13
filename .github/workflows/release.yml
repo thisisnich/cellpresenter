@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
   build:
@@ -38,12 +39,6 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
-    env:
-      # The AppImage must use the system's Wayland libraries: Ubuntu 22.04's
-      # are too old for newer graphics drivers, and WebKit then can't start
-      # ("Could not create default EGL display", seen on Fedora 44). Every
-      # Linux desktop has its own, since GTK needs them.
-      LINUXDEPLOY_EXCLUDED_LIBRARIES: "libwayland-*"
     steps:
       - uses: actions/checkout@v4
 
@@ -105,16 +100,78 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
-      - name: Check the AppImage leaves out Wayland
+      # linuxdeploy copies Ubuntu 22.04's libwayland into the AppImage, and
+      # that copy is too old for newer graphics drivers. WebKit then aborts
+      # ("Could not create default EGL display", seen on Fedora 44). Deb and
+      # rpm packages already use the system copy. Tauri 2.11 cannot pass
+      # linuxdeploy's --exclude-library flag, so the AppImage is repacked.
+      - name: Use the system's Wayland libraries in the AppImage
         if: runner.os == 'Linux'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          image=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -1)
-          cd "$(mktemp -d)" && "$OLDPWD/$image" --appimage-extract >/dev/null
-          if ls squashfs-root/usr/lib | grep -q '^libwayland'; then
-            echo "::error::The AppImage bundles libwayland; it crashes on newer distributions"
-            ls squashfs-root/usr/lib | grep '^libwayland'
+          set -euo pipefail
+          image=$(readlink -f "$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -1)")
+          work=$(mktemp -d)
+          cd "$work"
+          "$image" --appimage-extract >/dev/null
+          mapfile -t removed < <(find squashfs-root -name 'libwayland*.so*' -print -delete)
+          if [ "${#removed[@]}" -eq 0 ]; then
+            echo "No bundled libwayland libraries; leaving the AppImage as built"
+            exit 0
+          fi
+          printf 'removed %s\n' "${removed[@]}"
+          curl -fsSL -o appimagetool \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+          ARCH=x86_64 ./appimagetool --appimage-extract-and-run squashfs-root "$work/repacked.AppImage"
+          mv "$work/repacked.AppImage" "$image"
+          rm -f "${image}.sig"
+          cd "$GITHUB_WORKSPACE"
+          npx tauri signer sign "$image"
+          cd "$(mktemp -d)"
+          "$image" --appimage-extract >/dev/null
+          if find squashfs-root -name 'libwayland*.so*' | grep -q .; then
+            echo "::error::The repacked AppImage still bundles libwayland"
+            find squashfs-root -name 'libwayland*.so*'
             exit 1
           fi
+
+      - name: Update the draft with the repacked AppImage
+        if: runner.os == 'Linux' && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          image=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -1)
+          sig="${image}.sig"
+          pending=1
+          for _ in $(seq 1 40); do
+            pending=$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=20" \
+              --jq '[.jobs[] | select(.name != "Linux" and .status != "completed")] | length')
+            echo "other jobs still running: ${pending}"
+            if [ "$pending" = "0" ]; then
+              break
+            fi
+            sleep 30
+          done
+          if [ "$pending" != "0" ]; then
+            echo "::error::Other release jobs did not finish before the AppImage was swapped"
+            exit 1
+          fi
+          work=$(mktemp -d)
+          gh release download "${GITHUB_REF_NAME}" -p latest.json -D "$work"
+          SIG_FILE="$sig" python3 - "$work/latest.json" <<'PY'
+          import json, os, pathlib, sys
+          path = pathlib.Path(sys.argv[1])
+          data = json.loads(path.read_text())
+          signature = pathlib.Path(os.environ["SIG_FILE"]).read_text()
+          for key in ("linux-x86_64", "linux-x86_64-appimage"):
+              data["platforms"][key]["signature"] = signature
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+          gh release upload "${GITHUB_REF_NAME}" "$image" "$sig" "$work/latest.json" --clobber
 
       - name: Keep the installers
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
