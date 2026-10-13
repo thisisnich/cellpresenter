@@ -3,7 +3,9 @@
 // and /ws to the embedded server; in prod that server serves this app itself,
 // so same-origin holds in both worlds.
 import type { BackupInfo } from "../generated/BackupInfo";
+import type { ApiBibleSetup } from "../generated/ApiBibleSetup";
 import type { BibleInfo } from "../generated/BibleInfo";
+import type { BibleSources } from "../generated/BibleSources";
 import type { BackupList } from "../generated/BackupList";
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
@@ -11,6 +13,7 @@ import type { Look } from "../generated/Look";
 import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
+import type { OnlineBible } from "../generated/OnlineBible";
 import type { PassagePreview } from "../generated/PassagePreview";
 import type { PinInfo } from "../generated/PinInfo";
 import type { RecycleBin } from "../generated/RecycleBin";
@@ -111,6 +114,14 @@ export const api = {
   bibleInfo: () => request<BibleInfo>("/api/bible"),
   biblePassage: (translation: string, passage: ScriptureRef) =>
     request<PassagePreview>("/api/bible/passage", json("POST", { translation, passage })),
+  bibleSources: () => request<BibleSources>("/api/bible/sources"),
+  /** Set (checked first) or remove the church's ESV API key. */
+  setEsvKey: (key: string | null) => request<BibleSources>("/api/bible/sources/esv", json("PUT", { key })),
+  /** Set (checked first) or remove the API.Bible key; answers the Bibles it opens. */
+  setApiBibleKey: (key: string | null) => request<ApiBibleSetup>("/api/bible/sources/api-bible", json("PUT", { key })),
+  apiBiblesAvailable: () => request<OnlineBible[]>("/api/bible/sources/api-bible/available"),
+  chooseApiBibles: (bibles: OnlineBible[]) =>
+    request<BibleSources>("/api/bible/sources/api-bible/chosen", json("PUT", { bibles })),
   showScripture: (translation: string, passage: ScriptureRef) =>
     request<LiveState>("/api/live/show-scripture", json("POST", { translation, passage })),
 

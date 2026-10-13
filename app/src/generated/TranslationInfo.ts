@@ -4,4 +4,8 @@ export type TranslationInfo = { id: string, name: string,
 /**
  * "KJV", shown beside references.
  */
-short: string, };
+short: string, 
+/**
+ * Fetched with the church's own key rather than built in.
+ */
+online: boolean, };

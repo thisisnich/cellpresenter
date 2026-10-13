@@ -22,6 +22,7 @@ use uuid::Uuid;
 use crate::auth::{Denied, PinGuard};
 use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
 use crate::bible::{self, BibleError, BibleInfo, Passage, ScriptureRef};
+use crate::bible_online::{self, BibleSources, Keys, OnlineBible, OnlineBibleError};
 use crate::db::{Db, DbResult, NewMedia, RecycleBin, RestoredCounts};
 use crate::live::{Command, Credits, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
@@ -321,7 +322,7 @@ impl ServerState {
                 translation,
                 passage,
                 ..
-            } => match bible::passage(translation, passage) {
+            } => match self.scripture(translation, passage).await {
                 Ok(p) => Some(scripture_content(&p)),
                 Err(_) => None,
             },
@@ -959,12 +960,175 @@ fn bible_error(e: BibleError) -> ApiError {
     }
 }
 
-async fn bible_info() -> ApiResult<BibleInfo> {
+const BIBLE_KEYS: &str = "bible_keys";
+
+impl ServerState {
+    async fn bible_keys(&self) -> Keys {
+        match self.db.get_state(BIBLE_KEYS).await {
+            Ok(Some(json)) => serde_json::from_str(&json).unwrap_or_default(),
+            _ => Keys::default(),
+        }
+    }
+
+    async fn save_bible_keys(&self, keys: &Keys) -> Result<BibleSources, ApiError> {
+        let json = serde_json::to_string(keys).expect("serialize keys");
+        self.db.set_state(BIBLE_KEYS, &json).await?;
+        Ok(keys.sources())
+    }
+
+    /// A passage from a built-in Bible, or an online one with the church's
+    /// key. Online passages are kept, and used when the service can't be
+    /// reached (no internet during the service).
+    async fn scripture(&self, translation: &str, r: &ScriptureRef) -> Result<Passage, ApiError> {
+        if !bible_online::is_online(translation) {
+            return bible::passage(translation, r).map_err(bible_error);
+        }
+        let cache_key = format!(
+            "{translation}|{}",
+            serde_json::to_string(r).expect("serialize reference")
+        );
+        let keys = self.bible_keys().await;
+        match bible_online::passage(&keys, translation, r).await {
+            Ok(p) => {
+                if let Ok(json) = serde_json::to_string(&p) {
+                    let _ = self.db.cache_passage(&cache_key, &json).await;
+                }
+                Ok(p)
+            }
+            Err(e) => {
+                if let OnlineBibleError::Unavailable(why) = &e {
+                    eprintln!("cellpresenter: online Bible unavailable: {why}");
+                    if let Ok(Some(json)) = self.db.cached_passage(&cache_key).await {
+                        if let Ok(p) = serde_json::from_str::<Passage>(&json) {
+                            return Ok(p);
+                        }
+                    }
+                }
+                Err(online_bible_error(e))
+            }
+        }
+    }
+}
+
+fn online_bible_error(e: OnlineBibleError) -> ApiError {
+    match e {
+        OnlineBibleError::NoKey => ApiError(StatusCode::BAD_REQUEST, "no_key"),
+        OnlineBibleError::BadKey => ApiError(StatusCode::FORBIDDEN, "bad_key"),
+        OnlineBibleError::NotFound => NOT_FOUND,
+        OnlineBibleError::Unavailable(_) => ApiError(StatusCode::BAD_GATEWAY, "unavailable"),
+    }
+}
+
+async fn bible_info(State(s): State<ServerState>) -> ApiResult<BibleInfo> {
     // The first call unpacks the Bibles, which takes a moment.
-    tokio::task::spawn_blocking(bible::info)
+    let mut info = tokio::task::spawn_blocking(bible::info)
+        .await
+        .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "bible_failed"))?;
+    info.translations
+        .extend(s.bible_keys().await.translations());
+    Ok(Json(info))
+}
+
+// The church's own keys for copyrighted Bibles.
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct KeyInput {
+    /// The key, or null to remove it.
+    pub key: Option<String>,
+}
+
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct ApiBibleSetup {
+    pub sources: BibleSources,
+    /// The English Bibles the key gives access to, to choose from.
+    pub available: Vec<OnlineBible>,
+}
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct ChosenBibles {
+    pub bibles: Vec<OnlineBible>,
+}
+
+fn clean_key(key: Option<String>) -> Result<Option<String>, ApiError> {
+    let key = key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty());
+    if key
+        .as_ref()
+        .is_some_and(|k| k.len() > 200 || k.chars().any(char::is_whitespace))
+    {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "bad_key"));
+    }
+    Ok(key)
+}
+
+async fn bible_sources(State(s): State<ServerState>) -> ApiResult<BibleSources> {
+    Ok(Json(s.bible_keys().await.sources()))
+}
+
+/// Set (after checking it) or remove the ESV API key.
+async fn set_esv_key(
+    State(s): State<ServerState>,
+    Json(input): Json<KeyInput>,
+) -> ApiResult<BibleSources> {
+    let key = clean_key(input.key)?;
+    if let Some(k) = &key {
+        bible_online::check_esv(k)
+            .await
+            .map_err(online_bible_error)?;
+    }
+    let mut keys = s.bible_keys().await;
+    keys.esv = key;
+    Ok(Json(s.save_bible_keys(&keys).await?))
+}
+
+/// Set (after checking it) or remove the API.Bible key; answers the Bibles
+/// it opens. Chosen Bibles the new key doesn't allow are dropped.
+async fn set_api_bible_key(
+    State(s): State<ServerState>,
+    Json(input): Json<KeyInput>,
+) -> ApiResult<ApiBibleSetup> {
+    let key = clean_key(input.key)?;
+    let available = match &key {
+        Some(k) => bible_online::api_bibles(k)
+            .await
+            .map_err(online_bible_error)?,
+        None => Vec::new(),
+    };
+    let mut keys = s.bible_keys().await;
+    keys.api_bible = key;
+    keys.api_bibles
+        .retain(|b| available.iter().any(|a| a.id == b.id));
+    let sources = s.save_bible_keys(&keys).await?;
+    Ok(Json(ApiBibleSetup { sources, available }))
+}
+
+async fn api_bibles_available(State(s): State<ServerState>) -> ApiResult<Vec<OnlineBible>> {
+    let keys = s.bible_keys().await;
+    let key = keys
+        .api_bible
+        .as_deref()
+        .ok_or(ApiError(StatusCode::BAD_REQUEST, "no_key"))?;
+    bible_online::api_bibles(key)
         .await
         .map(Json)
-        .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "bible_failed"))
+        .map_err(online_bible_error)
+}
+
+async fn choose_api_bibles(
+    State(s): State<ServerState>,
+    Json(input): Json<ChosenBibles>,
+) -> ApiResult<BibleSources> {
+    if input.bibles.len() > 12 {
+        return Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, "too_many"));
+    }
+    let mut keys = s.bible_keys().await;
+    if keys.api_bible.is_none() {
+        return Err(ApiError(StatusCode::BAD_REQUEST, "no_key"));
+    }
+    keys.api_bibles = input.bibles;
+    Ok(Json(s.save_bible_keys(&keys).await?))
 }
 
 /// A passage and the slides it makes, to preview before showing.
@@ -975,8 +1139,11 @@ pub struct PassagePreview {
     pub slides: Vec<Slide>,
 }
 
-async fn bible_passage(Json(r): Json<PassageRequest>) -> ApiResult<PassagePreview> {
-    let passage = bible::passage(&r.translation, &r.passage).map_err(bible_error)?;
+async fn bible_passage(
+    State(s): State<ServerState>,
+    Json(r): Json<PassageRequest>,
+) -> ApiResult<PassagePreview> {
+    let passage = s.scripture(&r.translation, &r.passage).await?;
     let slides = bible::passage_slides(&passage);
     Ok(Json(PassagePreview { passage, slides }))
 }
@@ -986,7 +1153,7 @@ async fn live_show_scripture(
     State(s): State<ServerState>,
     Json(r): Json<PassageRequest>,
 ) -> ApiResult<LiveState> {
-    let p = bible::passage(&r.translation, &r.passage).map_err(bible_error)?;
+    let p = s.scripture(&r.translation, &r.passage).await?;
     let content = scripture_content(&p);
     Ok(Json(s.mutate(|l| {
         l.show(None, content.title, content.slides, 0, None);
@@ -1307,6 +1474,20 @@ pub fn router(state: ServerState) -> Router {
         )
         .route("/screens/output", post(set_output))
         .route("/live/show-scripture", post(live_show_scripture))
+        .route("/bible/sources", get(bible_sources))
+        .route("/bible/sources/esv", axum::routing::put(set_esv_key))
+        .route(
+            "/bible/sources/api-bible",
+            axum::routing::put(set_api_bible_key),
+        )
+        .route(
+            "/bible/sources/api-bible/available",
+            get(api_bibles_available),
+        )
+        .route(
+            "/bible/sources/api-bible/chosen",
+            axum::routing::put(choose_api_bibles),
+        )
         .route("/recycle-bin", get(recycle_bin))
         .route("/songs/{id}/undelete", post(undelete_song))
         .route("/setlists/{id}/undelete", post(undelete_setlist))
@@ -1652,6 +1833,45 @@ mod tests {
         let unknown = format!(r#"{{"translation":"niv","passage":{john}}}"#);
         let (status, _) = call(&router, "POST", "/api/bible/passage", Some(&unknown), None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn online_bibles_need_the_churchs_own_key() {
+        let (router, _) = app(LOCAL).await;
+        let (status, body) = call(&router, "GET", "/api/bible/sources", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, r#"{"esv":null,"api_bible":null,"api_bibles":[]}"#);
+        let john = r#"{"book":43,"ranges":[{"from":{"chapter":3,"verse":16},"to":{"chapter":3,"verse":16}}]}"#;
+        let esv = format!(r#"{{"translation":"esv","passage":{john}}}"#);
+        let (status, body) = call(&router, "POST", "/api/bible/passage", Some(&esv), None).await;
+        assert_eq!(
+            (status, body.as_str()),
+            (StatusCode::BAD_REQUEST, r#"{"error":"no_key"}"#)
+        );
+        let chosen = r#"{"bibles":[{"id":"x","abbreviation":"NASB","name":"NASB"}]}"#;
+        let (status, _) = call(
+            &router,
+            "PUT",
+            "/api/bible/sources/api-bible/chosen",
+            Some(chosen),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        // Removing a key that isn't there is fine, and needs no network.
+        let (status, _) = call(
+            &router,
+            "PUT",
+            "/api/bible/sources/esv",
+            Some(r#"{"key":null}"#),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        // Keys are for whoever runs the show.
+        let phone = router_for(app(LOCAL).await.1, PHONE);
+        let (status, _) = call(&phone, "GET", "/api/bible/sources", None, None).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]

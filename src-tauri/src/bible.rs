@@ -172,6 +172,8 @@ pub struct TranslationInfo {
     pub name: String,
     /// "KJV", shown beside references.
     pub short: String,
+    /// Fetched with the church's own key rather than built in.
+    pub online: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
@@ -223,7 +225,7 @@ pub struct Verse {
     pub text: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct Passage {
     /// "John 3:16–18, 20".
@@ -249,6 +251,7 @@ pub fn info() -> BibleInfo {
                 id: t.id.into(),
                 name: t.name.into(),
                 short: t.short.into(),
+                online: false,
             })
             .collect(),
         books: BOOKS
@@ -261,6 +264,24 @@ pub fn info() -> BibleInfo {
             })
             .collect(),
     }
+}
+
+/// USFM book codes ("JHN"), as API.Bible names books.
+pub const USFM: [&str; 66] = [
+    "GEN", "EXO", "LEV", "NUM", "DEU", "JOS", "JDG", "RUT", "1SA", "2SA", "1KI", "2KI", "1CH",
+    "2CH", "EZR", "NEH", "EST", "JOB", "PSA", "PRO", "ECC", "SNG", "ISA", "JER", "LAM", "EZK",
+    "DAN", "HOS", "JOL", "AMO", "OBA", "JON", "MIC", "NAM", "HAB", "ZEP", "HAG", "ZEC", "MAL",
+    "MAT", "MRK", "LUK", "JHN", "ACT", "ROM", "1CO", "2CO", "GAL", "EPH", "PHP", "COL", "1TH",
+    "2TH", "1TI", "2TI", "TIT", "PHM", "HEB", "JAS", "1PE", "2PE", "1JN", "2JN", "3JN", "JUD",
+    "REV",
+];
+
+/// How many verses a chapter has (KJV versification), 0 if no such chapter.
+pub fn verses_in(book: u8, chapter: u16) -> u16 {
+    text_of(&TRANSLATIONS[0])
+        .get(usize::from(book).wrapping_sub(1))
+        .and_then(|b| b.get(usize::from(chapter).wrapping_sub(1)))
+        .map_or(0, |c| c.len() as u16)
 }
 
 /// The book's name as a reference reads: "Psalm 23" for one psalm.

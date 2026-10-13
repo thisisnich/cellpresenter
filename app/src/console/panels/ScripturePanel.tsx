@@ -6,6 +6,7 @@ import type { PassagePreview } from "../../generated/PassagePreview";
 import type { ScriptureRef } from "../../generated/ScriptureRef";
 import { t } from "../../i18n";
 import { api, ApiError } from "../../lib/api";
+import { BibleKeys } from "../BibleKeys";
 import { useConsole } from "../ConsoleContext";
 
 const TRANSLATION_KEY = "cellpresenter.bible.translation";
@@ -20,20 +21,24 @@ const savedTranslation = () => {
 /** A passage, fetched again whenever it changes (a stale answer is dropped). */
 function usePassage(translation: string | null, passage: ScriptureRef | null) {
   const [preview, setPreview] = useState<PassagePreview | null>(null);
-  const [missing, setMissing] = useState(false);
+  // Why there is no preview: "not_found", "no_key", "bad_key", "unavailable"…
+  const [problem, setProblem] = useState<string | null>(null);
   const wanted = translation && passage ? JSON.stringify([translation, passage]) : null;
   useEffect(() => {
     if (!wanted || !translation || !passage) {
       setPreview(null);
-      setMissing(false);
+      setProblem(null);
       return;
     }
     let live = true;
     const timer = window.setTimeout(() => {
       api
         .biblePassage(translation, passage)
-        .then((p) => live && (setPreview(p), setMissing(false)))
-        .catch((err) => live && (setPreview(null), setMissing(err instanceof ApiError && err.status === 404)));
+        .then((p) => live && (setPreview(p), setProblem(null)))
+        .catch(
+          (err) =>
+            live && (setPreview(null), setProblem(err instanceof ApiError ? (err.status === 404 ? "not_found" : err.code) : "unavailable")),
+        );
     }, 150);
     return () => {
       live = false;
@@ -41,7 +46,7 @@ function usePassage(translation: string | null, passage: ScriptureRef | null) {
     };
     // `wanted` stands for both.
   }, [wanted]);
-  return { preview, missing };
+  return { preview, problem };
 }
 
 // Scripture, ProPresenter style: type a reference ("Jn 3:16-18") or pick a
@@ -56,6 +61,8 @@ export function ScripturePanel() {
   const [anchor, setAnchor] = useState<number | null>(null);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [showKeys, setShowKeys] = useState(false);
+  const [infoVersion, setInfoVersion] = useState(0);
 
   useEffect(() => {
     api
@@ -65,7 +72,7 @@ export function ScripturePanel() {
         setTranslation((tr) => (tr && i.translations.some((x) => x.id === tr) ? tr : (i.translations[0]?.id ?? null)));
       })
       .catch(() => setMessage({ ok: false, text: t("scripture.loadFailed") }));
-  }, []);
+  }, [infoVersion]);
   useEffect(() => {
     try {
       if (translation) localStorage.setItem(TRANSLATION_KEY, translation);
@@ -84,7 +91,7 @@ export function ScripturePanel() {
       book && chapter ? { book, ranges: [{ from: { chapter, verse: 1 }, to: { chapter, verse: 0 } }] } : null,
     [book, chapter],
   );
-  const { preview: selection, missing } = usePassage(translation, passage);
+  const { preview: selection, problem } = usePassage(translation, passage);
   const { preview: whole } = usePassage(translation, chapterRef);
   const chosen = new Set((selection?.passage.verses ?? []).map((v) => `${v.chapter}:${v.verse}`));
   const chapters = book ? (info?.books[book - 1]?.verses.length ?? 0) : 0;
@@ -160,12 +167,29 @@ export function ScripturePanel() {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            onClick={() => setShowKeys((v) => !v)}
+            aria-expanded={showKeys}
+            title={t("scripture.moreTranslations")}
+            className={`rounded-cp border-cp px-2 ${showKeys ? "bg-cp-surface-hi" : "text-cp-muted hover:text-cp-text"}`}
+          >
+            {t("scripture.more")}
+          </button>
         </div>
         <p className={`m-0 min-h-4 text-[12px] ${parsed && !parsed.ok ? "text-cp-danger" : "text-cp-muted"}`}>
           {parsed && !parsed.ok
             ? t(parsed.reason === "book" ? "scripture.unknownBook" : "scripture.badNumbers")
-            : missing
-              ? t("scripture.notFound")
+            : problem
+              ? t(
+                  problem === "not_found"
+                    ? "scripture.notFound"
+                    : problem === "no_key" || problem === "bad_key"
+                      ? "scripture.keyProblem"
+                      : problem === "pin_required"
+                        ? "scripture.needPin"
+                        : "scripture.offline",
+                )
               : selection
                 ? t("scripture.summary", {
                     label: selection.passage.label,
@@ -177,6 +201,11 @@ export function ScripturePanel() {
       </form>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+        {showKeys && (
+          <section className="border-b-cp p-3" aria-label={t("scripture.moreTranslations")}>
+            <BibleKeys onChange={() => setInfoVersion((v) => v + 1)} />
+          </section>
+        )}
         {!book && (
           <div className="flex flex-col gap-2 p-3">
             {[

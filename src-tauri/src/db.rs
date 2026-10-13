@@ -335,6 +335,37 @@ impl Db {
         })
     }
 
+    // ---------- scripture cache ----------
+
+    /// A passage fetched before, by key (translation and reference).
+    pub async fn cached_passage(&self, key: &str) -> DbResult<Option<String>> {
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT passage FROM scripture_cache WHERE key = ?")
+                .bind(key)
+                .fetch_optional(&self.pool)
+                .await?;
+        Ok(row.map(|(p,)| p))
+    }
+
+    /// Keep a fetched passage; ones not fetched for 90 days are let go.
+    pub async fn cache_passage(&self, key: &str, passage: &str) -> DbResult<()> {
+        let now = now_ms();
+        sqlx::query(
+            "INSERT INTO scripture_cache (key, passage, fetched_at) VALUES (?, ?, ?)
+             ON CONFLICT(key) DO UPDATE SET passage = excluded.passage, fetched_at = excluded.fetched_at",
+        )
+        .bind(key)
+        .bind(passage)
+        .bind(now)
+        .execute(&self.pool)
+        .await?;
+        sqlx::query("DELETE FROM scripture_cache WHERE fetched_at < ?")
+            .bind(now - 90 * 24 * 60 * 60 * 1000)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     // ---------- recycle bin ----------
 
     /// Deleted songs and setlists, most recently deleted first.
