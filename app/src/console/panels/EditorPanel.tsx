@@ -29,7 +29,17 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
   // A draft (a song found online) starts out unsaved.
   const { draft } = params;
   const [meta, setMeta] = useState<SongMeta>(() =>
-    draft ? { ...EMPTY_META, title: draft.title, artist: draft.artist, key: draft.key, capo: draft.capo } : EMPTY_META,
+    draft
+      ? {
+          ...EMPTY_META,
+          title: draft.title,
+          artist: draft.artist,
+          key: draft.key,
+          capo: draft.capo,
+          copyright: draft.copyright ?? "",
+          ccli: draft.ccli ?? "",
+        }
+      : EMPTY_META,
   );
   const [text, setText] = useState(draft?.text ?? "");
   const [linesPerSlide, setLinesPerSlide] = useState(2);

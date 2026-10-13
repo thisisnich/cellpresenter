@@ -34,9 +34,14 @@ export interface ParsedSong {
   sections: TextSection[];
   /** Section names in play order; repeats allowed. */
   arrangement: string[];
-  /** Picked up from ChordPro {title:} / {key:} directives, if present. */
+  /** Picked up from ChordPro directives ({title:}, {key:}, {artist:},
+   *  {copyright:}, {ccli:}, {capo:}), if present. */
   title?: string;
   key?: string;
+  artist?: string;
+  copyright?: string;
+  ccli?: string;
+  capo?: number;
 }
 
 export interface ParseOptions {
@@ -190,6 +195,10 @@ export function parseSongText(input: string, options: ParseOptions): ParsedSong 
       const d = name.toLowerCase();
       if (d === "title" || d === "t") result.title = value;
       else if (d === "key") result.key = value;
+      else if (["artist", "subtitle", "st", "composer", "lyricist"].includes(d) && value) result.artist ??= value;
+      else if (d === "copyright" && value) result.copyright = value;
+      else if ((d === "ccli" || d === "ccli_number" || d === "ccli_song") && value) result.ccli = value.replace(/\D/g, "") || undefined;
+      else if (d === "capo" && value && /^\d+$/.test(value)) result.capo = Number(value);
       else if (["c", "comment", "ci"].includes(d) && value) startSection(sectionHeader(`[${value}]`));
       else if (d === "soc" || d === "start_of_chorus") startSection("Chorus");
       else if (d === "sov" || d === "start_of_verse") startSection(value ? titleCase(value) : null);

@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
 use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
-use crate::db::{Db, DbResult, NewMedia, RestoredCounts};
+use crate::db::{Db, DbResult, NewMedia, RecycleBin, RestoredCounts};
 use crate::live::{Command, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
@@ -911,6 +911,29 @@ async fn set_look(State(s): State<ServerState>, Json(look): Json<Look>) -> ApiRe
     Ok(Json(s.mutate(|l| l.look = look)))
 }
 
+// ---------- recycle bin ----------
+
+async fn recycle_bin(State(s): State<ServerState>) -> ApiResult<RecycleBin> {
+    Ok(Json(s.db.recycle_bin().await?))
+}
+
+async fn undelete_song(State(s): State<ServerState>, Path(id): Path<String>) -> ApiResult<Song> {
+    if !s.db.undelete_song(&id).await? {
+        return Err(NOT_FOUND);
+    }
+    Ok(Json(s.db.get_song(&id).await?.ok_or(NOT_FOUND)?))
+}
+
+async fn undelete_setlist(
+    State(s): State<ServerState>,
+    Path(id): Path<String>,
+) -> ApiResult<Setlist> {
+    if !s.db.undelete_setlist(&id).await? {
+        return Err(NOT_FOUND);
+    }
+    Ok(Json(s.db.get_setlist(&id).await?.ok_or(NOT_FOUND)?))
+}
+
 // ---------- backups ----------
 
 const NO_BACKUPS: ApiError = ApiError(StatusCode::NOT_IMPLEMENTED, "no_backups");
@@ -1198,6 +1221,9 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/recycle-bin", get(recycle_bin))
+        .route("/songs/{id}/undelete", post(undelete_song))
+        .route("/setlists/{id}/undelete", post(undelete_setlist))
         .route("/backups", get(list_backups).post(create_backup))
         .route("/backups/{name}/restore", post(restore_backup))
         .route(

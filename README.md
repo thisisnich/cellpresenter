@@ -49,7 +49,9 @@ When the app first starts, allow it through the firewall if asked, so phones and
    - **Lyrics:** type the title, press **Search** and pick a result.
    - **Chords:** press **Search on Ultimate Guitar**, find the song in your browser, copy the page's link and paste it into the search box.
 
-   The song opens in the editor, split into slides; check it and press **Save**. Or click **+ New song** in the Library and paste the song yourself, for example a ChordPro download from CCLI SongSelect. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`.
+   The song opens in the editor, split into slides; check it and press **Save**. Or click **+ New song** in the Library and paste the song yourself.
+
+   **Song files:** press **Import…** in the Library (or drop files on it) to bring in ChordPro, CCLI SongSelect downloads (ChordPro, lyrics text or `.usr`), OpenLyrics (exported by OpenLP and others) or plain text. One file opens in the editor; several are saved straight to the library. Titles, writers, keys, copyright and CCLI numbers come along. A line like `[Chorus]` starts a section. Chords can sit above the words or inline, like `[G]Amazing [C]grace`.
 3. **Make a setlist.** In the Setlist panel press **New**. Add songs from the Library with **+**, and notices with **+ Announcement**.
 4. **Present.** Click a slide to show it. Use **Next / Prev**, the arrow keys or a clicker. **Clear text** and **Clear background** clear the screen, and **Black out** blanks it.
 5. **Connect phones.** Press **Display link** in the top-right corner. Each device must be on the same Wi-Fi as the computer.
@@ -58,6 +60,8 @@ When the app first starts, allow it through the firewall if asked, so phones and
    - **Chords:** musicians get lyrics with chords that follow along.
 
 If phones can't connect, the Wi-Fi may stop devices from reaching each other. This is common on guest, school and office networks. Try a phone hotspot, or [Tailscale](https://tailscale.com).
+
+Deleted songs and setlists go to the **Recycle bin** panel (Edit page), where **Restore** brings them back.
 
 ## Song licences
 

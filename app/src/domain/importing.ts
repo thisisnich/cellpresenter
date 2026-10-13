@@ -13,6 +13,9 @@ export interface SongDraft {
   key: string;
   capo: number;
   text: string;
+  /** Who owns it, and its CCLI song number, when the source says. */
+  copyright?: string;
+  ccli?: string;
   /** Where it was found, to remind whoever saves it to check it. */
   source?: Source;
 }

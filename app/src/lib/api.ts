@@ -11,6 +11,7 @@ import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
 import type { PinInfo } from "../generated/PinInfo";
+import type { RecycleBin } from "../generated/RecycleBin";
 import type { RestoredCounts } from "../generated/RestoredCounts";
 import type { Screens } from "../generated/Screens";
 import type { SearchHit } from "../generated/SearchHit";
@@ -117,6 +118,11 @@ export const api = {
   openUgSearch: (query: string) => request<void>("/api/online/open-ug-search", json("POST", { q: query })),
   onlineSong: (source: Source, id: string) =>
     request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
+
+  recycleBin: () => request<RecycleBin>("/api/recycle-bin"),
+  undeleteSong: (id: string) => request<Song>(`/api/songs/${encodeURIComponent(id)}/undelete`, { method: "POST" }),
+  undeleteSetlist: (id: string) =>
+    request<Setlist>(`/api/setlists/${encodeURIComponent(id)}/undelete`, { method: "POST" }),
 
   listBackups: () => request<BackupList>("/api/backups"),
   createBackup: () => request<BackupInfo>("/api/backups", { method: "POST" }),

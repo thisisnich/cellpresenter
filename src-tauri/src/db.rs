@@ -16,6 +16,31 @@ use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSli
 
 pub type DbResult<T> = Result<T, sqlx::Error>;
 
+/// Something in the recycle bin.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct Deleted {
+    pub id: String,
+    pub title: String,
+    /// The artist of a song, the date of a setlist.
+    pub detail: Option<String>,
+    #[ts(type = "number")]
+    pub deleted_at: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct RecycleBin {
+    pub songs: Vec<Deleted>,
+    pub setlists: Vec<Deleted>,
+}
+
+#[derive(Clone, Copy)]
+enum Undeletable {
+    Song,
+    Setlist,
+}
+
 /// What a restore brought back.
 #[derive(Clone, Debug, PartialEq, Serialize, TS)]
 #[ts(export)]
@@ -306,6 +331,89 @@ impl Db {
             setlists: setlists as u32,
             pictures: pictures as u32,
         })
+    }
+
+    // ---------- recycle bin ----------
+
+    /// Deleted songs and setlists, most recently deleted first.
+    pub async fn recycle_bin(&self) -> DbResult<RecycleBin> {
+        let songs: Vec<(String, String, Option<String>, i64)> = sqlx::query_as(
+            "SELECT id, title, artist, deleted_at FROM songs
+             WHERE library_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 500",
+        )
+        .bind(&self.library_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let setlists: Vec<(String, String, Option<String>, i64)> = sqlx::query_as(
+            "SELECT id, name, service_date, deleted_at FROM setlists
+             WHERE library_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at DESC LIMIT 500",
+        )
+        .bind(&self.library_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let deleted = |rows: Vec<(String, String, Option<String>, i64)>| {
+            rows.into_iter()
+                .map(|(id, title, detail, deleted_at)| Deleted {
+                    id,
+                    title,
+                    detail,
+                    deleted_at,
+                })
+                .collect()
+        };
+        Ok(RecycleBin {
+            songs: deleted(songs),
+            setlists: deleted(setlists),
+        })
+    }
+
+    /// Bring back a deleted song or setlist with the parts deleted along
+    /// with it (same moment); parts removed earlier by edits stay removed.
+    async fn undelete(&self, table: Undeletable, id: &str) -> DbResult<bool> {
+        let (parent, children): (&str, &[(&str, &str)]) = match table {
+            Undeletable::Song => ("songs", &[("sections", "song_id"), ("slides", "song_id")]),
+            Undeletable::Setlist => ("setlists", &[("setlist_items", "setlist_id")]),
+        };
+        let mut tx = self.pool.begin().await?;
+        let when: Option<(i64,)> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
+            "SELECT deleted_at FROM {parent} WHERE id = ? AND library_id = ? AND deleted_at IS NOT NULL"
+        )))
+        .bind(id)
+        .bind(&self.library_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some((when,)) = when else {
+            return Ok(false);
+        };
+        let now = now_ms();
+        // Safe: table and column names come from the fixed lists above.
+        sqlx::query(sqlx::AssertSqlSafe(format!(
+            "UPDATE {parent} SET deleted_at = NULL, updated_at = ? WHERE id = ?"
+        )))
+        .bind(now)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+        for (table, key) in children {
+            sqlx::query(sqlx::AssertSqlSafe(format!(
+                "UPDATE {table} SET deleted_at = NULL, updated_at = ? WHERE {key} = ? AND deleted_at = ?"
+            )))
+            .bind(now)
+            .bind(id)
+            .bind(when)
+            .execute(&mut *tx)
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(true)
+    }
+
+    pub async fn undelete_song(&self, id: &str) -> DbResult<bool> {
+        self.undelete(Undeletable::Song, id).await
+    }
+
+    pub async fn undelete_setlist(&self, id: &str) -> DbResult<bool> {
+        self.undelete(Undeletable::Setlist, id).await
     }
 
     pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {
@@ -1214,6 +1322,56 @@ mod tests {
             .await
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn the_recycle_bin_brings_songs_back_as_they_were_deleted() {
+        let db = Db::in_memory().await.unwrap();
+        let song = db
+            .create_song(&input("S", &[("V1", None, &["a"]), ("V2", None, &["b"])]))
+            .await
+            .unwrap();
+        // An edit removes V2 first; that stays removed.
+        db.update_song(&song.id, &input("S", &[("V1", None, &["a"])]))
+            .await
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        db.delete_song(&song.id).await.unwrap();
+        let bin = db.recycle_bin().await.unwrap();
+        assert_eq!(bin.songs.len(), 1);
+        assert_eq!(bin.songs[0].title, "S");
+
+        assert!(db.undelete_song(&song.id).await.unwrap());
+        assert!(!db.undelete_song(&song.id).await.unwrap());
+        let back = db.get_song(&song.id).await.unwrap().unwrap();
+        let names: Vec<_> = back.sections.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["V1"]);
+        assert_eq!(back.sections[0].slides.len(), 1);
+        assert!(db.recycle_bin().await.unwrap().songs.is_empty());
+
+        let setlist = db
+            .create_setlist(&SetlistInput {
+                name: "Friday".into(),
+                service_date: None,
+                items: vec![SetlistItemInput::Song {
+                    id: None,
+                    song_id: song.id.clone(),
+                }],
+            })
+            .await
+            .unwrap();
+        db.delete_setlist(&setlist.id).await.unwrap();
+        assert_eq!(db.recycle_bin().await.unwrap().setlists.len(), 1);
+        assert!(db.undelete_setlist(&setlist.id).await.unwrap());
+        assert_eq!(
+            db.get_setlist(&setlist.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .items
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]

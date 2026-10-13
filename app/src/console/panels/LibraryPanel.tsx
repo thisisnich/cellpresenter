@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SONG_FILE_TYPES } from "../../domain/fileImport";
 import type { SongSummary } from "../../generated/SongSummary";
 import { t } from "../../i18n";
 import { api } from "../../lib/api";
@@ -6,6 +7,7 @@ import { onLibraryChanged } from "../../lib/libraryEvents";
 import { usePage, usePages } from "../pages";
 import { newId } from "../../domain/songEditing";
 import { useConsole } from "../ConsoleContext";
+import { importSongFiles } from "../importFiles";
 import { useLive } from "../LiveContext";
 
 // Every song in the library, searchable. On the Show page, click a song to
@@ -19,6 +21,28 @@ export function LibraryPanel() {
   const [songs, setSongs] = useState<SongSummary[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [query, setQuery] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [dropping, setDropping] = useState(false);
+  const [imported, setImported] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Song files from other apps: one opens in the editor, several are saved.
+  const importFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setImporting(true);
+    setImported(null);
+    try {
+      const result = await importSongFiles(files);
+      if (result.single) editSong(null, result.single.title, result.single);
+      const parts = [
+        result.saved ? t("library.imported", { count: result.saved }) : "",
+        result.failed.length ? t("library.importFailed", { files: result.failed.join(", ") }) : "",
+      ].filter(Boolean);
+      if (parts.length) setImported({ ok: result.failed.length === 0, text: parts.join(" ") });
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -40,11 +64,53 @@ export function LibraryPanel() {
   }, [songs, query]);
 
   return (
-    <div className="flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text">
+    <div
+      className={`flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text ${dropping ? "outline-2 -outline-offset-2 outline-[var(--cp-live)] outline-dashed" : ""}`}
+      onDragOver={(e) => {
+        if (![...e.dataTransfer.types].includes("Files")) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        if (!e.dataTransfer.files.length) return;
+        e.preventDefault();
+        setDropping(false);
+        void importFiles([...e.dataTransfer.files]);
+      }}
+    >
       <div className="flex flex-col gap-2 border-b-cp p-3">
-        <button type="button" onClick={() => editSong(null)} className="cp-btn w-full">
-          {t("library.newSong")}
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => editSong(null)} className="cp-btn flex-1">
+            {t("library.newSong")}
+          </button>
+          <button
+            type="button"
+            disabled={importing}
+            onClick={() => picker.current?.click()}
+            title={t("library.importHelp")}
+            className="cp-btn"
+          >
+            {importing ? t("library.importing") : t("library.import")}
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            accept={SONG_FILE_TYPES.join(",")}
+            className="hidden"
+            onChange={(e) => {
+              const files = [...(e.target.files ?? [])];
+              e.target.value = "";
+              void importFiles(files);
+            }}
+          />
+        </div>
+        {imported && (
+          <p role={imported.ok ? "status" : "alert"} className={`m-0 text-[12px] ${imported.ok ? "text-cp-muted" : "text-cp-danger"}`}>
+            {imported.text}
+          </p>
+        )}
         <label htmlFor="library-search" className="sr-only">
           {t("library.search")}
         </label>
