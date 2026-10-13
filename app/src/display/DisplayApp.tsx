@@ -4,6 +4,8 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
+import { footerLines } from "../domain/credits";
+import { CreditsFooter } from "./CreditsFooter";
 import { LyricSlide } from "./LyricSlide";
 import { SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
@@ -24,6 +26,7 @@ export default function DisplayApp() {
   // The background layer, which slide cues switch on the server.
   const background = state?.background ?? null;
   const nextBackground = state?.slides[state.slide_index + 1]?.background ?? null;
+  const footer = state ? footerLines(state.credits, state.look, state.slide_index) : null;
 
   // Load the next slide's background ahead of time so it never pops in.
   useEffect(() => {
@@ -68,6 +71,7 @@ export default function DisplayApp() {
         {state && shown && !state.text_hidden && state.slides.length > 0 && (
           <LyricSlide text={active} textScale={textScale} />
         )}
+        {state && shown && !state.text_hidden && footer && <CreditsFooter lines={footer} />}
         {state && shown && state.slides.length === 0 && !background && (
           <p className="text-4xl text-white/25">{t("display.waiting")}</p>
         )}

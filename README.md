@@ -62,6 +62,8 @@ If phones can't connect, the Wi-Fi may stop devices from reaching each other. Th
 
 Songs belong to their writers and publishers. Projecting a song at church usually needs a licence, such as a [CCLI](https://ccli.com) Church Copyright Licence; check what applies where you are. Only import songs you have the rights to use.
 
+CCLI asks for a copyright line on screen. Fill in each song's **Copyright** and **CCLI song #** in the song editor, and your church's licence number in the **Screen** panel (next to Live output). The line shows on a song's first slide, every slide, or not at all.
+
 CellPresenter isn't affiliated with Ultimate Guitar or LRCLIB. It fetches only the song you pick, when you pick it; it never searches Ultimate Guitar itself, and it ships no song content except public-domain hymns. Ultimate Guitar's terms allow personal, non-commercial use of its content, so whether you may use a sheet from there is between you and them.
 
 ## Your data

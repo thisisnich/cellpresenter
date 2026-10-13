@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::live::Slide;
+use crate::live::{Credits, Slide};
 
 /// A chord placed above a lyric line, anchored to a character index.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -129,6 +129,16 @@ impl Song {
             }
         }
         self.sections.iter().collect()
+    }
+
+    /// The copyright details shown with the song.
+    pub fn credits(&self) -> Credits {
+        Credits {
+            title: self.title.clone(),
+            artist: self.artist.clone(),
+            copyright: self.copyright.clone(),
+            ccli_number: self.ccli_number.clone(),
+        }
     }
 
     /// The slides a display shows for this song, in play order. A slide's

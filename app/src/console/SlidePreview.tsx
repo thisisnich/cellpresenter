@@ -1,3 +1,4 @@
+import { CreditsFooter } from "../display/CreditsFooter";
 import { LyricSlide } from "../display/LyricSlide";
 import { SlideBackground } from "../display/SlideBackground";
 import { Stage } from "../display/Stage";
@@ -13,6 +14,7 @@ export function SlidePreview({
   background = null,
   hideText = false,
   transparent = false,
+  footer = null,
 }: {
   text: string;
   textScale?: number;
@@ -24,6 +26,8 @@ export function SlidePreview({
   /** A slide thumbnail rather than the screen: with no background of its
    *  own, show a checkerboard (it keeps whatever background is up). */
   transparent?: boolean;
+  /** The copyright line, when the screen shows one. */
+  footer?: string[] | null;
 }) {
   const checker = transparent && !background && !blank;
   return (
@@ -35,6 +39,7 @@ export function SlidePreview({
           <>
             <SlideBackground url={background} />
             {!hideText && <LyricSlide text={text} textScale={textScale} />}
+            {!hideText && footer && <CreditsFooter lines={footer} />}
           </>
         )}
       </Stage>

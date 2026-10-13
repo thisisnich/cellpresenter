@@ -16,7 +16,7 @@ import { SlidePreview } from "../SlidePreview";
 
 const KEYS = ["C", "C#", "Db", "D", "Eb", "E", "F", "F#", "Gb", "G", "Ab", "A", "Bb", "B", "Am", "Bm", "Cm", "Dm", "Em", "Fm", "Gm"];
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
-const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, sectionBackgrounds: {} };
+const EMPTY_META: SongMeta = { title: "", artist: "", key: "", capo: 0, copyright: "", ccli: "", sectionBackgrounds: {} };
 
 // Edit a song as text, with a live preview of the slides it makes.
 export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorParams>) {
@@ -49,6 +49,8 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           artist: song.artist ?? "",
           key: song.key ?? "",
           capo: song.capo,
+          copyright: song.copyright ?? "",
+          ccli: song.ccli_number ?? "",
           sectionBackgrounds: sectionBackgroundsOf(song),
         });
         setText(songToText(songForText(song)));
@@ -168,6 +170,24 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             max={11}
             value={meta.capo}
             onChange={(e) => edit("capo", Number(e.target.value) || 0)}
+            className="h-9 rounded-cp border-cp bg-cp-bg px-2.5 font-mono"
+          />
+        </label>
+        <label className="flex min-w-48 flex-[2] flex-col gap-1">
+          <span className="cp-label">{t("editor.copyright")}</span>
+          <input
+            value={meta.copyright}
+            onChange={(e) => edit("copyright", e.target.value)}
+            placeholder={t("editor.copyrightPlaceholder")}
+            className="h-9 rounded-cp border-cp bg-cp-bg px-2.5 placeholder:text-cp-muted"
+          />
+        </label>
+        <label className="flex w-36 flex-col gap-1">
+          <span className="cp-label">{t("editor.ccli")}</span>
+          <input
+            value={meta.ccli}
+            inputMode="numeric"
+            onChange={(e) => edit("ccli", e.target.value)}
             className="h-9 rounded-cp border-cp bg-cp-bg px-2.5 font-mono"
           />
         </label>

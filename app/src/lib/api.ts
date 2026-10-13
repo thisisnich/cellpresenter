@@ -4,6 +4,7 @@
 // so same-origin holds in both worlds.
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
+import type { Look } from "../generated/Look";
 import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
@@ -92,6 +93,8 @@ export const api = {
   showDisplayOn: (screen: number | null) => request<Screens>("/api/screens/output", json("POST", { screen })),
 
   liveState: () => request<LiveState>("/api/live/state"),
+  /** Change how every screen looks (copyright line, …). */
+  setLook: (look: Look) => request<LiveState>("/api/look", json("PUT", look)),
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),
   showSong: (args: ShowSong) => request<LiveState>("/api/live/show-song", json("POST", args)),
   showItem: (args: ShowItem) => request<LiveState>("/api/live/show-item", json("POST", args)),

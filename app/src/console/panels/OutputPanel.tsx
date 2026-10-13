@@ -1,3 +1,4 @@
+import { footerLines } from "../../domain/credits";
 import { t } from "../../i18n";
 import { backgroundFor } from "../../display/SlideBackground";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
@@ -44,6 +45,7 @@ export function OutputPanel() {
             blankLabel={t("output.blackedOut")}
             background={state.background}
             hideText={state.text_hidden}
+            footer={footerLines(state.credits, state.look, state.slide_index)}
           />
         </div>
       </section>

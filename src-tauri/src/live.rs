@@ -26,6 +26,40 @@ pub struct Slide {
     pub section_cue: bool,
 }
 
+/// Who wrote a song and who owns it, for the copyright line on screen.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Credits {
+    pub title: String,
+    pub artist: Option<String>,
+    pub copyright: Option<String>,
+    pub ccli_number: Option<String>,
+}
+
+/// When the copyright line shows.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum FooterMode {
+    Off,
+    /// On a song's first slide (the usual CCLI practice).
+    #[default]
+    First,
+    /// On every slide of a song.
+    All,
+}
+
+/// How every screen looks, set once for the church.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Look {
+    #[serde(default)]
+    pub footer: FooterMode,
+    /// The church's CCLI licence number, shown in the copyright line.
+    #[serde(default)]
+    pub ccli_licence: Option<String>,
+}
+
 /// Live presentation state. The server owns it; every client renders from it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
 #[ts(export)]
@@ -57,6 +91,10 @@ pub struct LiveState {
     /// Operator's proportional lyric-size control. Part of the shared live
     /// state so every display scales identically.
     pub text_scale: f64,
+    /// The song on air's copyright details (None for announcements).
+    pub credits: Option<Credits>,
+    /// How the screens look; changed from the console's Screen panel.
+    pub look: Look,
 }
 
 /// Every change to live state, from any client. Local buttons, the phone
@@ -116,6 +154,8 @@ impl LiveState {
         self.song_id = song_id;
         self.title = title;
         self.slides = slides;
+        // Whoever shows a song sets these again; announcements have none.
+        self.credits = None;
         if cue.is_some() {
             self.background = cue;
         }

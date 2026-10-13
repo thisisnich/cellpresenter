@@ -3,7 +3,7 @@ import type { Song } from "../generated/Song";
 import { longestSlide, newId, songForText, toSongInput } from "./songEditing";
 import { parseSongText, songToText } from "./songText";
 
-const meta = { title: " It Is Well ", artist: "", key: "C", capo: 0, sectionBackgrounds: { Chorus: "hills" } };
+const meta = { title: " It Is Well ", artist: "", key: "C", capo: 0, copyright: " Public domain ", ccli: "", sectionBackgrounds: { Chorus: "hills" } };
 
 const stored: Song = {
   id: "song",

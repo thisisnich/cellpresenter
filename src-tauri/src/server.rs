@@ -21,7 +21,7 @@ use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
 use crate::db::{Db, DbResult, NewMedia};
-use crate::live::{Command, LiveState, Slide};
+use crate::live::{Command, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
 use crate::online::{self, OnlineError, OnlineSong, SearchHit, Source};
@@ -112,6 +112,19 @@ impl ServerState {
 // ---------- surviving a restart ----------
 
 const LIVE_STATE_KEY: &str = "live";
+const LOOK_KEY: &str = "look";
+
+/// Put a library song on air, with its copyright details.
+fn put_song(l: &mut LiveState, song: &Song, slides: Vec<Slide>, slide_index: usize) {
+    l.show(
+        Some(song.id.clone()),
+        song.title.clone(),
+        slides,
+        slide_index,
+        None,
+    );
+    l.credits = Some(song.credits());
+}
 
 /// The part of live state worth restoring after a restart or crash: which
 /// song, where in it, and how the screen looked.
@@ -136,7 +149,15 @@ impl ServerState {
             Ok(Some(json)) => serde_json::from_str::<SavedLive>(&json).ok(),
             _ => None,
         };
-        let Some(saved) = saved else { return };
+        let Some(saved) = saved else {
+            // Nothing was on air; the screens' look still comes back.
+            if let Ok(Some(json)) = self.db.get_state(LOOK_KEY).await {
+                if let Ok(look) = serde_json::from_str::<Look>(&json) {
+                    self.mutate(|l| l.look = look);
+                }
+            }
+            return;
+        };
         let mut restored = false;
         if let (Some(setlist_id), Some(item_id)) = (&saved.setlist_id, &saved.item_id) {
             if let Ok(Some(setlist)) = self.db.get_setlist(setlist_id).await {
@@ -160,9 +181,14 @@ impl ServerState {
             }
             None => None,
         };
+        let look = match self.db.get_state(LOOK_KEY).await {
+            Ok(Some(json)) => serde_json::from_str::<Look>(&json).unwrap_or_default(),
+            _ => Look::default(),
+        };
         self.mutate(|l| {
+            l.look = look;
             if let Some((song, slides)) = song {
-                l.show(Some(song.id), song.title, slides, saved.slide_index, None);
+                put_song(l, &song, slides, saved.slide_index);
             }
             // The background layer comes back as it was, not from cues.
             l.background = saved.background;
@@ -206,8 +232,14 @@ impl ServerState {
 
 // ---------- setlist items on air ----------
 
-/// What a setlist item puts on screen: song id, title, slides, background cue.
-type ItemContent = (Option<String>, String, Vec<Slide>, Option<String>);
+/// What a setlist item puts on screen.
+struct ItemContent {
+    song: Option<Song>,
+    title: String,
+    slides: Vec<Slide>,
+    /// The item's own background (announcements).
+    cue: Option<String>,
+}
 
 /// Where to start in an item's slides.
 #[derive(Clone, Copy)]
@@ -217,14 +249,18 @@ enum SlideAt {
 }
 
 impl ServerState {
-    /// The slides an item shows, or None if its song is gone.
-    /// Its song id (if any), title, slides and background cue.
+    /// What an item shows, or None if its song is gone.
     async fn item_content(&self, item: &SetlistItem) -> DbResult<Option<ItemContent>> {
         Ok(match item {
             SetlistItem::Song { song_id, .. } => match self.db.get_song(song_id).await? {
                 Some(song) => {
                     let slides = self.song_content(&song).await?;
-                    Some((Some(song.id), song.title, slides, None))
+                    Some(ItemContent {
+                        title: song.title.clone(),
+                        song: Some(song),
+                        slides,
+                        cue: None,
+                    })
                 }
                 None => None,
             },
@@ -235,7 +271,12 @@ impl ServerState {
                 ..
             } => {
                 let cue = self.background_url(background_id.as_deref()).await?;
-                Some((None, title.clone(), announcement_slides(title, text), cue))
+                Some(ItemContent {
+                    song: None,
+                    title: title.clone(),
+                    slides: announcement_slides(title, text),
+                    cue,
+                })
             }
         })
     }
@@ -248,8 +289,7 @@ impl ServerState {
             let slides = self.song_content(&song).await?;
             self.mutate(|l| {
                 let index = l.slide_index;
-                let (id, title) = (song.id.clone(), song.title.clone());
-                l.show(Some(id), title, slides, index, None);
+                put_song(l, &song, slides, index);
             });
         }
         Ok(song)
@@ -286,16 +326,25 @@ impl ServerState {
         let Some(item) = setlist.items.get(index) else {
             return Ok(None);
         };
-        let Some((song_id, title, slides, cue)) = self.item_content(item).await? else {
+        let Some(content) = self.item_content(item).await? else {
             return Ok(None);
         };
         let slide_index = match at {
             SlideAt::Index(i) => i,
-            SlideAt::Last => slides.len().saturating_sub(1),
+            SlideAt::Last => content.slides.len().saturating_sub(1),
         };
         let (setlist_id, item_id) = (setlist.id.clone(), item.id().to_string());
         Ok(Some(self.mutate(|l| {
-            l.show(song_id, title, slides, slide_index, cue);
+            match &content.song {
+                Some(song) => put_song(l, song, content.slides, slide_index),
+                None => l.show(
+                    None,
+                    content.title,
+                    content.slides,
+                    slide_index,
+                    content.cue,
+                ),
+            }
             l.setlist_id = Some(setlist_id);
             l.item_id = Some(item_id);
         })))
@@ -533,7 +582,7 @@ async fn live_show_song(
     let song = s.db.get_song(&args.song_id).await?.ok_or(NOT_FOUND)?;
     let slides = s.song_content(&song).await?;
     Ok(Json(s.mutate(|l| {
-        l.show(Some(song.id), song.title, slides, args.slide_index, None);
+        put_song(l, &song, slides, args.slide_index);
         l.setlist_id = None;
         l.item_id = None;
     })))
@@ -572,10 +621,9 @@ async fn update_song(
     // If this song is on air, show the edit straight away.
     if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
         let slides = s.song_content(&song).await?;
-        let (song_id, title) = (song.id.clone(), song.title.clone());
         s.mutate(|l| {
             let index = l.slide_index;
-            l.show(Some(song_id), title, slides, index, None);
+            put_song(l, &song, slides, index);
         });
     }
     Ok(Json(song))
@@ -833,6 +881,28 @@ async fn set_output(
     Ok(Json(outputs.screens()))
 }
 
+// ---------- how the screens look ----------
+
+/// Change how every screen looks. Saved, so it survives a restart.
+async fn set_look(
+    State(s): State<ServerState>,
+    Json(mut look): Json<Look>,
+) -> ApiResult<LiveState> {
+    look.ccli_licence = look
+        .ccli_licence
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    if look.ccli_licence.as_ref().is_some_and(|n| n.len() > 40) {
+        return Err(ApiError(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "licence_too_long",
+        ));
+    }
+    let json = serde_json::to_string(&look).expect("serialize look");
+    s.db.set_state(LOOK_KEY, &json).await?;
+    Ok(Json(s.mutate(|l| l.look = look)))
+}
+
 // ---------- online song search ----------
 
 #[derive(Deserialize)]
@@ -1023,6 +1093,7 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/look", axum::routing::put(set_look))
         // Reaching out to the internet is for whoever runs the show.
         .route("/online/search", get(search_online))
         .route("/online/song", get(fetch_online))
@@ -1303,6 +1374,45 @@ mod tests {
         assert_eq!(live.slide_index, 2);
         assert!(!live.visible);
         assert_ne!(live.session, first.snapshot().session);
+    }
+
+    #[tokio::test]
+    async fn songs_on_air_carry_their_credits_and_the_look_is_saved() {
+        let (router, first) = app(LOCAL).await;
+        let id = first.db.list_songs().await.unwrap()[0].id.clone();
+        let body = format!(r#"{{"song_id":"{id}"}}"#);
+        call(&router, "POST", "/api/live/show-song", Some(&body), None).await;
+        let credits = first.snapshot().credits.expect("credits");
+        assert_eq!(credits.copyright.as_deref(), Some("Public domain"));
+
+        let look = r#"{"footer":"all","ccli_licence":"  123456 "}"#;
+        let (status, _) = call(&router, "PUT", "/api/look", Some(look), None).await;
+        assert_eq!(status, StatusCode::OK);
+        let too_long = format!(r#"{{"footer":"off","ccli_licence":"{}"}}"#, "9".repeat(41));
+        let (status, _) = call(&router, "PUT", "/api/look", Some(&too_long), None).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        let (status, _) = call(
+            &router_for(first.clone(), PHONE),
+            "PUT",
+            "/api/look",
+            Some(look),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        // A fresh start with nothing on air still gets the look back.
+        let second = ServerState::new(
+            Arc::new(|_| None),
+            first.db.clone(),
+            PinGuard::new("1".into()),
+            9100,
+            first.media.clone(),
+        );
+        second.restore_live().await;
+        let live = second.snapshot();
+        assert_eq!(live.look.footer, crate::live::FooterMode::All);
+        assert_eq!(live.look.ccli_licence.as_deref(), Some("123456"));
     }
 
     #[tokio::test]

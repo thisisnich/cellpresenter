@@ -9,6 +9,9 @@ export interface SongMeta {
   artist: string;
   key: string;
   capo: number;
+  /** Who owns the song, e.g. "2016 Integrity Music", and its CCLI song number. */
+  copyright: string;
+  ccli: string;
   /** Background image (media id) per section name; missing or null keeps
    *  whatever background is showing. */
   sectionBackgrounds: Record<string, string | null>;
@@ -74,8 +77,8 @@ export function toSongInput(parsed: ParsedSong, meta: SongMeta, existing?: Song)
     artist: blank(meta.artist),
     key: blank(meta.key),
     capo: Math.min(11, Math.max(0, Math.round(meta.capo))),
-    ccli_number: existing?.ccli_number ?? null,
-    copyright: existing?.copyright ?? null,
+    ccli_number: blank(meta.ccli),
+    copyright: blank(meta.copyright),
     arrangement: naturalOrder ? null : arrangement,
     sections,
   };

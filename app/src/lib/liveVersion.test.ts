@@ -15,6 +15,8 @@ const state = (session: string, version: number): LiveState => ({
   text_hidden: false,
   background: null,
   text_scale: 1,
+  credits: null,
+  look: { footer: "first", ccli_licence: null },
 });
 
 describe("isNewer", () => {
