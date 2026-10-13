@@ -4,4 +4,4 @@ import type { ScriptureRef } from "./ScriptureRef";
 /**
  * An item as a client sends it. Ids are optional, as for songs.
  */
-export type SetlistItemInput = { "kind": "song", id: string | null, song_id: string, notes?: string, } | { "kind": "announcement", id: string | null, title: string, text: string, background_id: string | null, notes?: string, } | { "kind": "scripture", id: string | null, translation: string, passage: ScriptureRef, title: string, notes?: string, };
+export type SetlistItemInput = { "kind": "song", id: string | null, song_id: string, arrangement?: Array<string>, notes?: string, } | { "kind": "announcement", id: string | null, title: string, text: string, background_id: string | null, notes?: string, } | { "kind": "scripture", id: string | null, translation: string, passage: ScriptureRef, title: string, notes?: string, };

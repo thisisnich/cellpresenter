@@ -14,6 +14,11 @@ title: string, key: string | null,
  */
 missing: boolean, 
 /**
+ * This service's order of the song's sections (ids, repeats
+ * allowed); `None` plays the song's own arrangement.
+ */
+arrangement: Array<string> | null, 
+/**
  * The operator's note on this item, shown in the Notes panel.
  */
 notes: string, } | { "kind": "announcement", id: string, title: string, 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Song } from "../generated/Song";
-import { announcementSlides, playedSlides } from "./played";
+import { announcementSlides, orderFromSlides, playedSlides, songOrder, withArrangement } from "./played";
 
 const line = (text: string) => ({ text, chords: [] });
 const song = (arrangement: string[] | null): Song => ({
@@ -51,5 +51,21 @@ describe("announcementSlides", () => {
       "7 pm",
     ]);
     expect(announcementSlides("Welcome", "  ")).toEqual([{ section: "Welcome", text: "Welcome", background: null, slide_id: null, section_id: null, section_cue: false }]);
+  });
+});
+
+describe("a setlist's own order", () => {
+  it("plays the song in another order, skipping sections it no longer has", () => {
+    const s = withArrangement(song(null), ["c", "gone", "v", "c"]);
+    expect(playedSlides(s).map((x) => x.section)).toEqual(["Chorus", "Verse 1", "Chorus"]);
+    expect(withArrangement(song(["v"]), ["gone"]).arrangement).toEqual(["v"]);
+    expect(songOrder(song(null))).toEqual(["v", "c"]);
+  });
+
+  it("reads the order back from the slides on air, repeats included", () => {
+    const s = song(null);
+    s.sections[0].slides.push({ id: "v2", lines: [line("d")], background_id: null });
+    const onAir = playedSlides(withArrangement(s, ["c", "c", "v", "c"]));
+    expect(orderFromSlides(s, onAir)).toEqual(["c", "c", "v", "c"]);
   });
 });

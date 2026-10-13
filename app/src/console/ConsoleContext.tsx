@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { announcementSlides, playedSlides } from "../domain/played";
+import { announcementSlides, playedSlides, withArrangement } from "../domain/played";
 import type { Media } from "../generated/Media";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
@@ -56,7 +56,7 @@ const OPEN_SETLIST_KEY = "cellpresenter.setlist";
 export function itemInput(item: SetlistItem): SetlistItemInput {
   switch (item.kind) {
     case "song":
-      return { kind: "song", id: item.id, song_id: item.song_id, notes: item.notes };
+      return { kind: "song", id: item.id, song_id: item.song_id, notes: item.notes, arrangement: item.arrangement ?? undefined };
     case "scripture":
       return { kind: "scripture", id: item.id, translation: item.translation, passage: item.passage, title: item.title, notes: item.notes };
     case "announcement":
@@ -185,7 +185,9 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
         const preview = await api.biblePassage(item.translation, item.passage).catch(() => null);
         return preview && { title: preview.passage.label, slides: preview.slides, songId: null, cue: null };
       }
-      const s = await song(item.song_id);
+      const found = await song(item.song_id);
+      // In this setlist's order, if it has its own.
+      const s = found && withArrangement(found, item.arrangement);
       return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
     },
     [setlist, song, mediaUrl],

@@ -8,6 +8,7 @@ import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { isMediaDrag, MEDIA_DRAG_TYPE } from "../dragMedia";
 import { nextIndex, useLive } from "../LiveContext";
 import { SlidePreview } from "../SlidePreview";
+import { ArrangementEditor } from "../ArrangementEditor";
 
 const sectionColor = (name: string) => `var(--cp-section-${sectionKind(name)})`;
 
@@ -24,7 +25,8 @@ function isOnAir(selection: Selection, live: LiveState): boolean {
 // when that slide goes live, the background layer switches to the picture.
 export function SlidesPanel() {
   const { state, send, showSong, showItem } = useLive();
-  const { selection, select } = useConsole();
+  const { selection, select, setlist, saveSetlist } = useConsole();
+  const [editingOrder, setEditingOrder] = useState(false);
   const previewing = Boolean(state && selection && !isOnAir(selection, state));
   const { content, loading } = useContent(previewing ? selection : null);
   const [dropAt, setDropAt] = useState<number | null>(null);
@@ -77,6 +79,19 @@ export function SlidesPanel() {
     );
   }
   const arrangement = arrangementOf(slides.map((s) => s.section));
+  // A setlist song (the one previewed, or on air) can have its own order.
+  const itemId =
+    selection?.kind === "item" && selection.setlistId === setlist?.id
+      ? selection.itemId
+      : !previewing && state.setlist_id === setlist?.id
+        ? state.item_id
+        : null;
+  const item = setlist?.items.find((i) => i.id === itemId);
+  const songItem = item?.kind === "song" && !item.missing ? item : null;
+  const saveOrder = (order: string[] | null) =>
+    void saveSetlist((items) =>
+      items.map((i) => (i.id === songItem?.id && i.kind === "song" ? { ...i, arrangement: order ?? undefined } : i)),
+    );
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-cp-panel font-ui text-[13px] text-cp-text">
@@ -106,8 +121,22 @@ export function SlidesPanel() {
               {sectionAbbrev(section)}
             </span>
           ))}
+          {songItem && (
+            <button
+              type="button"
+              onClick={() => setEditingOrder((e) => !e)}
+              aria-expanded={editingOrder}
+              title={t("arrangement.editHelp")}
+              className={`ml-1 rounded-cp-sm border-cp px-2 py-0.5 text-[12px] ${editingOrder ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+            >
+              {editingOrder ? t("arrangement.done") : t("arrangement.edit")}
+            </button>
+          )}
         </div>
       </div>
+      {songItem && editingOrder && (
+        <ArrangementEditor songId={songItem.song_id} order={songItem.arrangement} onChange={saveOrder} />
+      )}
 
       <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3.5 overflow-y-auto p-4">
         {slides.map((slide, i) => {

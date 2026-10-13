@@ -906,6 +906,7 @@ struct SetlistItemRow {
     body: Option<String>,
     background_id: Option<String>,
     notes: Option<String>,
+    arrangement: Option<String>,
     song_title: Option<String>,
     song_key: Option<String>,
     song_deleted: Option<i64>,
@@ -945,7 +946,7 @@ impl Db {
         .await?;
         let Some(row) = row else { return Ok(None) };
         let items: Vec<SetlistItemRow> = sqlx::query_as(
-            "SELECT i.id, i.kind, i.song_id, i.title, i.body, i.background_id, i.notes,
+            "SELECT i.id, i.kind, i.song_id, i.title, i.body, i.background_id, i.notes, i.arrangement,
                     s.title AS song_title, s.song_key AS song_key, s.deleted_at AS song_deleted
              FROM setlist_items i LEFT JOIN songs s ON s.id = i.song_id
              WHERE i.setlist_id = ? AND i.deleted_at IS NULL ORDER BY i.position",
@@ -968,6 +969,10 @@ impl Db {
                         title: i.song_title.unwrap_or_default(),
                         key: i.song_key,
                         notes: i.notes.unwrap_or_default(),
+                        arrangement: i
+                            .arrangement
+                            .as_deref()
+                            .and_then(|a| serde_json::from_str(a).ok()),
                     },
                     "scripture" => match serde_json::from_str::<StoredScripture>(
                         i.body.as_deref().unwrap_or(""),
@@ -1092,8 +1097,18 @@ impl Db {
         let mut kept = HashSet::new();
         for (position, item) in items.iter().enumerate() {
             let stored;
+            let mut arrangement_json: Option<String> = None;
             let (requested, kind, song_id, title, body, background_id) = match item {
-                SetlistItemInput::Song { id, song_id, .. } => {
+                SetlistItemInput::Song {
+                    id,
+                    song_id,
+                    arrangement,
+                    ..
+                } => {
+                    arrangement_json = arrangement
+                        .as_ref()
+                        .filter(|a| !a.is_empty())
+                        .map(|a| serde_json::to_string(a).expect("serialize arrangement"));
                     (id, "song", Some(song_id.as_str()), None, None, None)
                 }
                 SetlistItemInput::Scripture {
@@ -1136,7 +1151,7 @@ impl Db {
             let notes = item.notes().map(str::trim).filter(|n| !n.is_empty());
             if own.contains(&item_id) {
                 sqlx::query(
-                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, background_id = ?, notes = ?, updated_at = ?, deleted_at = NULL
+                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, background_id = ?, notes = ?, arrangement = ?, updated_at = ?, deleted_at = NULL
                      WHERE id = ?",
                 )
                 .bind(position as i64)
@@ -1146,14 +1161,15 @@ impl Db {
                 .bind(body)
                 .bind(background_id)
                 .bind(notes)
+                .bind(&arrangement_json)
                 .bind(now)
                 .bind(&item_id)
                 .execute(&mut **tx)
                 .await?;
             } else {
                 sqlx::query(
-                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, background_id, notes, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, background_id, notes, arrangement, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&item_id)
                 .bind(&self.library_id)
@@ -1165,6 +1181,7 @@ impl Db {
                 .bind(body)
                 .bind(background_id)
                 .bind(notes)
+                .bind(&arrangement_json)
                 .bind(now)
                 .bind(now)
                 .execute(&mut **tx)
@@ -1442,6 +1459,7 @@ mod tests {
                 items: vec![SetlistItemInput::Song {
                     id: None,
                     song_id: song.id.clone(),
+                    arrangement: None,
                     notes: None,
                 }],
             })
@@ -1505,6 +1523,7 @@ mod tests {
                     SetlistItemInput::Song {
                         id: None,
                         song_id: a.id.clone(),
+                        arrangement: None,
                         notes: Some("  Key change after chorus 2 ".into()),
                     },
                     SetlistItemInput::Announcement {
@@ -1517,6 +1536,7 @@ mod tests {
                     SetlistItemInput::Song {
                         id: None,
                         song_id: b.id.clone(),
+                        arrangement: None,
                         notes: None,
                     },
                 ],
@@ -1546,11 +1566,13 @@ mod tests {
                         SetlistItemInput::Song {
                             id: Some(beta_id.clone()),
                             song_id: b.id.clone(),
+                            arrangement: None,
                             notes: None,
                         },
                         SetlistItemInput::Song {
                             id: Some(alpha_id.clone()),
                             song_id: a.id.clone(),
+                            arrangement: None,
                             notes: None,
                         },
                     ],

@@ -298,8 +298,24 @@ impl ServerState {
     /// What an item shows, or None if its song is gone.
     async fn item_content(&self, item: &SetlistItem) -> DbResult<Option<ItemContent>> {
         Ok(match item {
-            SetlistItem::Song { song_id, .. } => match self.db.get_song(song_id).await? {
-                Some(song) => {
+            SetlistItem::Song {
+                song_id,
+                arrangement,
+                ..
+            } => match self.db.get_song(song_id).await? {
+                Some(mut song) => {
+                    // This service's order, where it has one: only sections
+                    // the song still has, and none at all falls back.
+                    if let Some(order) = arrangement {
+                        let order: Vec<String> = order
+                            .iter()
+                            .filter(|id| song.sections.iter().any(|s| &s.id == *id))
+                            .cloned()
+                            .collect();
+                        if !order.is_empty() {
+                            song.arrangement = Some(order);
+                        }
+                    }
                     let slides = self.song_content(&song).await?;
                     Some(ItemContent {
                         title: song.title.clone(),
@@ -1831,6 +1847,51 @@ mod tests {
         assert_eq!(live.slide_index, 2);
         assert!(!live.visible);
         assert_ne!(live.session, first.snapshot().session);
+    }
+
+    #[tokio::test]
+    async fn a_setlist_song_plays_in_its_own_order() {
+        let (router, state) = app(LOCAL).await;
+        let summary = state.db.list_songs().await.unwrap()[0].clone();
+        let song = state.db.get_song(&summary.id).await.unwrap().unwrap();
+        let (a, b) = (&song.sections[0], &song.sections[1]);
+        let order = format!(r#"["{}","{}","gone","{}"]"#, b.id, a.id, b.id);
+        let body = format!(
+            r#"{{"name":"Sunday","items":[{{"kind":"song","song_id":"{}","arrangement":{order}}}]}}"#,
+            song.id
+        );
+        let (status, body) = call(&router, "POST", "/api/setlists", Some(&body), None).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let saved: Setlist = serde_json::from_str(&body).unwrap();
+        let SetlistItem::Song {
+            id, arrangement, ..
+        } = &saved.items[0]
+        else {
+            panic!("{saved:?}");
+        };
+        assert_eq!(arrangement.as_ref().map(Vec::len), Some(4));
+        let show = format!(r#"{{"setlist_id":"{}","item_id":"{id}"}}"#, saved.id);
+        let (status, _) = call(&router, "POST", "/api/live/show-item", Some(&show), None).await;
+        assert_eq!(status, StatusCode::OK);
+        // Sections in the service's order; the unknown id is skipped.
+        let mut played: Vec<String> = Vec::new();
+        for slide in state.snapshot().slides {
+            if played.last() != Some(&slide.section) {
+                played.push(slide.section);
+            }
+        }
+        assert_eq!(played, [b.name.clone(), a.name.clone(), b.name.clone()]);
+        // The song in the library keeps its own arrangement.
+        assert_eq!(
+            state
+                .db
+                .get_song(&song.id)
+                .await
+                .unwrap()
+                .unwrap()
+                .arrangement,
+            song.arrangement
+        );
     }
 
     #[tokio::test]

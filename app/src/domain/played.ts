@@ -12,6 +12,33 @@ export function playedSections(song: Song): Song["sections"] {
   return arranged.length > 0 ? arranged : song.sections;
 }
 
+/** The song's own play order as section ids (repeats allowed). */
+export function songOrder(song: Song): string[] {
+  return playedSections(song).map((s) => s.id);
+}
+
+/**
+ * The song played in another order (a setlist's): ids the song doesn't have
+ * are skipped, and an order with none left plays the song's own.
+ */
+export function withArrangement(song: Song, order: string[] | null | undefined): Song {
+  const known = new Set(song.sections.map((s) => s.id));
+  const kept = (order ?? []).filter((id) => known.has(id));
+  return kept.length > 0 ? { ...song, arrangement: kept } : song;
+}
+
+/**
+ * The order the song is being played in, read back from the slides on air:
+ * each time a section's first slide comes up, that section starts again.
+ * Lets a chord sheet follow any order the operator chose.
+ */
+export function orderFromSlides(song: Song, slides: Pick<Slide, "slide_id" | "section_id">[]): string[] {
+  const first = new Map(song.sections.map((s) => [s.id, s.slides[0]?.id]));
+  return slides.flatMap((slide) =>
+    slide.section_id && slide.slide_id && first.get(slide.section_id) === slide.slide_id ? [slide.section_id] : [],
+  );
+}
+
 /**
  * A song's slides in play order (its arrangement, else section order).
  * A slide's background cue is its own, else its section's; `urlOf` turns

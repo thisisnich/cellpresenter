@@ -19,6 +19,10 @@ pub enum SetlistItem {
         key: Option<String>,
         /// The song was deleted from the library.
         missing: bool,
+        /// This service's order of the song's sections (ids, repeats
+        /// allowed); `None` plays the song's own arrangement.
+        #[serde(default)]
+        arrangement: Option<Vec<String>>,
         /// The operator's note on this item, shown in the Notes panel.
         #[serde(default)]
         notes: String,
@@ -105,6 +109,9 @@ pub enum SetlistItemInput {
         #[serde(default)]
         id: Option<String>,
         song_id: String,
+        #[serde(default)]
+        #[ts(optional)]
+        arrangement: Option<Vec<String>>,
         #[serde(default)]
         #[ts(optional)]
         notes: Option<String>,

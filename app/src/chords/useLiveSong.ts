@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { orderFromSlides, withArrangement } from "../domain/played";
 import type { Song } from "../generated/Song";
 import { api } from "../lib/api";
 import type { LiveState } from "../lib/ws";
@@ -26,5 +27,11 @@ export function useLiveSong(state: LiveState | null): Song | null {
       cancelled = true;
     };
   }, [songId, contentKey]);
-  return song && song.id === songId ? song : null;
+  // In the order actually on air (a setlist can play its own), so the
+  // chord sheet lines up with the live slides whatever the order.
+  const slides = state?.slides;
+  return useMemo(() => {
+    if (!song || song.id !== songId) return null;
+    return slides ? withArrangement(song, orderFromSlides(song, slides)) : song;
+  }, [song, songId, slides]);
 }
