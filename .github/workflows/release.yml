@@ -38,6 +38,12 @@ jobs:
             os: windows-latest
             target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
+    env:
+      # The AppImage must use the system's Wayland libraries: Ubuntu 22.04's
+      # are too old for newer graphics drivers, and WebKit then can't start
+      # ("Could not create default EGL display", seen on Fedora 44). Every
+      # Linux desktop has its own, since GTK needs them.
+      LINUXDEPLOY_EXCLUDED_LIBRARIES: "libwayland-*"
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +97,17 @@ jobs:
           # GitHub never counts a pre-release as.
           prerelease: false
           updaterJsonPreferNsis: true
+
+      - name: Check the AppImage leaves out Wayland
+        if: runner.os == 'Linux'
+        run: |
+          image=$(ls src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage | head -1)
+          cd "$(mktemp -d)" && "$OLDPWD/$image" --appimage-extract >/dev/null
+          if ls squashfs-root/usr/lib | grep -q '^libwayland'; then
+            echo "::error::The AppImage bundles libwayland; it crashes on newer distributions"
+            ls squashfs-root/usr/lib | grep '^libwayland'
+            exit 1
+          fi
 
       - name: Build only (no tag)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
