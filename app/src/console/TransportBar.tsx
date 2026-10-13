@@ -36,7 +36,7 @@ export function TransportBar() {
 
   const disabled = !state;
   return (
-    <footer className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-4 py-2.5 font-ui text-[13px] text-cp-text">
+    <footer data-guide="transport" className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-4 py-2.5 font-ui text-[13px] text-cp-text">
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"

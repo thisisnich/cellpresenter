@@ -28,7 +28,7 @@ export function ChordsPanel() {
     <div className="flex h-full flex-col bg-cp-panel font-ui text-[13px] text-cp-text">
       <div className="flex flex-wrap items-end justify-between gap-3 border-b-cp px-4 py-2.5">
         <h1 className="m-0 text-lg font-semibold">{song.title}</h1>
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3" data-guide="chord-controls">
           <ChordControls songKey={song.key} semitones={prefs.semitones} capo={prefs.capo} onChange={setPrefs} compact />
           <TextSizeButtons scale={view.fontScale} onChange={(fontScale) => setView({ fontScale })} compact />
         </div>

@@ -113,7 +113,7 @@ export function ScreenPanel() {
         <SlidePreview text={slide?.text || SAMPLE} textScale={state.text_scale} background={state.background} footer={footer} look={look} />
       </div>
 
-      <section className="flex flex-col gap-2.5" aria-labelledby="screen-text">
+      <section className="flex flex-col gap-2.5" aria-labelledby="screen-text" data-guide="screen-look">
         <div className="flex items-center justify-between gap-2">
           <h3 id="screen-text" className="cp-label m-0">
             {t("screen.text")}
@@ -178,7 +178,7 @@ export function ScreenPanel() {
         </label>
       </section>
 
-      <section className="flex flex-col gap-2" aria-labelledby="screen-footer">
+      <section className="flex flex-col gap-2" aria-labelledby="screen-footer" data-guide="screen-footer">
         <h3 id="screen-footer" className="cp-label m-0">
           {t("screen.footer")}
         </h3>

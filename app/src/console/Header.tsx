@@ -32,6 +32,7 @@ export function Header({
   onAddPanel: (kind: PanelKind) => void;
 }) {
   const [layoutOpen, setLayoutOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const { status } = useLive();
   const clock = useClock();
   const guide = useGuide();
@@ -66,6 +67,7 @@ export function Header({
             type="button"
             onClick={() => setLayoutOpen((o) => !o)}
             aria-expanded={layoutOpen}
+            data-guide="layout"
             className={`rounded-cp border-cp px-2.5 py-1 ${layoutOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
           >
             {t("layout.label")} {layoutOpen ? "‹" : "›"}
@@ -96,7 +98,7 @@ export function Header({
           )}
         </div>
       </div>
-      <div className="flex items-center gap-4 text-cp-muted">
+      <div className="flex items-center gap-4 text-cp-muted" data-guide="status">
         {pin && (
           <span title={t("header.remotePinHelp")} className="inline-flex items-center gap-1.5">
             {t("header.remotePin")}
@@ -111,15 +113,40 @@ export function Header({
           {t(`connection.${status}`)}
         </span>
         <UpdateButton />
-        <button
-          type="button"
-          onClick={() => guide?.open()}
-          aria-label={t("guide.open")}
-          title={t("guide.open")}
-          className="size-8 rounded-full border-cp text-cp-muted hover:text-cp-text"
+        <div
+          className="relative"
+          onBlur={(e) => !e.currentTarget.contains(e.relatedTarget) && setGuideOpen(false)}
+          onKeyDown={(e) => e.key === "Escape" && setGuideOpen(false)}
         >
-          ?
-        </button>
+          <button
+            type="button"
+            onClick={() => setGuideOpen((o) => !o)}
+            aria-expanded={guideOpen}
+            aria-label={t("guide.open")}
+            title={t("guide.open")}
+            data-guide="guide"
+            className="size-8 rounded-full border-cp text-cp-muted hover:text-cp-text"
+          >
+            ?
+          </button>
+          {guideOpen && (
+            <div className="absolute right-0 top-10 z-30 flex w-56 flex-col rounded-cp border-cp bg-cp-chrome p-1 shadow-2xl">
+              {(["start", page] as const).map((tour) => (
+                <button
+                  key={tour}
+                  type="button"
+                  onClick={() => {
+                    setGuideOpen(false);
+                    guide?.open(tour);
+                  }}
+                  className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-surface-hi"
+                >
+                  {tour === "start" ? t("guide.startTour") : t("guide.pageTour", { page: t(`mode.${page}`) })}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <DisplayLink />
       </div>
     </header>

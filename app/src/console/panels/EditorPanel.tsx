@@ -165,7 +165,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           {t("editor.fromOnline", { site: t(`search.source.${draft.source}`) })}
         </p>
       )}
-      <div className="flex flex-wrap items-end gap-3 border-b-cp p-3">
+      <div className="flex flex-wrap items-end gap-3 border-b-cp p-3" data-guide="editor-details">
         <label className="flex min-w-48 flex-[2] flex-col gap-1">
           <span className="cp-label">{t("editor.title")}</span>
           <input
@@ -220,7 +220,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       </div>
 
       {parsed.sections.length > 0 && (
-        <details className="border-b-cp px-4 py-2" open={Object.values(meta.sectionBackgrounds).some(Boolean) || undefined}>
+        <details data-guide="editor-backgrounds" className="border-b-cp px-4 py-2" open={Object.values(meta.sectionBackgrounds).some(Boolean) || undefined}>
           <summary className="cp-label cursor-pointer py-1">
             {t("editor.sectionBackgrounds")}
             {(() => {
@@ -256,7 +256,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       {/* A wrapping row sizes to its content, so cap each side at the row's
           height: wide, the preview scrolls; narrow, the whole row does. */}
       <div className="flex min-h-0 flex-1 flex-wrap overflow-y-auto">
-        <label className="flex max-h-full min-h-64 min-w-0 flex-[1_1_380px] flex-col">
+        <label className="flex max-h-full min-h-64 min-w-0 flex-[1_1_380px] flex-col" data-guide="editor-text">
           <span className="sr-only">{t("editor.lyrics")}</span>
           <textarea
             value={text}
@@ -267,7 +267,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           />
         </label>
 
-        <section aria-label={t("editor.preview")} className="flex max-h-full min-w-0 flex-[1_1_320px] flex-col overflow-hidden border-l-cp">
+        <section aria-label={t("editor.preview")} data-guide="editor-preview" className="flex max-h-full min-w-0 flex-[1_1_320px] flex-col overflow-hidden border-l-cp">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-cp px-3 py-2">
             <span className="cp-label">{t("editor.previewCount", { count: played.length })}</span>
             <div className="flex flex-wrap gap-1">
@@ -324,7 +324,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
 
       <div role="group" aria-label={t("panel.actions")} className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-cp-muted" title={t("editor.slidesHelp")}>
+          <label className="flex items-center gap-2 text-cp-muted" title={t("editor.slidesHelp")} data-guide="editor-split">
             {t("editor.slides")}
             <select
               value={linesPerSlide}
@@ -345,7 +345,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-guide="editor-save">
           {confirm === "delete" ? (
             <>
               <span className="text-cp-danger">{t("editor.confirmDelete")}</span>
