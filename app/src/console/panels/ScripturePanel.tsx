@@ -293,7 +293,7 @@ export function ScripturePanel() {
         )}
       </div>
 
-      <footer className="flex flex-col gap-2 border-t-cp bg-cp-chrome p-2.5">
+      <div role="group" aria-label={t("panel.actions")} className="flex flex-col gap-2 border-t-cp bg-cp-chrome p-2.5">
         {message && (
           <p role={message.ok ? "status" : "alert"} className={`m-0 text-[12px] ${message.ok ? "text-cp-muted" : "text-cp-danger"}`}>
             {message.text}
@@ -312,7 +312,7 @@ export function ScripturePanel() {
             </button>
           </div>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }

@@ -279,7 +279,12 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
               ))}
             </div>
           </div>
-          <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto p-3">
+          {/* Focusable so the keyboard can scroll it too. */}
+          <div
+            tabIndex={0}
+            aria-label={t("editor.preview")}
+            className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto p-3"
+          >
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
               <div key={i} className="group overflow-hidden rounded-cp border-cp">
@@ -317,7 +322,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
         </section>
       </div>
 
-      <footer className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-3 py-2.5">
+      <div role="group" aria-label={t("panel.actions")} className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-cp-muted" title={t("editor.slidesHelp")}>
             {t("editor.slides")}
@@ -369,7 +374,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
             {saving ? t("editor.saving") : t("editor.save")}
           </button>
         </div>
-      </footer>
+      </div>
     </div>
   );
 }

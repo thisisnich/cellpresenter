@@ -37,7 +37,7 @@ export default function ChordsApp() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className={`size-2 rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} aria-label={t(`connection.${status}`)} />
+          <span role="img" className={`size-2 rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} aria-label={t(`connection.${status}`)} />
           <TextSizeButtons scale={view.fontScale} onChange={(fontScale) => setView({ fontScale })} />
           <button type="button" onClick={() => setShowSettings((s) => !s)} aria-expanded={showSettings} className="cp-btn h-10 px-3">
             {t("chords.settings")}

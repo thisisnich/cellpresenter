@@ -109,3 +109,9 @@ body,
 .dockview-theme-cp .dv-groupview.dv-active-group .dv-tab.dv-active-tab {
   box-shadow: inset 0 -2px 0 var(--cp-live);
 }
+
+/* Keyboard focus on panel tabs (Dockview draws none of its own). */
+.dockview-theme-cp .dv-tab:focus-visible {
+  outline: 2px solid var(--cp-live);
+  outline-offset: -2px;
+}

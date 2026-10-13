@@ -74,6 +74,7 @@ export const en = {
   "panel.backup": "Backups",
   "panel.bin": "Recycle bin",
   "panel.scripture": "Scripture",
+  "panel.actions": "Actions",
   "panel.search": "Find songs",
 
   "setlist.tonight": "Tonight",
@@ -381,6 +382,7 @@ export const en = {
   "connection.connecting": "Connecting…",
   "connection.closed": "Disconnected",
 
+  "remote.heading": "CellPresenter remote control",
   "remote.pinTitle": "Enter the remote PIN",
   "remote.pinHelp": "It's in the top bar of CellPresenter on the presenting computer.",
   "remote.pinEntered": "{count} of 4 digits entered",

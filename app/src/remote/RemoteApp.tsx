@@ -100,6 +100,7 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
   return (
     <LookContext.Provider value={state.look}>
       <main className="flex h-dvh flex-col gap-3 bg-cp-bg p-3 font-ui text-cp-text select-none">
+        <h1 className="sr-only">{t("remote.heading")}</h1>
         <header className="flex items-center justify-between gap-3">
           <button type="button" onClick={() => setPicking(true)} className="flex min-w-0 flex-1 flex-col items-start text-left">
             <span className="text-xs text-cp-muted">{t("remote.changeSong")} ▾</span>

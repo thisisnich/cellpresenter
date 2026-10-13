@@ -63,7 +63,7 @@ export default function DisplayApp() {
 
   return (
     <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>
-      <div className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(appWindow)}>
+      <main className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(appWindow)}>
         <Stage backdrop={state && shown ? <SlideBackground url={background} /> : null}>
           {/* Sizes here are stage pixels (1920 wide), so messages stay readable
               when the stage is scaled down to a phone. Blacked out = nothing. */}
@@ -98,7 +98,7 @@ export default function DisplayApp() {
             {status === "connecting" ? t("connection.connecting") : t("display.reconnecting")}
           </p>
         )}
-      </div>
+      </main>
     </LookContext.Provider>
   );
 }

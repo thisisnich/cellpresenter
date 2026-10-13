@@ -80,9 +80,12 @@ export function ChordSheet({
             style={isLive ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
           >
             {startsSection && (
-              <h3 className="m-0 mb-1 flex items-center gap-2 text-[0.75em] font-semibold tracking-wide uppercase" style={{ color: sectionColor(slide.section) }}>
+              <h2
+                className="m-0 mb-1 inline-block rounded-cp-sm px-1.5 py-0.5 text-[0.7em] font-semibold tracking-wide text-white uppercase"
+                style={{ background: sectionColor(slide.section) }}
+              >
                 {slide.section}
-              </h3>
+              </h2>
             )}
             {(isLive || isNext) && (
               <span className={`float-right font-mono text-[0.65em] font-bold ${isLive ? "text-cp-live" : "text-cp-next"}`}>
