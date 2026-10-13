@@ -85,6 +85,7 @@ export const en = {
   "setlist.intro": "Open a setlist, or press New to start tonight's.",
   "setlist.empty": "Add songs from the Library with +, or add an announcement.",
   "setlist.announcement": "Announcement",
+  "setlist.scripture": "BIBLE",
   "setlist.notice": "NOTICE",
   "setlist.missingSong": "Song deleted from the library",
   "setlist.editItem": "Edit {title}",

@@ -136,7 +136,7 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
         )}
 
         {jumps.length > 1 && (
-          <nav aria-label={t("remote.sections")} className="flex gap-2 overflow-x-auto pb-1">
+          <nav aria-label={t("remote.sections")} className="flex flex-wrap gap-2">
             {jumps.map((jump) => {
               const on = jump === here;
               return (

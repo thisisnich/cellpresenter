@@ -132,14 +132,24 @@ export function SetlistPanel() {
                 className="grid min-w-0 flex-1 grid-cols-[20px_minmax(0,1fr)_auto] items-center gap-2 px-2 py-2 text-left"
               >
                 <span className="font-mono text-[11px] text-cp-muted">{index + 1}</span>
-                <span className={`truncate ${item.kind === "song" && item.missing ? "text-cp-danger" : ""}`}>{itemLabel(item)}</span>
-                {item.notes && (
-                  <span className="shrink-0 rounded-cp-sm border-cp px-1 text-[10px] text-cp-muted" title={item.notes}>
-                    {t("notes.badge")}
-                  </span>
-                )}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className={`truncate ${item.kind === "song" && item.missing ? "text-cp-danger" : ""}`}>{itemLabel(item)}</span>
+                  {item.notes && (
+                    <span className="shrink-0 rounded-cp-sm border-cp px-1 text-[10px] text-cp-muted" title={item.notes}>
+                      {t("notes.badge")}
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono text-[10px] text-cp-muted">
-                  {onAir ? <span className="font-bold text-cp-live">{t("slides.live")}</span> : item.kind === "song" ? (item.key ?? "") : t("setlist.notice")}
+                  {onAir ? (
+                    <span className="font-bold text-cp-live">{t("slides.live")}</span>
+                  ) : item.kind === "song" ? (
+                    (item.key ?? "")
+                  ) : item.kind === "scripture" ? (
+                    t("setlist.scripture")
+                  ) : (
+                    t("setlist.notice")
+                  )}
                 </span>
               </button>
               <div className="flex items-center gap-0.5 pr-1 opacity-60 group-hover:opacity-100 focus-within:opacity-100">

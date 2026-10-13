@@ -7,11 +7,11 @@ import type { Page } from "./pages";
 // page; the result is saved per machine and per page, and Reset brings the
 // default back.
 //   Show:   setlist + library, scripture | slides (notes) | output (media, screen)
-//   Edit:   library, find songs | song editors | media, backups, recycle bin
+//   Edit:   library, find songs / media, backups, recycle bin | song editors
 //   Chords: setlist | chords | output
 
 // Bump the version when panels change, so old saved layouts are dropped.
-const storageKey = (page: Page) => `cellpresenter.layout.v12.${page}`;
+const storageKey = (page: Page) => `cellpresenter.layout.v13.${page}`;
 
 export function buildDefaultLayout(api: DockviewApi, page: Page): void {
   api.clear();
@@ -94,12 +94,14 @@ function buildEdit(api: DockviewApi): void {
     position: { referencePanel: "library", direction: "within" },
     inactive: true,
   });
+  // Below the library, so the editor gets the rest of the width: on a
+  // laptop that's what fits the text and its slide preview side by side.
   api.addPanel({
     id: "media",
     component: "media",
     title: t("panel.media"),
-    position: { referencePanel: "start", direction: "right" },
-    initialWidth: 300,
+    position: { referencePanel: "library", direction: "below" },
+    initialHeight: 320,
   });
   api.addPanel({
     id: "backup",
