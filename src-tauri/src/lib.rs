@@ -12,6 +12,7 @@ mod seed;
 mod server;
 mod setlist;
 mod song;
+mod updates;
 
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -24,6 +25,7 @@ use db::Db;
 use media::MediaStore;
 use outputs::{Outputs, Screen, Screens};
 use server::{ServerState, WebAsset};
+use updates::{AvailableUpdate, Pending, Updater};
 
 const DEV_WEBVIEW_URL: &str = "http://localhost:5173";
 const LIBRARY_FILE: &str = "library.db";
@@ -171,6 +173,52 @@ impl WindowOutputs {
     }
 }
 
+/// Updates from GitHub releases through Tauri's updater, which checks each
+/// download against the public key in tauri.conf.json.
+struct AppUpdater {
+    app: AppHandle,
+    /// The update the last check found, kept for `install`.
+    found: Arc<tokio::sync::Mutex<Option<tauri_plugin_updater::Update>>>,
+}
+
+impl Updater for AppUpdater {
+    fn check(&self) -> Pending<Option<AvailableUpdate>> {
+        use tauri_plugin_updater::UpdaterExt;
+        let (app, found) = (self.app.clone(), self.found.clone());
+        Box::pin(async move {
+            let update = app
+                .updater()
+                .map_err(|e| e.to_string())?
+                .check()
+                .await
+                .map_err(|e| e.to_string())?;
+            let available = update.as_ref().map(|u| AvailableUpdate {
+                version: u.version.clone(),
+                notes: u.body.clone(),
+            });
+            *found.lock().await = update;
+            Ok(available)
+        })
+    }
+
+    fn install(&self) -> Pending<()> {
+        let (app, found) = (self.app.clone(), self.found.clone());
+        Box::pin(async move {
+            let update = found.lock().await.take().ok_or("no update to install")?;
+            update
+                .download_and_install(|_, _| {}, || {})
+                .await
+                .map_err(|e| e.to_string())?;
+            // The new version starts in a moment; answer the request first.
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                app.restart();
+            });
+            Ok(())
+        })
+    }
+}
+
 /// Run `f` on the main thread (where windows live) and wait for its answer.
 fn on_main_thread<T: Send + 'static>(
     app: &AppHandle,
@@ -260,6 +308,7 @@ async fn open_library(app: &AppHandle) -> Result<Db, String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let handle = app.handle().clone();
             let report = |msg: String| {
@@ -303,7 +352,11 @@ pub fn run() {
                 .map_err(|e| report(format!("can't create {}: {e}", backup_dir.display())))?;
             let state = ServerState::new(assets, db, pins, port, media)
                 .with_outputs(outputs)
-                .with_backups(backups);
+                .with_backups(backups)
+                .with_updater(Arc::new(AppUpdater {
+                    app: handle.clone(),
+                    found: Arc::default(),
+                }));
             tauri::async_runtime::block_on(async {
                 state.restore_live().await;
             });

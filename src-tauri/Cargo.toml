@@ -31,6 +31,8 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 open = "5"
 # The bundled Bibles are gzipped.
 flate2 = "1.1"
+# Checks GitHub for a newer release and installs it (signed updates).
+tauri-plugin-updater = "=2.13.0"
 # Backups are zip files.
 zip = { version = "8.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 

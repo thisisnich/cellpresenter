@@ -4,6 +4,11 @@ name: Release
 # and attach them to a draft GitHub release. Check the draft, then publish
 # it by hand. "Run workflow" builds the same installers without a tag, as
 # workflow artifacts, to check a build before tagging.
+#
+# Releases also carry signed update files and latest.json, which installed
+# apps read to update themselves (tauri.release.conf.json turns them on).
+# The signing key is the TAURI_SIGNING_PRIVATE_KEY secret (and its
+# password); the public half is in tauri.conf.json.
 
 on:
   push:
@@ -64,8 +69,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          args: --target ${{ matrix.target }}
+          args: --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
           tagName: ${{ github.ref_name }}
           releaseName: CellPresenter ${{ github.ref_name }}
           releaseBody: |
@@ -76,11 +83,17 @@ jobs:
             - **Windows:** `CellPresenter_*_x64-setup.exe` (or the `.msi`)
             - **Linux:** `.AppImage` (any distro), `.deb` (Ubuntu, Debian) or `.rpm` (Fedora)
           releaseDraft: true
-          prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
+          # Installed apps look for updates in the latest release, which
+          # GitHub never counts a pre-release as.
+          prerelease: false
+          updaterJsonPreferNsis: true
 
       - name: Build only (no tag)
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        run: npx tauri build --target ${{ matrix.target }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
       - name: Keep the installers
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}

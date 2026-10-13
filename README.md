@@ -41,6 +41,8 @@ The apps aren't code-signed yet, so your computer will warn you the first time:
 - **Windows:** if SmartScreen says "Windows protected your PC", click **More info**, then **Run anyway**.
 - **Linux (AppImage):** make it executable with `chmod +x CellPresenter_*.AppImage`, then run it.
 
+**Updates:** from v0.5 the app checks for new releases and shows **Update to …** in the top bar of the console; press it when it suits you and the app restarts into the new version. On Linux this works for the AppImage; `.deb` and `.rpm` installs update by downloading the new package.
+
 When the app first starts, allow it through the firewall if asked, so phones and tablets can connect. It listens on port 9100 (or the next free port up to 9109).
 
 ## Using it
@@ -124,7 +126,9 @@ Bump the version in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-The [Release workflow](.github/workflows/release.yml) builds the Mac, Windows and Linux installers and attaches them to a **draft** release. Check the draft, then publish it. Running the workflow by hand ("Run workflow") builds the installers without a release, to test a build.
+The [Release workflow](.github/workflows/release.yml) builds the Mac, Windows and Linux installers and attaches them to a **draft** release, with signed update files and `latest.json` for the app's updater. Check the draft, then publish it: installed apps offer the update once it's published.
+
+Updates are signed with a private key kept as the `TAURI_SIGNING_PRIVATE_KEY` (and `…_PASSWORD`) repository secrets; the public key is in `tauri.conf.json`. Keep a copy of the private key somewhere safe: without it, installed apps can never be updated again. Builds from source don't need it (`tauri.release.conf.json`, which turns on update files, is only used by the workflow). Running the workflow by hand ("Run workflow") builds the installers without a release, to test a build.
 
 ## Licence
 

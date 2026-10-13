@@ -4,6 +4,7 @@
 // so same-origin holds in both worlds.
 import type { BackupInfo } from "../generated/BackupInfo";
 import type { ApiBibleSetup } from "../generated/ApiBibleSetup";
+import type { UpdateStatus } from "../generated/UpdateStatus";
 import type { BibleInfo } from "../generated/BibleInfo";
 import type { BibleSources } from "../generated/BibleSources";
 import type { BackupList } from "../generated/BackupList";
@@ -98,6 +99,11 @@ export const api = {
   network: () => request<NetworkInfo>("/api/network"),
   /** Resolves if this device may control slides (PIN accepted or local). */
   checkControl: () => request<void>("/api/control/check"),
+
+  /** Whether a newer release is out (the app checks GitHub). */
+  checkUpdate: () => request<UpdateStatus>("/api/update"),
+  /** Install it and restart (this computer only). */
+  installUpdate: () => request<void>("/api/update/install", { method: "POST" }),
 
   screens: () => request<Screens>("/api/screens"),
   showDisplayOn: (screen: number | null) => request<Screens>("/api/screens/output", json("POST", { screen })),

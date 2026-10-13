@@ -31,6 +31,7 @@ use crate::online::{self, OnlineError, OnlineSong, SearchHit, Source};
 use crate::outputs::{OutputChoice, Outputs, Screens};
 use crate::setlist::{announcement_slides, Setlist, SetlistInput, SetlistItem, SetlistSummary};
 use crate::song::{Song, SongInput, SongSummary};
+use crate::updates::{UpdateStatus, Updater};
 
 /// Preferred port. The Vite dev proxy targets it, so dev builds use it only.
 pub const DEFAULT_PORT: u16 = 9100;
@@ -70,6 +71,7 @@ pub struct ServerState {
     media: MediaStore,
     outputs: Option<Arc<dyn Outputs>>,
     backups: Option<Arc<Backups>>,
+    updater: Option<Arc<dyn Updater>>,
 }
 
 impl ServerState {
@@ -86,12 +88,18 @@ impl ServerState {
             media,
             outputs: None,
             backups: None,
+            updater: None,
         }
     }
 
     /// Let the console move the Display window between screens.
     pub fn with_outputs(mut self, outputs: Arc<dyn Outputs>) -> Self {
         self.outputs = Some(outputs);
+        self
+    }
+
+    pub fn with_updater(mut self, updater: Arc<dyn Updater>) -> Self {
+        self.updater = Some(updater);
         self
     }
 
@@ -1163,6 +1171,45 @@ async fn live_show_scripture(
     })))
 }
 
+// ---------- updates ----------
+
+/// Whether a newer release is out. Headless servers and dev builds without
+/// an updater just report their own version.
+async fn check_update(State(s): State<ServerState>) -> ApiResult<UpdateStatus> {
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let Some(updater) = &s.updater else {
+        return Ok(Json(UpdateStatus {
+            current,
+            available: None,
+        }));
+    };
+    let available = updater.check().await.map_err(|e| {
+        eprintln!("cellpresenter: update check failed: {e}");
+        ApiError(StatusCode::BAD_GATEWAY, "unavailable")
+    })?;
+    Ok(Json(UpdateStatus { current, available }))
+}
+
+/// Install the update and restart. Only from this computer: the app goes
+/// away for a moment, which the person at it should choose.
+async fn install_update(
+    State(s): State<ServerState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> Result<StatusCode, ApiError> {
+    if !peer.ip().is_loopback() {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    let updater = s
+        .updater
+        .as_ref()
+        .ok_or(ApiError(StatusCode::NOT_IMPLEMENTED, "no_updater"))?;
+    updater.install().await.map_err(|e| {
+        eprintln!("cellpresenter: update failed: {e}");
+        ApiError(StatusCode::BAD_GATEWAY, "update_failed")
+    })?;
+    Ok(StatusCode::ACCEPTED)
+}
+
 // ---------- recycle bin ----------
 
 async fn recycle_bin(State(s): State<ServerState>) -> ApiResult<RecycleBin> {
@@ -1473,6 +1520,7 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/update/install", post(install_update))
         .route("/live/show-scripture", post(live_show_scripture))
         .route("/bible/sources", get(bible_sources))
         .route("/bible/sources/esv", axum::routing::put(set_esv_key))
@@ -1526,6 +1574,7 @@ pub fn router(state: ServerState) -> Router {
         .route("/songs", get(list_songs))
         .route("/songs/{id}", get(get_song))
         .route("/bible", get(bible_info))
+        .route("/update", get(check_update))
         .route("/bible/passage", post(bible_passage))
         .route("/setlists", get(list_setlists))
         .route("/media", get(list_media))
@@ -1833,6 +1882,22 @@ mod tests {
         let unknown = format!(r#"{{"translation":"niv","passage":{john}}}"#);
         let (status, _) = call(&router, "POST", "/api/bible/passage", Some(&unknown), None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn updates_report_the_version_and_install_only_here() {
+        let (router, state) = app(LOCAL).await;
+        let (status, body) = call(&router, "GET", "/api/update", None, None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(
+            body.contains(env!("CARGO_PKG_VERSION")) && body.contains(r#""available":null"#),
+            "{body}"
+        );
+        let phone = router_for(state, PHONE);
+        let (status, _) = call(&phone, "POST", "/api/update/install", None, Some("4321")).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        let (status, _) = call(&router, "POST", "/api/update/install", None, None).await;
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
     }
 
     #[tokio::test]

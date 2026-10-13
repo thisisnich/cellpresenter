@@ -15,6 +15,12 @@ export const en = {
   "layout.reset": "Reset",
   "layout.resetHelp": "Put every panel back where it started",
   "header.copied": "Copied",
+  "update.available": "Update to {version}",
+  "update.confirm": "Install {version} and restart? Screens go dark for a few seconds.",
+  "update.install": "Install",
+  "update.later": "Not now",
+  "update.installing": "Installing… CellPresenter restarts by itself",
+  "update.failed": "Update failed; try again later",
   "header.remotePin": "Remote PIN",
 
   "displayLink.button": "Display link",

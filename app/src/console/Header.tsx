@@ -5,6 +5,7 @@ import { DisplayLink } from "./DisplayLink";
 import { PANEL_KINDS, type PanelKind } from "./layout";
 import { PAGES, type Page } from "./pages";
 import { useLive } from "./LiveContext";
+import { UpdateButton } from "./UpdateButton";
 
 function useClock(): string {
   const format = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -107,6 +108,7 @@ export function Header({
           <span className={`size-[7px] rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} />
           {t(`connection.${status}`)}
         </span>
+        <UpdateButton />
         <DisplayLink />
       </div>
     </header>
