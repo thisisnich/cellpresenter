@@ -9,6 +9,7 @@ import { ChordsPanel } from "./panels/ChordsPanel";
 import { EditorPanel } from "./panels/EditorPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
 import { MediaPanel } from "./panels/MediaPanel";
+import { NotesPanel } from "./panels/NotesPanel";
 import { OutputPanel } from "./panels/OutputPanel";
 import { PlaceholderPanel } from "./panels/PlaceholderPanel";
 import { RecycleBinPanel } from "./panels/RecycleBinPanel";
@@ -31,6 +32,7 @@ const components = {
   screen: ScreenPanel,
   backup: BackupPanel,
   bin: RecycleBinPanel,
+  notes: NotesPanel,
   scripture: ScripturePanel,
 };
 

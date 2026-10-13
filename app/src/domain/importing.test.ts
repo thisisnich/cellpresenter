@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { OnlineSong } from "../generated/OnlineSong";
-import { cleanChordSheet, draftFrom, songLink, tidySongText, ugSearchUrl } from "./importing";
+import { cleanChordSheet, decodeEntities, draftFrom, songLink, tidySongText, ugSearchUrl } from "./importing";
 import { parseSongText } from "./songText";
 
 // Shaped like a real Ultimate Guitar sheet.
@@ -103,6 +103,14 @@ describe("songLink", () => {
     expect(songLink("https://www.ultimate-guitar.com/search.php?value=x")).toBeNull();
     expect(songLink("https://evil.com/tab/a/b")).toBeNull();
     expect(songLink("way maker")).toBeNull();
+  });
+});
+
+describe("decodeEntities", () => {
+  it("turns HTML codes back into characters", () => {
+    expect(decodeEntities("I&rsquo;ve known You &amp; &#39;Father&#x27; &ldquo;Yes&rdquo;")).toBe("I’ve known You & 'Father' “Yes”");
+    expect(decodeEntities("Fish &chips; & co")).toBe("Fish &chips; & co");
+    expect(cleanChordSheet("[tab][ch]G[/ch]\nI&rsquo;ve known[/tab]").text).toBe("G\nI’ve known");
   });
 });
 

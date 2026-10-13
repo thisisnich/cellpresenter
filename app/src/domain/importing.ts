@@ -27,6 +27,23 @@ const INFO_LINE = /^\s*(key|tuning|tempo|bpm|time signature|time|strumming|chord
 // "Intro: G D Em C" — a label with only chords after it.
 const LABELLED_CHORDS = /^\s*[A-Za-z][\w ]{0,20}:\s*(.+)$/;
 
+// HTML character codes some sheets carry ("I&rsquo;ve").
+const ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“",
+  hellip: "…", mdash: "—", ndash: "–",
+};
+
+/** Text with HTML character codes turned back into characters. */
+export function decodeEntities(text: string): string {
+  return text.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (code, name: string) => {
+    if (name[0] === "#") {
+      const n = name[1].toLowerCase() === "x" ? parseInt(name.slice(2), 16) : Number(name.slice(1));
+      return Number.isFinite(n) && n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : code;
+    }
+    return ENTITIES[name.toLowerCase()] ?? code;
+  });
+}
+
 export interface CleanSheet {
   text: string;
   capo: number | null;
@@ -37,7 +54,7 @@ export function cleanChordSheet(content: string): CleanSheet {
   let capo: number | null = null;
   const lines: string[] = [];
   for (const raw of content.replace(/\r\n?/g, "\n").split("\n")) {
-    const line = raw.replace(/\[\/?(tab|ch)\]/g, "");
+    const line = decodeEntities(raw.replace(/\[\/?(tab|ch)\]/g, ""));
     const capoMatch = CAPO_LINE.exec(line);
     if (capoMatch) {
       if (capoMatch[1]) capo = Number(capoMatch[1]);
@@ -66,7 +83,7 @@ export function tidySongText(text: string): string {
 
 /** A song from a site, ready to edit and save. */
 export function draftFrom(song: OnlineSong): SongDraft {
-  const sheet = song.source === "ultimate_guitar" ? cleanChordSheet(song.text) : { text: song.text, capo: null };
+  const sheet = song.source === "ultimate_guitar" ? cleanChordSheet(song.text) : { text: decodeEntities(song.text), capo: null };
   const parsed = parseSongText(sheet.text, { linesPerSlide: 1000 });
   return {
     title: song.title || parsed.title || "",

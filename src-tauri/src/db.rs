@@ -900,6 +900,7 @@ struct SetlistItemRow {
     title: Option<String>,
     body: Option<String>,
     background_id: Option<String>,
+    notes: Option<String>,
     song_title: Option<String>,
     song_key: Option<String>,
     song_deleted: Option<i64>,
@@ -939,7 +940,7 @@ impl Db {
         .await?;
         let Some(row) = row else { return Ok(None) };
         let items: Vec<SetlistItemRow> = sqlx::query_as(
-            "SELECT i.id, i.kind, i.song_id, i.title, i.body, i.background_id,
+            "SELECT i.id, i.kind, i.song_id, i.title, i.body, i.background_id, i.notes,
                     s.title AS song_title, s.song_key AS song_key, s.deleted_at AS song_deleted
              FROM setlist_items i LEFT JOIN songs s ON s.id = i.song_id
              WHERE i.setlist_id = ? AND i.deleted_at IS NULL ORDER BY i.position",
@@ -961,6 +962,7 @@ impl Db {
                         missing: i.song_title.is_none() || i.song_deleted.is_some(),
                         title: i.song_title.unwrap_or_default(),
                         key: i.song_key,
+                        notes: i.notes.unwrap_or_default(),
                     },
                     "scripture" => match serde_json::from_str::<StoredScripture>(
                         i.body.as_deref().unwrap_or(""),
@@ -970,6 +972,7 @@ impl Db {
                             translation: stored.translation,
                             passage: stored.passage,
                             title: i.title.unwrap_or_default(),
+                            notes: i.notes.unwrap_or_default(),
                         },
                         // Unreadable: keep it visible as a note rather than lose it.
                         Err(_) => SetlistItem::Announcement {
@@ -977,6 +980,7 @@ impl Db {
                             title: i.title.unwrap_or_default(),
                             text: String::new(),
                             background_id: None,
+                            notes: i.notes.unwrap_or_default(),
                         },
                     },
                     _ => SetlistItem::Announcement {
@@ -984,6 +988,7 @@ impl Db {
                         title: i.title.unwrap_or_default(),
                         text: i.body.unwrap_or_default(),
                         background_id: i.background_id,
+                        notes: i.notes.unwrap_or_default(),
                     },
                 })
                 .collect(),
@@ -1083,7 +1088,7 @@ impl Db {
         for (position, item) in items.iter().enumerate() {
             let stored;
             let (requested, kind, song_id, title, body, background_id) = match item {
-                SetlistItemInput::Song { id, song_id } => {
+                SetlistItemInput::Song { id, song_id, .. } => {
                     (id, "song", Some(song_id.as_str()), None, None, None)
                 }
                 SetlistItemInput::Scripture {
@@ -1091,6 +1096,7 @@ impl Db {
                     translation,
                     passage,
                     title,
+                    ..
                 } => {
                     stored = serde_json::to_string(&StoredScripture {
                         translation: translation.clone(),
@@ -1111,6 +1117,7 @@ impl Db {
                     title,
                     text,
                     background_id,
+                    ..
                 } => (
                     id,
                     "announcement",
@@ -1121,9 +1128,10 @@ impl Db {
                 ),
             };
             let item_id = self.claim_id(tx, requested, &own, "setlist_items").await?;
+            let notes = item.notes().map(str::trim).filter(|n| !n.is_empty());
             if own.contains(&item_id) {
                 sqlx::query(
-                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, background_id = ?, updated_at = ?, deleted_at = NULL
+                    "UPDATE setlist_items SET position = ?, kind = ?, song_id = ?, title = ?, body = ?, background_id = ?, notes = ?, updated_at = ?, deleted_at = NULL
                      WHERE id = ?",
                 )
                 .bind(position as i64)
@@ -1132,14 +1140,15 @@ impl Db {
                 .bind(title)
                 .bind(body)
                 .bind(background_id)
+                .bind(notes)
                 .bind(now)
                 .bind(&item_id)
                 .execute(&mut **tx)
                 .await?;
             } else {
                 sqlx::query(
-                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, background_id, created_at, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO setlist_items (id, library_id, setlist_id, position, kind, song_id, title, body, background_id, notes, created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 )
                 .bind(&item_id)
                 .bind(&self.library_id)
@@ -1150,6 +1159,7 @@ impl Db {
                 .bind(title)
                 .bind(body)
                 .bind(background_id)
+                .bind(notes)
                 .bind(now)
                 .bind(now)
                 .execute(&mut **tx)
@@ -1427,6 +1437,7 @@ mod tests {
                 items: vec![SetlistItemInput::Song {
                     id: None,
                     song_id: song.id.clone(),
+                    notes: None,
                 }],
             })
             .await
@@ -1470,21 +1481,30 @@ mod tests {
                     SetlistItemInput::Song {
                         id: None,
                         song_id: a.id.clone(),
+                        notes: Some("  Key change after chorus 2 ".into()),
                     },
                     SetlistItemInput::Announcement {
                         id: None,
                         title: "Potluck".into(),
                         text: "Next Friday".into(),
                         background_id: None,
+                        notes: None,
                     },
                     SetlistItemInput::Song {
                         id: None,
                         song_id: b.id.clone(),
+                        notes: None,
                     },
                 ],
             })
             .await
             .unwrap();
+        assert!(
+            matches!(&list.items[0], SetlistItem::Song { notes, .. } if notes == "Key change after chorus 2")
+        );
+        assert!(
+            matches!(&list.items[1], SetlistItem::Announcement { notes, .. } if notes.is_empty())
+        );
         assert_eq!(list.name, "Friday");
         assert_eq!(list.items.len(), 3);
         assert!(matches!(&list.items[0], SetlistItem::Song { title, .. } if title == "Alpha"));
@@ -1502,10 +1522,12 @@ mod tests {
                         SetlistItemInput::Song {
                             id: Some(beta_id.clone()),
                             song_id: b.id.clone(),
+                            notes: None,
                         },
                         SetlistItemInput::Song {
                             id: Some(alpha_id.clone()),
                             song_id: a.id.clone(),
+                            notes: None,
                         },
                     ],
                 },

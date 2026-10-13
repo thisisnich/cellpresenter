@@ -6,12 +6,12 @@ import type { Page } from "./pages";
 // Each console page has its own default layout. Operators can rearrange a
 // page; the result is saved per machine and per page, and Reset brings the
 // default back.
-//   Show:   setlist + library, scripture | slides (notes) | output (stage, media, screen)
+//   Show:   setlist + library, scripture | slides (notes) | output (media, screen)
 //   Edit:   library, find songs | song editors | media, backups, recycle bin
 //   Chords: setlist | chords | output
 
 // Bump the version when panels change, so old saved layouts are dropped.
-const storageKey = (page: Page) => `cellpresenter.layout.v11.${page}`;
+const storageKey = (page: Page) => `cellpresenter.layout.v12.${page}`;
 
 export function buildDefaultLayout(api: DockviewApi, page: Page): void {
   api.clear();
@@ -24,9 +24,8 @@ function buildShow(api: DockviewApi): void {
   api.addPanel({ id: "slides", component: "slides", title: t("panel.slides") });
   api.addPanel({
     id: "notes",
-    component: "placeholder",
+    component: "notes",
     title: t("panel.notes"),
-    params: { message: "notes.comingSoon" },
     position: { referencePanel: "slides", direction: "within" },
     inactive: true,
   });
@@ -56,14 +55,6 @@ function buildShow(api: DockviewApi): void {
     title: t("panel.output"),
     position: { referencePanel: "slides", direction: "right" },
     initialWidth: 320,
-  });
-  api.addPanel({
-    id: "stage",
-    component: "placeholder",
-    title: t("panel.stage"),
-    params: { message: "stage.comingSoon" },
-    position: { referencePanel: "output", direction: "within" },
-    inactive: true,
   });
   api.addPanel({
     id: "media",
@@ -146,10 +137,10 @@ function buildChords(api: DockviewApi): void {
 
 // Panels the Layout menu can add. Any of them can be open more than once
 // (two Chords tabs, say); the first copy keeps the plain id.
-export const PANEL_KINDS = ["slides", "chords", "setlist", "library", "scripture", "search", "output", "media", "screen", "backup", "bin", "notes", "stage"] as const;
+export const PANEL_KINDS = ["slides", "chords", "setlist", "library", "scripture", "search", "output", "media", "screen", "backup", "bin", "notes"] as const;
 export type PanelKind = (typeof PANEL_KINDS)[number];
 
-const PLACEHOLDERS: Partial<Record<PanelKind, string>> = { notes: "notes.comingSoon", stage: "stage.comingSoon" };
+const PLACEHOLDERS: Partial<Record<PanelKind, string>> = {};
 
 /** The kind of panel an id belongs to: "chords:2" → "chords". */
 export const kindOf = (id: string | null | undefined): string | null => id?.split(":")[0] ?? null;

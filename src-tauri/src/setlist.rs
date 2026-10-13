@@ -19,6 +19,9 @@ pub enum SetlistItem {
         key: Option<String>,
         /// The song was deleted from the library.
         missing: bool,
+        /// The operator's note on this item, shown in the Notes panel.
+        #[serde(default)]
+        notes: String,
     },
     Announcement {
         id: String,
@@ -27,6 +30,9 @@ pub enum SetlistItem {
         text: String,
         /// Background image (a media id); `None` uses the default.
         background_id: Option<String>,
+        /// The operator's note on this item, shown in the Notes panel.
+        #[serde(default)]
+        notes: String,
     },
     Scripture {
         id: String,
@@ -35,6 +41,9 @@ pub enum SetlistItem {
         passage: ScriptureRef,
         /// "John 3:16–18", as it was when added.
         title: String,
+        /// The operator's note on this item, shown in the Notes panel.
+        #[serde(default)]
+        notes: String,
     },
 }
 
@@ -44,6 +53,16 @@ impl SetlistItem {
             SetlistItem::Song { id, .. }
             | SetlistItem::Announcement { id, .. }
             | SetlistItem::Scripture { id, .. } => id,
+        }
+    }
+}
+
+impl SetlistItemInput {
+    pub fn notes(&self) -> Option<&str> {
+        match self {
+            SetlistItemInput::Song { notes, .. }
+            | SetlistItemInput::Announcement { notes, .. }
+            | SetlistItemInput::Scripture { notes, .. } => notes.as_deref(),
         }
     }
 }
@@ -86,6 +105,9 @@ pub enum SetlistItemInput {
         #[serde(default)]
         id: Option<String>,
         song_id: String,
+        #[serde(default)]
+        #[ts(optional)]
+        notes: Option<String>,
     },
     Announcement {
         #[serde(default)]
@@ -94,6 +116,9 @@ pub enum SetlistItemInput {
         text: String,
         #[serde(default)]
         background_id: Option<String>,
+        #[serde(default)]
+        #[ts(optional)]
+        notes: Option<String>,
     },
     Scripture {
         #[serde(default)]
@@ -101,6 +126,9 @@ pub enum SetlistItemInput {
         translation: String,
         passage: ScriptureRef,
         title: String,
+        #[serde(default)]
+        #[ts(optional)]
+        notes: Option<String>,
     },
 }
 

@@ -52,7 +52,10 @@ export function SetlistPanel() {
       text: draft.text,
       background_id: draft.backgroundId,
     };
-    await saveSetlist((items) => (draft.id ? items.map((i) => (i.id === draft.id ? entry : i)) : [...items, entry]));
+    // Editing keeps the item's note.
+    await saveSetlist((items) =>
+      draft.id ? items.map((i) => (i.id === draft.id ? { ...entry, notes: i.notes } : i)) : [...items, entry],
+    );
     setDraft(null);
   };
 
@@ -130,6 +133,11 @@ export function SetlistPanel() {
               >
                 <span className="font-mono text-[11px] text-cp-muted">{index + 1}</span>
                 <span className={`truncate ${item.kind === "song" && item.missing ? "text-cp-danger" : ""}`}>{itemLabel(item)}</span>
+                {item.notes && (
+                  <span className="shrink-0 rounded-cp-sm border-cp px-1 text-[10px] text-cp-muted" title={item.notes}>
+                    {t("notes.badge")}
+                  </span>
+                )}
                 <span className="font-mono text-[10px] text-cp-muted">
                   {onAir ? <span className="font-bold text-cp-live">{t("slides.live")}</span> : item.kind === "song" ? (item.key ?? "") : t("setlist.notice")}
                 </span>

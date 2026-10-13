@@ -12,7 +12,11 @@ title: string, key: string | null,
 /**
  * The song was deleted from the library.
  */
-missing: boolean, } | { "kind": "announcement", id: string, title: string, 
+missing: boolean, 
+/**
+ * The operator's note on this item, shown in the Notes panel.
+ */
+notes: string, } | { "kind": "announcement", id: string, title: string, 
 /**
  * Lines of text; a blank line starts a new slide.
  */
@@ -20,7 +24,11 @@ text: string,
 /**
  * Background image (a media id); `None` uses the default.
  */
-background_id: string | null, } | { "kind": "scripture", id: string, 
+background_id: string | null, 
+/**
+ * The operator's note on this item, shown in the Notes panel.
+ */
+notes: string, } | { "kind": "scripture", id: string, 
 /**
  * "kjv" or "web".
  */
@@ -28,4 +36,8 @@ translation: string, passage: ScriptureRef,
 /**
  * "John 3:16–18", as it was when added.
  */
-title: string, };
+title: string, 
+/**
+ * The operator's note on this item, shown in the Notes panel.
+ */
+notes: string, };

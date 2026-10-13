@@ -56,11 +56,18 @@ const OPEN_SETLIST_KEY = "cellpresenter.setlist";
 export function itemInput(item: SetlistItem): SetlistItemInput {
   switch (item.kind) {
     case "song":
-      return { kind: "song", id: item.id, song_id: item.song_id };
+      return { kind: "song", id: item.id, song_id: item.song_id, notes: item.notes };
     case "scripture":
-      return { kind: "scripture", id: item.id, translation: item.translation, passage: item.passage, title: item.title };
+      return { kind: "scripture", id: item.id, translation: item.translation, passage: item.passage, title: item.title, notes: item.notes };
     case "announcement":
-      return { kind: "announcement", id: item.id, title: item.title, text: item.text, background_id: item.background_id };
+      return {
+        kind: "announcement",
+        id: item.id,
+        title: item.title,
+        text: item.text,
+        background_id: item.background_id,
+        notes: item.notes,
+      };
   }
 }
 
