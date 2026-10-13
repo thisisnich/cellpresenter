@@ -1222,7 +1222,11 @@ impl From<MediaRow> for Media {
             image_url(&r.hash, &r.ext)
         };
         Media {
-            thumb_url: if video { url.clone() } else { thumb_url(&r.hash) },
+            thumb_url: if video {
+                url.clone()
+            } else {
+                thumb_url(&r.hash)
+            },
             url,
             video,
             id: r.id,
