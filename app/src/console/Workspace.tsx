@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import type { Theme } from "../theme/tokens";
 import { restoreLayout, saveLayout } from "./layout";
 import { PageContext, type Page } from "./pages";
+import { BackupPanel } from "./panels/BackupPanel";
 import { ChordsPanel } from "./panels/ChordsPanel";
 import { EditorPanel } from "./panels/EditorPanel";
 import { LibraryPanel } from "./panels/LibraryPanel";
@@ -26,6 +27,7 @@ const components = {
   placeholder: PlaceholderPanel,
   search: SongSearchPanel,
   screen: ScreenPanel,
+  backup: BackupPanel,
 };
 
 // One page's dockable workspace. Panels are plain components; the page's

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { footerLines } from "../../domain/credits";
 import { DEFAULT_LOOK, FONT_FAMILY, FONT_NAME } from "../../display/look";
 import type { FooterMode } from "../../generated/FooterMode";
+import type { FooterPlace } from "../../generated/FooterPlace";
 import type { Look } from "../../generated/Look";
 import type { LyricFont } from "../../generated/LyricFont";
 import type { TextPosition } from "../../generated/TextPosition";
@@ -11,6 +12,7 @@ import { useLive } from "../LiveContext";
 import { SlidePreview } from "../SlidePreview";
 
 const FOOTER_MODES: FooterMode[] = ["first", "all", "off"];
+const FOOTER_PLACES: FooterPlace[] = ["centre", "corner"];
 const FONTS: LyricFont[] = ["inter", "montserrat", "open_sans", "oswald", "lora"];
 const POSITIONS: TextPosition[] = ["top", "middle", "bottom"];
 const SAMPLE = "Amazing grace, how sweet the sound\nThat saved a wretch like me";
@@ -186,6 +188,13 @@ export function ScreenPanel() {
           value={look.footer}
           name={(mode) => t(`screen.footer.${mode}`)}
           onPick={(footer) => change({ footer })}
+        />
+        <Segmented
+          label={t("screen.footerPlace")}
+          options={FOOTER_PLACES}
+          value={look.footer_place}
+          name={(place) => t(`screen.footerPlace.${place}`)}
+          onPick={(footer_place) => change({ footer_place })}
         />
         <label className="flex flex-col gap-1">
           <span className="text-cp-muted">{t("screen.licence")}</span>

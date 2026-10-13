@@ -4,8 +4,10 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use serde::Serialize;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 use sqlx::{FromRow, Sqlite, Transaction};
+use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::media::{image_url, thumb_url, Media};
@@ -13,6 +15,15 @@ use crate::setlist::{Setlist, SetlistInput, SetlistItem, SetlistItemInput, Setli
 use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSlide, SongSummary};
 
 pub type DbResult<T> = Result<T, sqlx::Error>;
+
+/// What a restore brought back.
+#[derive(Clone, Debug, PartialEq, Serialize, TS)]
+#[ts(export)]
+pub struct RestoredCounts {
+    pub songs: u32,
+    pub setlists: u32,
+    pub pictures: u32,
+}
 
 pub fn new_id() -> String {
     Uuid::now_v7().to_string()
@@ -155,6 +166,146 @@ impl Db {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+
+    // ---------- backups ----------
+
+    /// Write a consistent copy of the whole database to `path` (which must
+    /// not exist yet), even while the app is using it.
+    pub async fn copy_to(&self, path: &Path) -> DbResult<()> {
+        sqlx::query("VACUUM INTO ?")
+            .bind(path.to_string_lossy().into_owned())
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Close the database (e.g. a backup opened to bring it up to date).
+    pub async fn close(self) {
+        self.pool.close().await;
+    }
+
+    /// Bring everything in the backup database at `path` into this library:
+    /// songs, setlists and pictures it has are added or replaced (the
+    /// backup's copy wins); anything added here since is kept. The backup
+    /// must already be migrated to this app's schema (open it with `open`).
+    pub async fn merge_backup(&self, path: &Path) -> DbResult<RestoredCounts> {
+        let mut conn = self.pool.acquire().await?;
+        sqlx::query("ATTACH DATABASE ? AS backup")
+            .bind(path.to_string_lossy().into_owned())
+            .execute(&mut *conn)
+            .await?;
+        let merged = Self::merge_attached(&mut conn, &self.library_id).await;
+        // Detach even if the merge failed, so the connection is clean.
+        let detached = sqlx::query("DETACH DATABASE backup")
+            .execute(&mut *conn)
+            .await;
+        let counts = merged?;
+        detached?;
+        Ok(counts)
+    }
+
+    async fn merge_attached(
+        conn: &mut sqlx::SqliteConnection,
+        library_id: &str,
+    ) -> DbResult<RestoredCounts> {
+        let count = |sql: &'static str| sqlx::query_as::<_, (i64,)>(sql);
+        let songs = count("SELECT COUNT(*) FROM backup.songs WHERE deleted_at IS NULL")
+            .fetch_one(&mut *conn)
+            .await?
+            .0;
+        let setlists = count("SELECT COUNT(*) FROM backup.setlists WHERE deleted_at IS NULL")
+            .fetch_one(&mut *conn)
+            .await?
+            .0;
+        let pictures = count("SELECT COUNT(*) FROM backup.media WHERE deleted_at IS NULL")
+            .fetch_one(&mut *conn)
+            .await?
+            .0;
+
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+        // A new computer starts with the starter hymns; drop the untouched
+        // ones the backup has its own copy of, so they don't appear twice.
+        let now = now_ms();
+        sqlx::query(
+            "UPDATE main.songs SET deleted_at = ?, updated_at = ?
+             WHERE library_id = ? AND deleted_at IS NULL AND created_at = updated_at
+               AND id NOT IN (SELECT id FROM backup.songs)
+               AND lower(title) IN (SELECT lower(title) FROM backup.songs WHERE deleted_at IS NULL)",
+        )
+        .bind(now)
+        .bind(now)
+        .bind(library_id)
+        .execute(&mut *tx)
+        .await?;
+        // A song or setlist in the backup comes back exactly as it was, so
+        // parts added here since (a new verse, another item) go.
+        for sql in [
+            "DELETE FROM main.slides WHERE song_id IN (SELECT id FROM backup.songs)",
+            "DELETE FROM main.sections WHERE song_id IN (SELECT id FROM backup.songs)",
+            "DELETE FROM main.setlist_items WHERE setlist_id IN (SELECT id FROM backup.setlists)",
+        ] {
+            sqlx::query(sql).execute(&mut *tx).await?;
+        }
+        // Parents before children, so every reference already exists.
+        for table in [
+            "media",
+            "songs",
+            "sections",
+            "slides",
+            "setlists",
+            "setlist_items",
+        ] {
+            let columns: Vec<(String,)> = sqlx::query_as("SELECT name FROM pragma_table_info(?)")
+                .bind(table)
+                .fetch_all(&mut *tx)
+                .await?;
+            let names: Vec<&str> = columns.iter().map(|(c,)| c.as_str()).collect();
+            // Rows join this library, whichever library they were backed up from.
+            let select: Vec<String> = names
+                .iter()
+                .map(|c| {
+                    if *c == "library_id" {
+                        "?".into()
+                    } else {
+                        format!("\"{c}\"")
+                    }
+                })
+                .collect();
+            let update: Vec<String> = names
+                .iter()
+                .filter(|c| **c != "id")
+                .map(|c| format!("\"{c}\" = excluded.\"{c}\""))
+                .collect();
+            let sql =
+                format!(
+                "INSERT INTO main.{table} ({cols}) SELECT {select} FROM backup.{table} WHERE true
+                 ON CONFLICT(id) DO UPDATE SET {update}",
+                cols = names.iter().map(|c| format!("\"{c}\"")).collect::<Vec<_>>().join(", "),
+                select = select.join(", "),
+                update = update.join(", "),
+            );
+            // Safe: table names are the fixed list above, column names come
+            // from the schema itself.
+            sqlx::query(sqlx::AssertSqlSafe(sql))
+                .bind(library_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+        // The screens' look comes back too; what was on air doesn't.
+        sqlx::query(
+            "INSERT INTO main.app_state (key, value, updated_at)
+             SELECT key, value, updated_at FROM backup.app_state WHERE key = 'look'
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        )
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(RestoredCounts {
+            songs: songs as u32,
+            setlists: setlists as u32,
+            pictures: pictures as u32,
+        })
     }
 
     pub async fn list_songs(&self) -> DbResult<Vec<SongSummary>> {

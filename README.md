@@ -63,13 +63,15 @@ If phones can't connect, the Wi-Fi may stop devices from reaching each other. Th
 
 Songs belong to their writers and publishers. Projecting a song at church usually needs a licence, such as a [CCLI](https://ccli.com) Church Copyright Licence; check what applies where you are. Only import songs you have the rights to use.
 
-CCLI asks for a copyright line on screen. Fill in each song's **Copyright** and **CCLI song #** in the song editor, and your church's licence number in the **Screen** panel (next to Live output). The line shows on a song's first slide, every slide, or not at all.
+CCLI asks for a copyright line on screen. Fill in each song's **Copyright** and **CCLI song #** in the song editor, and your church's licence number in the **Screen** panel (next to Live output). The line shows on a song's first slide, every slide, or not at all, centred along the bottom or small in the bottom corner.
 
 CellPresenter isn't affiliated with Ultimate Guitar or LRCLIB. It fetches only the song you pick, when you pick it; it never searches Ultimate Guitar itself, and it ships no song content except public-domain hymns. Ultimate Guitar's terms allow personal, non-commercial use of its content, so whether you may use a sheet from there is between you and them.
 
 ## Your data
 
-Songs, setlists and settings live in one file, `library.db`. Pictures are in the `media` folder next to it. To back up, copy both while the app is closed.
+**Backups:** everything (songs, setlists, settings and pictures) is backed up once a day when the app starts, to `CellPresenter Backups` in your Documents folder; the last 7 automatic backups are kept. On the **Edit** page, the **Backups** panel has **Back up now**, a list of backups to restore, and **Restore from a file…** to bring a `.cpbackup` file from another computer. Restoring brings back the songs, setlists and pictures in the backup as they were, and keeps anything added since.
+
+The library itself is one file, `library.db`, with pictures in the `media` folder next to it:
 
 | System | Folder |
 |---|---|

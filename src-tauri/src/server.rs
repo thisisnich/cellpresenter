@@ -20,7 +20,8 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
-use crate::db::{Db, DbResult, NewMedia};
+use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
+use crate::db::{Db, DbResult, NewMedia, RestoredCounts};
 use crate::live::{Command, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
@@ -66,6 +67,7 @@ pub struct ServerState {
     port: u16,
     media: MediaStore,
     outputs: Option<Arc<dyn Outputs>>,
+    backups: Option<Arc<Backups>>,
 }
 
 impl ServerState {
@@ -81,6 +83,7 @@ impl ServerState {
             port,
             media,
             outputs: None,
+            backups: None,
         }
     }
 
@@ -88,6 +91,21 @@ impl ServerState {
     pub fn with_outputs(mut self, outputs: Arc<dyn Outputs>) -> Self {
         self.outputs = Some(outputs);
         self
+    }
+
+    pub fn with_backups(mut self, backups: Backups) -> Self {
+        self.backups = Some(Arc::new(backups));
+        self
+    }
+
+    /// Back up the library if the last backup is a day or so old.
+    pub async fn auto_backup(&self) {
+        let Some(backups) = &self.backups else { return };
+        match backups.auto_backup(&self.db, self.media.dir()).await {
+            Ok(Some(made)) => println!("cellpresenter: backed up to {}", made.name),
+            Ok(None) => {}
+            Err(e) => eprintln!("cellpresenter: automatic backup failed: {e:?}"),
+        }
     }
 
     fn snapshot(&self) -> LiveState {
@@ -893,6 +911,93 @@ async fn set_look(State(s): State<ServerState>, Json(look): Json<Look>) -> ApiRe
     Ok(Json(s.mutate(|l| l.look = look)))
 }
 
+// ---------- backups ----------
+
+const NO_BACKUPS: ApiError = ApiError(StatusCode::NOT_IMPLEMENTED, "no_backups");
+/// Largest backup file that can be uploaded to restore.
+const MAX_BACKUP_UPLOAD: usize = 1024 * 1024 * 1024;
+
+fn backup_error(e: BackupError) -> ApiError {
+    match e {
+        BackupError::NotABackup => ApiError(StatusCode::UNPROCESSABLE_ENTITY, "not_a_backup"),
+        BackupError::NotFound => NOT_FOUND,
+        BackupError::Io(why) | BackupError::Db(why) => {
+            eprintln!("cellpresenter: backup failed: {why}");
+            ApiError(StatusCode::INTERNAL_SERVER_ERROR, "backup_failed")
+        }
+    }
+}
+
+async fn list_backups(State(s): State<ServerState>) -> ApiResult<BackupList> {
+    Ok(Json(s.backups.as_ref().ok_or(NO_BACKUPS)?.list()))
+}
+
+async fn create_backup(State(s): State<ServerState>) -> ApiResult<BackupInfo> {
+    let backups = s.backups.as_ref().ok_or(NO_BACKUPS)?;
+    backups
+        .create(&s.db, s.media.dir(), false)
+        .await
+        .map(Json)
+        .map_err(backup_error)
+}
+
+impl ServerState {
+    /// Restore, then show the restored look on every screen.
+    async fn restore_from(&self, file: &std::path::Path) -> Result<RestoredCounts, ApiError> {
+        let backups = self.backups.as_ref().ok_or(NO_BACKUPS)?;
+        let counts = backups
+            .restore(file, &self.db, self.media.dir())
+            .await
+            .map_err(backup_error)?;
+        if let Ok(Some(json)) = self.db.get_state(LOOK_KEY).await {
+            if let Ok(look) = serde_json::from_str::<Look>(&json) {
+                self.mutate(|l| l.look = look);
+            }
+        }
+        Ok(counts)
+    }
+}
+
+async fn restore_backup(
+    State(s): State<ServerState>,
+    Path(name): Path<String>,
+) -> ApiResult<RestoredCounts> {
+    let backups = s.backups.as_ref().ok_or(NO_BACKUPS)?;
+    let path = backups.path_of(&name).ok_or(NOT_FOUND)?;
+    Ok(Json(s.restore_from(&path).await?))
+}
+
+/// Restore a backup file picked on this or another device.
+async fn restore_uploaded_backup(
+    State(s): State<ServerState>,
+    body: axum::body::Bytes,
+) -> ApiResult<RestoredCounts> {
+    let backups = s.backups.as_ref().ok_or(NO_BACKUPS)?;
+    let path = backups.upload_path();
+    tokio::fs::write(&path, &body)
+        .await
+        .map_err(|e| backup_error(BackupError::Io(e.to_string())))?;
+    let result = s.restore_from(&path).await;
+    let _ = tokio::fs::remove_file(&path).await;
+    Ok(Json(result?))
+}
+
+/// Show the backups folder in the file manager (this computer only).
+async fn open_backup_folder(
+    State(s): State<ServerState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+) -> Result<StatusCode, ApiError> {
+    if !peer.ip().is_loopback() {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    let backups = s.backups.as_ref().ok_or(NO_BACKUPS)?;
+    open::that_detached(backups.folder()).map_err(|e| {
+        eprintln!("cellpresenter: can't open the backups folder: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 // ---------- online song search ----------
 
 #[derive(Deserialize)]
@@ -1093,6 +1198,13 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/backups", get(list_backups).post(create_backup))
+        .route("/backups/{name}/restore", post(restore_backup))
+        .route(
+            "/backups/restore",
+            post(restore_uploaded_backup).layer(DefaultBodyLimit::max(MAX_BACKUP_UPLOAD)),
+        )
+        .route("/backups/open-folder", post(open_backup_folder))
         .route("/screens/toggle-fullscreen", post(toggle_fullscreen))
         .route("/look", axum::routing::put(set_look))
         // Reaching out to the internet is for whoever runs the show.

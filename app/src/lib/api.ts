@@ -2,6 +2,8 @@
 // in the spec). Relative URLs everywhere: in dev the Vite proxy forwards /api
 // and /ws to the embedded server; in prod that server serves this app itself,
 // so same-origin holds in both worlds.
+import type { BackupInfo } from "../generated/BackupInfo";
+import type { BackupList } from "../generated/BackupList";
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
 import type { Look } from "../generated/Look";
@@ -9,6 +11,7 @@ import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
 import type { PinInfo } from "../generated/PinInfo";
+import type { RestoredCounts } from "../generated/RestoredCounts";
 import type { Screens } from "../generated/Screens";
 import type { SearchHit } from "../generated/SearchHit";
 import type { Setlist } from "../generated/Setlist";
@@ -114,6 +117,16 @@ export const api = {
   openUgSearch: (query: string) => request<void>("/api/online/open-ug-search", json("POST", { q: query })),
   onlineSong: (source: Source, id: string) =>
     request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
+
+  listBackups: () => request<BackupList>("/api/backups"),
+  createBackup: () => request<BackupInfo>("/api/backups", { method: "POST" }),
+  restoreBackup: (name: string) =>
+    request<RestoredCounts>(`/api/backups/${encodeURIComponent(name)}/restore`, { method: "POST" }),
+  /** Restore a backup file picked on this device. */
+  restoreBackupFile: (file: File) =>
+    request<RestoredCounts>("/api/backups/restore", { method: "POST", body: file }, "application/octet-stream"),
+  /** Show the backups folder in the file manager (this computer only). */
+  openBackupFolder: () => request<void>("/api/backups/open-folder", { method: "POST" }),
 
   listMedia: () => request<Media[]>("/api/media"),
   /** Upload an image file; big photos are scaled down on the server. */

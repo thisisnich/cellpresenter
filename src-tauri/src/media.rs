@@ -138,6 +138,11 @@ impl MediaStore {
         Ok(Self { dir })
     }
 
+    /// The folder holding the images (and `thumbs/`).
+    pub fn dir(&self) -> &Path {
+        &self.dir
+    }
+
     fn write_once(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         if path.exists() {
             return Ok(());

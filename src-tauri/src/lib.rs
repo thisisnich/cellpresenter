@@ -1,4 +1,5 @@
 mod auth;
+mod backup;
 mod db;
 mod live;
 mod media;
@@ -16,6 +17,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use auth::PinGuard;
+use backup::Backups;
 use db::Db;
 use media::MediaStore;
 use outputs::{Outputs, Screen, Screens};
@@ -288,10 +290,23 @@ pub fn run() {
                 app: handle.clone(),
                 port,
             });
-            let state = ServerState::new(assets, db, pins, port, media).with_outputs(outputs);
+            // Backups go where people can find them: Documents/CellPresenter Backups.
+            let backup_dir = handle
+                .path()
+                .document_dir()
+                .map(|d| d.join("CellPresenter Backups"))
+                .or_else(|_| handle.path().app_data_dir().map(|d| d.join("backups")))
+                .map_err(|e| report(format!("no folder for backups: {e}")))?;
+            let backups = Backups::new(backup_dir.clone())
+                .map_err(|e| report(format!("can't create {}: {e}", backup_dir.display())))?;
+            let state = ServerState::new(assets, db, pins, port, media)
+                .with_outputs(outputs)
+                .with_backups(backups);
             tauri::async_runtime::block_on(async {
                 state.restore_live().await;
             });
+            let backing_up = state.clone();
+            tauri::async_runtime::spawn(async move { backing_up.auto_backup().await });
             tauri::async_runtime::spawn(async move {
                 state.spawn_persistence();
                 let app = server::router(state).into_make_service_with_connect_info::<SocketAddr>();

@@ -117,8 +117,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       songs.current.clear();
       setLibraryVersion((v) => v + 1);
       void refreshSetlists();
+      // A restored backup can bring pictures too.
+      void reloadMedia();
     });
-  }, [refreshSetlists]);
+  }, [refreshSetlists, reloadMedia]);
 
   // Load the open setlist (and reload it when songs change, for titles).
   useEffect(() => {

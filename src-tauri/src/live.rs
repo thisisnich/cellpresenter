@@ -49,6 +49,18 @@ pub enum FooterMode {
     All,
 }
 
+/// Where the copyright line sits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum FooterPlace {
+    /// Centred along the bottom.
+    #[default]
+    Centre,
+    /// Small, in the bottom-right corner.
+    Corner,
+}
+
 /// Lyric typefaces. They ship with the app, so every screen draws (and
 /// fits) the words the same way.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -81,6 +93,7 @@ pub enum TextPosition {
 #[ts(export)]
 pub struct Look {
     pub footer: FooterMode,
+    pub footer_place: FooterPlace,
     /// The church's CCLI licence number, shown in the copyright line.
     pub ccli_licence: Option<String>,
     pub font: LyricFont,
@@ -101,6 +114,7 @@ impl Default for Look {
     fn default() -> Self {
         Self {
             footer: FooterMode::default(),
+            footer_place: FooterPlace::default(),
             ccli_licence: None,
             font: LyricFont::default(),
             bold: true,

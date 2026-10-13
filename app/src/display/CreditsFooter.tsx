@@ -1,15 +1,18 @@
 import { FONT_FAMILY, useLook } from "./look";
 
-// The copyright line along the bottom of the stage (canvas pixels, so it
-// sits in the same place on every screen). With the words in the lower
-// third, it moves to the top so the two never overlap.
+// The copyright line, centred along the bottom of the stage or small in the
+// bottom-right corner (canvas pixels, so it sits in the same place on every
+// screen). With the words in the lower third it moves to the top, so the
+// two never overlap.
 export function CreditsFooter({ lines }: { lines: string[] }) {
   const look = useLook();
+  const corner = look.footer_place === "corner";
+  const edge = look.position === "bottom" ? "top-9" : "bottom-9";
   return (
     <div
-      className={`absolute inset-x-0 flex flex-col items-center px-24 text-center font-semibold ${look.position === "bottom" ? "top-9" : "bottom-9"}`}
+      className={`absolute flex flex-col font-semibold ${edge} ${corner ? "right-12 max-w-[55%] items-end text-right" : "inset-x-0 items-center px-24 text-center"}`}
       style={{
-        fontSize: 24,
+        fontSize: corner ? 20 : 24,
         lineHeight: 1.35,
         fontFamily: FONT_FAMILY[look.font],
         color: look.color,

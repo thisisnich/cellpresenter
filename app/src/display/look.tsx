@@ -7,6 +7,7 @@ import type { LyricFont } from "../generated/LyricFont";
 
 export const DEFAULT_LOOK: Look = {
   footer: "first",
+  footer_place: "centre",
   ccli_licence: null,
   font: "inter",
   bold: true,
