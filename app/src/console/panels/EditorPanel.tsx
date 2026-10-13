@@ -1,7 +1,8 @@
 import type { IDockviewPanelProps } from "dockview-react";
 import { useEffect, useMemo, useState } from "react";
 import { sectionKind } from "../../domain/sections";
-import { longestSlide, sectionBackgroundsOf, songForText, toSongInput, type SongMeta } from "../../domain/songEditing";
+import { sectionBackgroundsOf, songForText, toSongInput, type SongMeta } from "../../domain/songEditing";
+import { arrangementRuns, joinWithNext, splitInTwo } from "../../domain/slideEdits";
 import { parseSongText, songToText } from "../../domain/songText";
 import type { Song } from "../../generated/Song";
 import { t } from "../../i18n";
@@ -42,6 +43,9 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       : EMPTY_META,
   );
   const [text, setText] = useState(draft?.text ?? "");
+  // How long stanzas become slides: every N lines, or 0 = as written (only
+  // blank lines break). Saved songs open as written: the text then shows
+  // exactly the slides they have.
   const [linesPerSlide, setLinesPerSlide] = useState(2);
   const [dirty, setDirty] = useState(Boolean(draft));
   const [saving, setSaving] = useState(false);
@@ -64,7 +68,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           sectionBackgrounds: sectionBackgroundsOf(song),
         });
         setText(songToText(songForText(song)));
-        setLinesPerSlide(longestSlide(song));
+        setLinesPerSlide(0);
       })
       .catch(() => setError(t("editor.loadFailed")))
       .finally(() => setLoading(false));
@@ -79,12 +83,24 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
         const old = stored?.sections.find((s) => s.name === name);
         return (section?.slides ?? []).map((lines, i) => ({
           section: name,
+          index: i,
+          lines: lines.length,
+          last: i === (section?.slides.length ?? 0) - 1,
           text: lines.map((l) => l.text).join("\n"),
           background: mediaUrl(old?.slides[i]?.background_id ?? meta.sectionBackgrounds[name]),
         }));
       }),
     [parsed, stored, mediaUrl, meta.sectionBackgrounds],
   );
+
+  // Join / Split from the preview: the breaks go into the text as blank
+  // lines, and the song switches to "as written" so they stay put.
+  const reshape = (next: string | null) => {
+    if (next === null) return;
+    setText(next);
+    setLinesPerSlide(0);
+    setDirty(true);
+  };
 
   const edit = <K extends keyof SongMeta>(field: K, value: SongMeta[K]) => {
     setMeta((m) => ({ ...m, [field]: value }));
@@ -255,9 +271,10 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           <div className="flex flex-wrap items-center justify-between gap-2 border-b-cp px-3 py-2">
             <span className="cp-label">{t("editor.previewCount", { count: played.length })}</span>
             <div className="flex flex-wrap gap-1">
-              {parsed.arrangement.map((name, i) => (
-                <span key={i} className="rounded-cp-sm px-1.5 py-0.5 text-[11px] font-semibold text-white" style={{ background: sectionColor(name) }}>
-                  {name}
+              {arrangementRuns(parsed.arrangement).map((run, i) => (
+                <span key={i} className="rounded-cp-sm px-1.5 py-0.5 text-[11px] font-semibold text-white" style={{ background: sectionColor(run.name) }}>
+                  {run.name}
+                  {run.times > 1 && ` ×${run.times}`}
                 </span>
               ))}
             </div>
@@ -265,10 +282,34 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
           <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto p-3">
             {played.length === 0 && <p className="m-0 col-span-full text-cp-muted">{t("editor.previewEmpty")}</p>}
             {played.map((slide, i) => (
-              <div key={i} className="overflow-hidden rounded-cp border-cp">
+              <div key={i} className="group overflow-hidden rounded-cp border-cp">
                 <SlidePreview text={slide.text} background={slide.background} transparent />
-                <div className="px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
-                  {i + 1} · {slide.section}
+                <div className="flex items-center justify-between gap-1 px-2 py-1 text-[11px] font-semibold text-white" style={{ background: sectionColor(slide.section) }}>
+                  <span className="truncate">
+                    {i + 1} · {slide.section}
+                  </span>
+                  <span className="flex shrink-0 gap-1 opacity-70 group-hover:opacity-100">
+                    {slide.lines > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => reshape(splitInTwo(parsed, slide.section, slide.index))}
+                        title={t("editor.splitHelp")}
+                        className="rounded-cp-sm bg-black/25 px-1.5 hover:bg-black/45"
+                      >
+                        {t("editor.split")}
+                      </button>
+                    )}
+                    {!slide.last && (
+                      <button
+                        type="button"
+                        onClick={() => reshape(joinWithNext(parsed, slide.section, slide.index))}
+                        title={t("editor.joinHelp")}
+                        className="rounded-cp-sm bg-black/25 px-1.5 hover:bg-black/45"
+                      >
+                        {t("editor.join")}
+                      </button>
+                    )}
+                  </span>
                 </div>
               </div>
             ))}
@@ -278,16 +319,17 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
 
       <footer className="flex flex-wrap items-center justify-between gap-3 border-t-cp bg-cp-chrome px-3 py-2.5">
         <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-cp-muted">
-            {t("editor.linesPerSlide")}
+          <label className="flex items-center gap-2 text-cp-muted" title={t("editor.slidesHelp")}>
+            {t("editor.slides")}
             <select
               value={linesPerSlide}
               onChange={(e) => setLinesPerSlide(Number(e.target.value))}
               className="rounded-cp border-cp bg-cp-surface px-2 py-1 text-cp-text"
             >
+              <option value={0}>{t("editor.asWritten")}</option>
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <option key={n} value={n}>
-                  {n}
+                  {n === 1 ? t("editor.everyLine") : t("editor.everyLines", { count: n })}
                 </option>
               ))}
             </select>

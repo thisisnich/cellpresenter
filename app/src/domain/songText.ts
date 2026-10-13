@@ -45,7 +45,8 @@ export interface ParsedSong {
 }
 
 export interface ParseOptions {
-  /** Longer blocks are split into slides of at most this many lines. */
+  /** Longer blocks are split into slides of at most this many lines; 0
+   *  splits only where the text has a blank line ("as written"). */
   linesPerSlide: number;
 }
 
@@ -146,6 +147,7 @@ function attachChords(lyric: string, above: ChordAt[]): TextLine {
 /** Split a block into as few slides as fit `max` lines, sized evenly so no
  *  slide is left with a single stray line (5 lines at 4 → 3 + 2). */
 function splitBlock(lines: TextLine[], max: number): TextLine[][] {
+  if (!Number.isFinite(max)) return [lines];
   const count = Math.ceil(lines.length / max);
   const out: TextLine[][] = [];
   let start = 0;
@@ -167,7 +169,7 @@ interface RawSection {
 
 /** Turn pasted or typed song text into sections, slides and an arrangement. */
 export function parseSongText(input: string, options: ParseOptions): ParsedSong {
-  const perSlide = Math.max(1, Math.floor(options.linesPerSlide));
+  const perSlide = options.linesPerSlide > 0 ? Math.max(1, Math.floor(options.linesPerSlide)) : Infinity;
   const raw: RawSection[] = [];
   const result: ParsedSong = { sections: [], arrangement: [] };
   let current: RawSection | null = null;
