@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>CellPresenter</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      @font-face {
+        font-family: "Geist";
+        src: url("assets/fonts/geist-latin-wght-normal.woff2") format("woff2");
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Lora";
+        src: url("assets/fonts/lora-latin-wght-normal.woff2") format("woff2");
+        font-weight: 400 700;
+        font-style: normal;
+        font-display: block;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #17181a;
+        color: #ececee;
+        font-family: "Geist", sans-serif;
+      }
+      #root {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #17181a;
+      }
+      .clip { position: absolute; inset: 0; }
+      #wash {
+        background: radial-gradient(ellipse at 50% 46%, rgba(245, 165, 36, 0.55), transparent 62%);
+        opacity: 0.16;
+      }
+      .stage {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .lyric-block { text-align: center; }
+      .lyric {
+        font-family: "Lora", serif;
+        font-weight: 500;
+        font-size: 92px;
+        line-height: 1.22;
+        letter-spacing: -0.02em;
+        color: #f7f7f8;
+      }
+      .live-mark {
+        position: absolute;
+        top: 64px;
+        left: 72px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.14em;
+        color: #f5a524;
+      }
+      .live-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 99px;
+        background: #f5a524;
+      }
+      .split {
+        width: 1560px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 72px;
+      }
+      .copy {
+        width: 520px;
+        font-size: 54px;
+        font-weight: 520;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        color: #ececee;
+      }
+      .panel {
+        width: 760px;
+        background: #1b1c1f;
+        border: 1px solid #2c2e33;
+        border-radius: 16px;
+        padding: 28px;
+      }
+      .panel-label {
+        font-size: 20px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #c5c7cd;
+        margin-bottom: 18px;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 84px;
+        padding: 0 22px;
+        margin-bottom: 12px;
+        border-radius: 10px;
+        background: #26282c;
+        border: 2px solid transparent;
+        font-size: 32px;
+      }
+      .row:last-child { margin-bottom: 0; }
+      .row.live { border-color: #f5a524; background: #2a2418; }
+      .row.next { border-color: #6ea8ff; }
+      .tag {
+        font-size: 18px;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .tag.live { color: #1a1206; background: #f5a524; border-radius: 6px; padding: 6px 10px; }
+      .tag.next { color: #d6e6ff; }
+      .phones { display: flex; gap: 36px; }
+      .phone {
+        width: 300px;
+        height: 560px;
+        background: #1b1c1f;
+        border: 1px solid #2c2e33;
+        border-radius: 36px;
+        padding: 28px 22px;
+        display: flex;
+        flex-direction: column;
+      }
+      .phone h3 {
+        font-size: 22px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #c5c7cd;
+        margin-bottom: 22px;
+      }
+      .next-btn, .prev-btn {
+        height: 84px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        font-weight: 640;
+        margin-bottom: 14px;
+      }
+      .next-btn { background: #f5a524; color: #1a1206; }
+      .prev-btn { background: #26282c; color: #ececee; border: 1px solid #2c2e33; }
+      .pin {
+        margin-top: auto;
+        font-size: 22px;
+        letter-spacing: 0.18em;
+        color: #ececee;
+      }
+      .keyline {
+        font-size: 28px;
+        margin-bottom: 8px;
+      }
+      .keyline span { color: #f5a524; }
+      .chords { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+      .chord {
+        width: 112px;
+        height: 72px;
+        border-radius: 10px;
+        background: #26282c;
+        border: 1px solid #2c2e33;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        font-weight: 620;
+      }
+      .outro { text-align: center; }
+      .wordmark {
+        font-size: 92px;
+        font-weight: 620;
+        letter-spacing: -0.04em;
+      }
+      .claim {
+        margin-top: 18px;
+        font-size: 40px;
+        font-weight: 480;
+        letter-spacing: -0.02em;
+        color: #ececee;
+      }
+      .closer {
+        margin-top: 28px;
+        font-size: 28px;
+        color: #d0d2d6;
+      }
+      .enter { opacity: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="21">
+      <div id="wash" class="clip" data-start="0" data-duration="21" data-track-index="0"></div>
+
+      <section id="scene-slide" class="clip" data-start="0" data-duration="5.5" data-track-index="1">
+        <div class="stage" id="slide-inner">
+          <div class="live-mark enter" id="live-mark"><span class="live-dot"></span>LIVE</div>
+          <div class="lyric-block">
+            <div class="lyric enter" id="line-1">Amazing grace</div>
+            <div class="lyric enter" id="line-2">how sweet the sound</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-setlist" class="clip" data-start="5.5" data-duration="5" data-track-index="1">
+        <div class="stage" id="setlist-inner">
+          <div class="split">
+            <div class="panel">
+              <div class="panel-label">Setlist</div>
+              <div class="row live enter" id="row-1"><span>Amazing Grace</span><span class="tag live">Live</span></div>
+              <div class="row next enter" id="row-2"><span>How Great Thou Art</span><span class="tag next">Next</span></div>
+              <div class="row enter" id="row-3"><span>Welcome</span></div>
+            </div>
+            <div class="copy enter" id="setlist-copy">Click a slide. It's on the screen.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-phones" class="clip" data-start="10.5" data-duration="5.5" data-track-index="1">
+        <div class="stage" id="phones-inner">
+          <div class="split">
+            <div class="phones">
+              <div class="phone enter" id="phone-remote">
+                <h3>Remote</h3>
+                <div class="next-btn">Next</div>
+                <div class="prev-btn">Prev</div>
+                <div class="pin">PIN 4821</div>
+              </div>
+              <div class="phone enter" id="phone-chords">
+                <h3>Chords</h3>
+                <div class="keyline">Key <span>G</span></div>
+                <div class="keyline">Capo <span>2</span></div>
+                <div class="chords">
+                  <div class="chord">G</div>
+                  <div class="chord">C</div>
+                  <div class="chord">Em</div>
+                  <div class="chord">D</div>
+                </div>
+              </div>
+            </div>
+            <div class="copy enter" id="phones-copy">Every phone follows.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-outro" class="clip" data-start="16" data-duration="5" data-track-index="1">
+        <div class="stage" id="outro-inner">
+          <div class="outro">
+            <div class="wordmark enter" id="wordmark">CellPresenter</div>
+            <div class="claim enter" id="claim-1">Lyrics on the screen.</div>
+            <div class="claim enter" id="claim-2">Chords in their key.</div>
+            <div class="closer enter" id="closer">Free. On your own Wi-Fi.</div>
+          </div>
+        </div>
+      </section>
+
+      <audio
+        id="music"
+        src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3"
+        data-start="0"
+        data-duration="21"
+        data-track-index="4"
+        data-volume="1"
+        data-automation='{"version":1,"lanes":[{"target":"volume","points":[{"t":0,"v":0},{"t":0.6,"v":0.28},{"t":19.4,"v":0.28},{"t":21,"v":0}]}]}'
+      ></audio>
+      <audio id="sfx-lyric" src="assets/sfx/impact/impactSoft_medium_001.ogg" data-start="1.55" data-duration="0.18" data-track-index="5" data-volume="0.45"></audio>
+      <audio id="sfx-live" src="assets/sfx/interface/click_003.ogg" data-start="5.8" data-duration="0.05" data-track-index="5" data-volume="0.55"></audio>
+      <audio id="sfx-phone" src="assets/sfx/interface/click_003.ogg" data-start="10.9" data-duration="0.05" data-track-index="6" data-volume="0.4"></audio>
+      <audio id="sfx-name" src="assets/sfx/interface/bong_001.ogg" data-start="17.7" data-duration="0.12" data-track-index="5" data-volume="0.5"></audio>
+    </div>
+    <script src="audio-data.js"></script>
+    <script>
+      const tl = gsap.timeline({ paused: true });
+      const rise = { y: 28, opacity: 0 };
+      const rest = { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" };
+
+      tl.fromTo("#line-1", rise, rest, 1.5);
+      tl.fromTo("#line-2", rise, rest, 2.15);
+      tl.fromTo("#live-mark", { opacity: 0 }, { opacity: 1, duration: 0.4 }, 1.2);
+      tl.to("#slide-inner", { opacity: 0, duration: 0.4, ease: "power1.out" }, 5.1);
+
+      tl.fromTo("#row-1", rise, rest, 5.8);
+      tl.fromTo("#row-2", rise, rest, 6.55);
+      tl.fromTo("#row-3", rise, rest, 7.25);
+      tl.fromTo("#setlist-copy", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 6.3);
+      tl.fromTo("#setlist-inner", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 5.5);
+      tl.to("#setlist-inner", { opacity: 0, duration: 0.35 }, 10.15);
+
+      tl.fromTo("#phone-remote", { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 10.9);
+      tl.fromTo("#phone-chords", { y: 36, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 11.45);
+      tl.fromTo("#phones-copy", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5 }, 11.7);
+      tl.to("#phones-inner", { opacity: 0, duration: 0.35 }, 15.6);
+
+      tl.fromTo("#wordmark", rise, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 17.7);
+      tl.fromTo("#claim-1", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, 18.4);
+      tl.fromTo("#claim-2", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.4 }, 18.75);
+      tl.fromTo("#closer", { opacity: 0 }, { opacity: 1, duration: 0.35 }, 19.15);
+
+      const frames = (window.AUDIO_DATA && window.AUDIO_DATA.frames) || [];
+      const fps = (window.AUDIO_DATA && window.AUDIO_DATA.fps) || 30;
+      for (let f = 0; f < frames.length; f++) {
+        const t = f / fps;
+        if (t > 21) break;
+        const bass = frames[f].bands[0];
+        const rms = frames[f].rms;
+        tl.call(
+          ((b, r) => () => {
+            gsap.set("#wash", { opacity: 0.12 + b * 0.28 + r * 0.08 });
+          })(bass, rms),
+          [],
+          t,
+        );
+      }
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
