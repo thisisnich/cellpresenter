@@ -306,7 +306,24 @@ async fn open_library(app: &AppHandle) -> Result<Db, String> {
     Ok(db)
 }
 
+/// The AppImage carries its own (older) WebKit, built on Ubuntu 22.04, and
+/// runs under XWayland. With accelerated compositing on, that WebKit aborts
+/// when a window is made fullscreen on newer distributions (seen on Fedora
+/// 44 with an NVIDIA card). Without it, pages draw the same, on the CPU.
+/// Installed packages (.deb, .rpm) use the system's WebKit and keep it on.
+fn work_around_appimage_webkit() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("APPIMAGE").is_some()
+        && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none()
+    {
+        // Before any other thread starts, so nothing reads the environment
+        // while it changes.
+        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+    }
+}
+
 pub fn run() {
+    work_around_appimage_webkit();
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {

@@ -20,7 +20,8 @@ export default function DisplayApp() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const send = useCallback((command: LiveCommand) => api.liveCommand(command).catch(() => undefined), []);
   useTransportKeys(send, local);
-  useFullscreenKey(new URLSearchParams(window.location.search).get("window") === "1");
+  const appWindow = new URLSearchParams(window.location.search).get("window") === "1";
+  useFullscreenKey(appWindow);
   const slide = state?.slides[state.slide_index];
   const active = slide?.text ?? "";
   const shown = state?.visible ?? false;
@@ -62,7 +63,7 @@ export default function DisplayApp() {
 
   return (
     <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>
-      <div className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(false)}>
+      <div className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(appWindow)}>
         <Stage backdrop={state && shown ? <SlideBackground url={background} /> : null}>
           {/* Sizes here are stage pixels (1920 wide), so messages stay readable
               when the stage is scaled down to a phone. Blacked out = nothing. */}
