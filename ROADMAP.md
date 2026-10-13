@@ -32,7 +32,7 @@ The bar: a volunteer at another church installs it and runs a Sunday with no hel
 | Release | Items |
 |---|---|
 | v0.2 | Song search and import (**done**) |
-| v0.3 | Copyright footer on slides (**done**: copyright and CCLI song # in the editor; licence number and first slide / every slide / off in the Screen panel) · text style (font, size, colour, shadow, position, margins) · Back up / Restore library buttons · ChordPro and OpenLyrics file import (opens CCLI SongSelect downloads, since SongSelect no longer offers an integration) · recycle bin for deleted songs and setlists |
+| v0.3 | Copyright footer on slides (**done**: copyright and CCLI song # in the editor; licence number and first slide / every slide / off in the Screen panel) · text style (**done**: five bundled fonts, bold, ALL CAPS, colour, shadow, top / middle / lower third, margins, in the Screen panel) · Back up / Restore library buttons · ChordPro and OpenLyrics file import (opens CCLI SongSelect downloads, since SongSelect no longer offers an integration) · recycle bin for deleted songs and setlists |
 | v0.4 | Scripture: public-domain translations (KJV, WEB) bundled, search by reference, verses split into slides |
 | v0.5 | Auto-update (Tauri updater, signed) · Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
 | v1.0 | First-run guide · Notes and Stage panels built or hidden (no "coming soon") · polish · **launch video** made with [`/brag`](https://github.com/latent-spaces/brag) (a Claude Code skill that reads the repo and renders a ~20 s video with music and captions) for the README, release notes and socials |
@@ -51,7 +51,6 @@ Remote editing from another PC · team invites · opt-in media upload with tempo
 
 Written down so they aren't lost; not scheduled yet.
 
-- **F for fullscreen on the Display.** Pressing F in the Display window toggles fullscreen (like F11 or YouTube's F), hiding the taskbar and title bar; Esc leaves it. Small; do it alongside v0.3.
 - **Licensed song sources.** Bundled public-domain hymns, and any song service that offers an official API or licence for apps.
 
 - **Panels in their own windows.** Drag a tab out of the console to open it in a new window, like a browser tab (for example a dedicated Chords window on a second screen). Every panel already gets its data from the embedded server, so a panel can be its own page (`/panel/chords`) in a native window. Dragging a tab past the window edge opens that window. About one or two sessions. Dockview's built-in popout uses `window.open`, which Tauri blocks by default, so our own windows are the sturdier route. A plain "Open in new window" tab action comes first.

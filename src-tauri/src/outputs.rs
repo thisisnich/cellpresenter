@@ -39,4 +39,9 @@ pub trait Outputs: Send + Sync {
     /// Put the Display window fullscreen on `screen`, or back in a normal
     /// window. Opens the window again if it was closed.
     fn show_on(&self, screen: Option<u32>) -> Result<(), String>;
+    /// Fullscreen on the screen the Display window is on, or back to a
+    /// window if it's fullscreen already (the Display's F key).
+    fn toggle_fullscreen(&self) -> Result<(), String> {
+        Err("not supported".into())
+    }
 }

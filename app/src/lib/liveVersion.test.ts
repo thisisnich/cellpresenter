@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_LOOK } from "../display/look";
 import { isNewer } from "./liveVersion";
 import type { LiveState } from "./ws";
 
@@ -16,7 +17,7 @@ const state = (session: string, version: number): LiveState => ({
   background: null,
   text_scale: 1,
   credits: null,
-  look: { footer: "first", ccli_licence: null },
+  look: DEFAULT_LOOK,
 });
 
 describe("isNewer", () => {

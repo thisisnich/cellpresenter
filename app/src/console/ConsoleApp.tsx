@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { DEFAULT_LOOK, LookContext } from "../display/look";
 import { DEFAULT_THEME } from "../theme/tokens";
 import { Header } from "./Header";
 import { addPanel, resetLayout } from "./layout";
@@ -59,16 +60,24 @@ function Shell() {
   );
 }
 
+// Previews draw lyrics with the screens' current look.
+function LiveLook({ children }: { children: ReactNode }) {
+  const { state } = useLive();
+  return <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>{children}</LookContext.Provider>;
+}
+
 // Operator console: header, dockable workspace, transport bar.
 export default function ConsoleApp() {
   return (
     <LiveProvider>
-      <ConsoleProvider>
-        <PagesProvider>
-          <TransportKeys />
-          <Shell />
-        </PagesProvider>
-      </ConsoleProvider>
+      <LiveLook>
+        <ConsoleProvider>
+          <PagesProvider>
+            <TransportKeys />
+            <Shell />
+          </PagesProvider>
+        </ConsoleProvider>
+      </LiveLook>
     </LiveProvider>
   );
 }

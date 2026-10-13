@@ -1,5 +1,7 @@
 import { CreditsFooter } from "../display/CreditsFooter";
 import { LyricSlide } from "../display/LyricSlide";
+import { LookContext } from "../display/look";
+import type { Look } from "../generated/Look";
 import { SlideBackground } from "../display/SlideBackground";
 import { Stage } from "../display/Stage";
 
@@ -15,6 +17,7 @@ export function SlidePreview({
   hideText = false,
   transparent = false,
   footer = null,
+  look,
 }: {
   text: string;
   textScale?: number;
@@ -28,9 +31,11 @@ export function SlidePreview({
   transparent?: boolean;
   /** The copyright line, when the screen shows one. */
   footer?: string[] | null;
+  /** A look to try out instead of the screens' current one. */
+  look?: Look;
 }) {
   const checker = transparent && !background && !blank;
-  return (
+  const preview = (
     <div className={`relative aspect-video w-full overflow-hidden ${checker ? "cp-checker" : "bg-black"}`}>
       <Stage clear={checker}>
         {blank ? (
@@ -45,4 +50,5 @@ export function SlidePreview({
       </Stage>
     </div>
   );
+  return look ? <LookContext.Provider value={look}>{preview}</LookContext.Provider> : preview;
 }

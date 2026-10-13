@@ -884,20 +884,10 @@ async fn set_output(
 // ---------- how the screens look ----------
 
 /// Change how every screen looks. Saved, so it survives a restart.
-async fn set_look(
-    State(s): State<ServerState>,
-    Json(mut look): Json<Look>,
-) -> ApiResult<LiveState> {
-    look.ccli_licence = look
-        .ccli_licence
-        .map(|n| n.trim().to_string())
-        .filter(|n| !n.is_empty());
-    if look.ccli_licence.as_ref().is_some_and(|n| n.len() > 40) {
-        return Err(ApiError(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "licence_too_long",
-        ));
-    }
+async fn set_look(State(s): State<ServerState>, Json(look): Json<Look>) -> ApiResult<LiveState> {
+    let look = look
+        .checked()
+        .map_err(|why| ApiError(StatusCode::UNPROCESSABLE_ENTITY, why))?;
     let json = serde_json::to_string(&look).expect("serialize look");
     s.db.set_state(LOOK_KEY, &json).await?;
     Ok(Json(s.mutate(|l| l.look = look)))
@@ -966,6 +956,16 @@ async fn open_ug_search(
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
     })?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// The Display window's F key: fullscreen where it is, or back to a window.
+async fn toggle_fullscreen(State(s): State<ServerState>) -> ApiResult<Screens> {
+    let outputs = s.outputs.ok_or(NO_SCREENS)?;
+    outputs.toggle_fullscreen().map_err(|e| {
+        eprintln!("cellpresenter: can't toggle fullscreen: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "output_failed")
+    })?;
+    Ok(Json(outputs.screens()))
 }
 
 // ---------- WebSocket ----------
@@ -1093,6 +1093,7 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/screens/toggle-fullscreen", post(toggle_fullscreen))
         .route("/look", axum::routing::put(set_look))
         // Reaching out to the internet is for whoever runs the show.
         .route("/online/search", get(search_online))

@@ -6,6 +6,7 @@ import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
 import { footerLines } from "../domain/credits";
 import { CreditsFooter } from "./CreditsFooter";
+import { DEFAULT_LOOK, LookContext } from "./look";
 import { LyricSlide } from "./LyricSlide";
 import { SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
@@ -19,6 +20,7 @@ export default function DisplayApp() {
   const local = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
   const send = useCallback((command: LiveCommand) => api.liveCommand(command).catch(() => undefined), []);
   useTransportKeys(send, local);
+  useFullscreenKey(new URLSearchParams(window.location.search).get("window") === "1");
   const slide = state?.slides[state.slide_index];
   const active = slide?.text ?? "";
   const shown = state?.visible ?? false;
@@ -59,41 +61,75 @@ export default function DisplayApp() {
     document.fonts.check('700 90px "Inter Variable"');
 
   return (
-    <div className="relative h-dvh w-full overflow-hidden bg-black">
-      <Stage backdrop={state && shown ? <SlideBackground url={background} /> : null}>
-        {/* Sizes here are stage pixels (1920 wide), so messages stay readable
-            when the stage is scaled down to a phone. Blacked out = nothing. */}
-        {!state && (
-          <p className="text-5xl text-white/40">
-            {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
+    <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>
+      <div className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(false)}>
+        <Stage backdrop={state && shown ? <SlideBackground url={background} /> : null}>
+          {/* Sizes here are stage pixels (1920 wide), so messages stay readable
+              when the stage is scaled down to a phone. Blacked out = nothing. */}
+          {!state && (
+            <p className="text-5xl text-white/40">
+              {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
+            </p>
+          )}
+          {state && shown && !state.text_hidden && state.slides.length > 0 && (
+            <LyricSlide text={active} textScale={textScale} />
+          )}
+          {state && shown && !state.text_hidden && footer && <CreditsFooter lines={footer} />}
+          {state && shown && state.slides.length === 0 && !background && (
+            <p className="text-4xl text-white/25">{t("display.waiting")}</p>
+          )}
+        </Stage>
+
+        {diag && (
+          <div className="absolute left-3 top-3 z-10 rounded bg-black/70 px-2 py-1 font-mono text-[10px] leading-4 text-white/70">
+            <div>
+              viewport: {viewport.w}×{viewport.h}
+            </div>
+            <div>scale: {scale.toFixed(3)}</div>
+            <div>font: {fontOk ? "Inter ✓" : "fallback ✗"}</div>
+            <div>state: {state ? `slide ${state.slide_index + 1}, ${Math.round(textScale * 100)}%` : "none"}</div>
+            <div>bundle: {bundle.split("/").pop()}</div>
+          </div>
+        )}
+
+        {status !== "open" && (
+          <p className="absolute top-6 right-8 text-xs text-white/40">
+            {status === "connecting" ? t("connection.connecting") : t("display.reconnecting")}
           </p>
         )}
-        {state && shown && !state.text_hidden && state.slides.length > 0 && (
-          <LyricSlide text={active} textScale={textScale} />
-        )}
-        {state && shown && !state.text_hidden && footer && <CreditsFooter lines={footer} />}
-        {state && shown && state.slides.length === 0 && !background && (
-          <p className="text-4xl text-white/25">{t("display.waiting")}</p>
-        )}
-      </Stage>
-
-      {diag && (
-        <div className="absolute left-3 top-3 z-10 rounded bg-black/70 px-2 py-1 font-mono text-[10px] leading-4 text-white/70">
-          <div>
-            viewport: {viewport.w}×{viewport.h}
-          </div>
-          <div>scale: {scale.toFixed(3)}</div>
-          <div>font: {fontOk ? "Inter ✓" : "fallback ✗"}</div>
-          <div>state: {state ? `slide ${state.slide_index + 1}, ${Math.round(textScale * 100)}%` : "none"}</div>
-          <div>bundle: {bundle.split("/").pop()}</div>
-        </div>
-      )}
-
-      {status !== "open" && (
-        <p className="absolute top-6 right-8 text-xs text-white/40">
-          {status === "connecting" ? t("connection.connecting") : t("display.reconnecting")}
-        </p>
-      )}
-    </div>
+      </div>
+    </LookContext.Provider>
   );
+}
+
+/**
+ * F toggles fullscreen, like YouTube (Esc leaves it). The app's own Display
+ * window asks the app, which fills the screen it's on (no title bar or
+ * taskbar); a browser page uses the browser's fullscreen.
+ */
+function toggleFullscreen(appWindow: boolean): void {
+  if (appWindow) {
+    void api.toggleFullscreen().catch(() => undefined);
+  } else if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => undefined);
+  } else {
+    void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  }
+}
+
+function useFullscreenKey(appWindow: boolean): void {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+      if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen(appWindow);
+      } else if (e.key === "Escape" && appWindow) {
+        // Back to a window (does nothing if it already is one).
+        void api.showDisplayOn(null).catch(() => undefined);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [appWindow]);
 }

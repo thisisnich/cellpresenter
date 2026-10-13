@@ -49,15 +49,90 @@ pub enum FooterMode {
     All,
 }
 
+/// Lyric typefaces. They ship with the app, so every screen draws (and
+/// fits) the words the same way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum LyricFont {
+    #[default]
+    Inter,
+    Montserrat,
+    OpenSans,
+    Oswald,
+    Lora,
+}
+
+/// Where the words sit on the screen.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TextPosition {
+    #[default]
+    Middle,
+    /// The bottom third, e.g. over a livestream or a video.
+    Bottom,
+    Top,
+}
+
 /// How every screen looks, set once for the church.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize, TS)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[serde(default)]
 #[ts(export)]
 pub struct Look {
-    #[serde(default)]
     pub footer: FooterMode,
     /// The church's CCLI licence number, shown in the copyright line.
-    #[serde(default)]
     pub ccli_licence: Option<String>,
+    pub font: LyricFont,
+    pub bold: bool,
+    pub uppercase: bool,
+    /// Text colour as "#rrggbb".
+    pub color: String,
+    /// A soft shadow behind the words, so they read over bright pictures.
+    pub shadow: bool,
+    pub position: TextPosition,
+    /// Space kept clear around the words, in percent of the screen (0–20).
+    pub margin: u8,
+}
+
+pub const MAX_MARGIN: u8 = 20;
+
+impl Default for Look {
+    fn default() -> Self {
+        Self {
+            footer: FooterMode::default(),
+            ccli_licence: None,
+            font: LyricFont::default(),
+            bold: true,
+            uppercase: false,
+            color: "#ffffff".into(),
+            shadow: true,
+            position: TextPosition::default(),
+            margin: 5,
+        }
+    }
+}
+
+impl Look {
+    /// Tidy what a client sent; Err names what's wrong.
+    pub fn checked(mut self) -> Result<Self, &'static str> {
+        self.ccli_licence = self
+            .ccli_licence
+            .map(|n| n.trim().to_string())
+            .filter(|n| !n.is_empty());
+        if self.ccli_licence.as_ref().is_some_and(|n| n.len() > 40) {
+            return Err("licence_too_long");
+        }
+        let hex = self.color.strip_prefix('#').unwrap_or("");
+        if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err("bad_color");
+        }
+        self.color = self.color.to_ascii_lowercase();
+        if self.margin > MAX_MARGIN {
+            return Err("bad_margin");
+        }
+        Ok(self)
+    }
 }
 
 /// Live presentation state. The server owns it; every client renders from it.
@@ -225,6 +300,37 @@ impl LiveState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn looks_are_checked_and_old_saves_still_load() {
+        let old: Look = serde_json::from_str(r#"{"footer":"all","ccli_licence":"1"}"#).unwrap();
+        assert_eq!(old.footer, FooterMode::All);
+        assert_eq!(old.color, "#ffffff");
+        assert!(old.bold && old.shadow);
+        let ok = Look {
+            color: "#FFAA00".into(),
+            ccli_licence: Some("  ".into()),
+            ..Look::default()
+        };
+        let ok = ok.checked().unwrap();
+        assert_eq!(ok.color, "#ffaa00");
+        assert_eq!(ok.ccli_licence, None);
+        let bad = |look: Look| look.checked().unwrap_err();
+        assert_eq!(
+            bad(Look {
+                color: "red".into(),
+                ..Look::default()
+            }),
+            "bad_color"
+        );
+        assert_eq!(
+            bad(Look {
+                margin: 21,
+                ..Look::default()
+            }),
+            "bad_margin"
+        );
+    }
 
     fn fixture() -> LiveState {
         let mut s = LiveState::new("test".into());

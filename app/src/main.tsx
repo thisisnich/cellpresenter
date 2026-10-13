@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import "@fontsource-variable/inter";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
+// Lyric fonts (the Screen panel picks one); loaded only when used.
+import "@fontsource-variable/montserrat";
+import "@fontsource-variable/open-sans";
+import "@fontsource-variable/oswald";
+import "@fontsource-variable/lora";
 import App from "./App";
 import "./index.css";
 import { applyTheme, DEFAULT_THEME } from "./theme/tokens";

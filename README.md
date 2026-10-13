@@ -10,7 +10,8 @@ Free, open-source worship lyrics presenter, made for cell groups and small churc
 - **Find songs online:** search for a song's lyrics (from LRCLIB), or paste a link to a chord sheet on Ultimate Guitar. The song opens in the editor already split into sections and slides, with repeats worked out, so you only check it and save.
 - **Setlists:** build tonight's list of songs and announcements. Preview a song before it goes live, and Next carries on into the next item.
 - **Backgrounds:** pictures work like in ProPresenter. Click one to put it on screen, or cue it on a slide or a whole section so it switches when that part comes up.
-- **Any screen is a display:** the projector window, a TV, or phones and tablets. Every screen shows the same layout.
+- **Any screen is a display:** the projector window, a TV, or phones and tablets. Every screen shows the same layout. Press **F** on the Display (or double-click it) to fill the screen; **F** or **Esc** again brings the window back.
+- **Your look:** the **Screen** panel sets the font (five included), bold, ALL CAPS, colour, shadow, where the words sit (top, middle or lower third for livestreams) and the margins, for every screen at once.
 - **Phone remote:** scan a QR code, and your phone becomes the clicker and song picker. It's protected by a 4-digit PIN.
 - **Chords for musicians:** each musician opens the chords view on their own phone and picks their key and capo. The view follows the live slide, and tapping a chord shows the guitar shapes for it.
 - **Clickers and keyboard:** arrow keys, Space and Page Up/Down change slides, so most presentation clickers work too. **N** and **P** jump to the next or previous setlist item, and **B** blanks the screen.

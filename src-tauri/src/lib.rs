@@ -50,7 +50,9 @@ fn open_windows(app: &AppHandle, port: u16) -> tauri::Result<()> {
 }
 
 fn open_display(app: &AppHandle, port: u16) -> tauri::Result<tauri::WebviewWindow> {
-    WebviewWindowBuilder::new(app, DISPLAY, app_url(port, "/display"))
+    // `?window=1` tells the page it is this app's own Display window, so
+    // its F key asks the app (not the browser) for fullscreen.
+    WebviewWindowBuilder::new(app, DISPLAY, app_url(port, "/display?window=1"))
         .title("CellPresenter Display")
         .inner_size(960.0, 540.0)
         .build()
@@ -124,6 +126,41 @@ impl Outputs for WindowOutputs {
                 };
                 if let Err(e) = place_display(&window, screen, monitor.as_ref()) {
                     eprintln!("cellpresenter: can't move the display: {e}");
+                }
+            })
+            .map_err(|e| e.to_string())
+    }
+
+    fn toggle_fullscreen(&self) -> Result<(), String> {
+        self.toggle()
+    }
+}
+
+impl WindowOutputs {
+    fn toggle(&self) -> Result<(), String> {
+        let app = self.app.clone();
+        self.app
+            .run_on_main_thread(move || {
+                let Some(window) = app.get_webview_window(DISPLAY) else {
+                    return;
+                };
+                let result = if is_fullscreen(&window) {
+                    place_display(&window, None, None)
+                } else {
+                    let current = window.current_monitor().ok().flatten();
+                    let monitors = app.available_monitors().unwrap_or_default();
+                    let index = current.as_ref().and_then(|c| {
+                        monitors
+                            .iter()
+                            .position(|m| m.position() == c.position() && m.size() == c.size())
+                    });
+                    match (index, current) {
+                        (Some(i), Some(m)) => place_display(&window, Some(i as u32), Some(&m)),
+                        _ => window.set_fullscreen(true),
+                    }
+                };
+                if let Err(e) = result {
+                    eprintln!("cellpresenter: can't toggle fullscreen: {e}");
                 }
             })
             .map_err(|e| e.to_string())

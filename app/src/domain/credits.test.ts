@@ -4,7 +4,7 @@ import type { Look } from "../generated/Look";
 import { footerLines } from "./credits";
 
 const song: Credits = { title: "Way Maker", artist: "Sinach", copyright: "2016 Integrity Music", ccli_number: "7115744" };
-const look: Look = { footer: "first", ccli_licence: "123456" };
+const look: Pick<Look, "footer" | "ccli_licence"> = { footer: "first", ccli_licence: "123456" };
 
 describe("footerLines", () => {
   it("credits the song on its first slide", () => {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SlidePreview } from "../console/SlidePreview";
+import { LookContext } from "../display/look";
 import { currentJump, sectionJumps } from "../domain/sections";
 import type { LiveState } from "../generated/LiveState";
 import { t } from "../i18n";
@@ -97,111 +98,113 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
   const background = state.background;
 
   return (
-    <main className="flex h-dvh flex-col gap-3 bg-cp-bg p-3 font-ui text-cp-text select-none">
-      <header className="flex items-center justify-between gap-3">
-        <button type="button" onClick={() => setPicking(true)} className="flex min-w-0 flex-1 flex-col items-start text-left">
-          <span className="text-xs text-cp-muted">{t("remote.changeSong")} ▾</span>
-          <span className="max-w-full truncate text-lg font-semibold">{state.title || t("remote.nothingOnAir")}</span>
-        </button>
-        <span className="inline-flex items-center gap-1.5 text-xs text-cp-muted">
-          <span className={`size-2 rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} />
-          {status === "open" ? t("connection.open") : t("connection.connecting")}
-        </span>
-      </header>
+    <LookContext.Provider value={state.look}>
+      <main className="flex h-dvh flex-col gap-3 bg-cp-bg p-3 font-ui text-cp-text select-none">
+        <header className="flex items-center justify-between gap-3">
+          <button type="button" onClick={() => setPicking(true)} className="flex min-w-0 flex-1 flex-col items-start text-left">
+            <span className="text-xs text-cp-muted">{t("remote.changeSong")} ▾</span>
+            <span className="max-w-full truncate text-lg font-semibold">{state.title || t("remote.nothingOnAir")}</span>
+          </button>
+          <span className="inline-flex items-center gap-1.5 text-xs text-cp-muted">
+            <span className={`size-2 rounded-full ${status === "open" ? "bg-cp-ok" : "bg-cp-danger"}`} />
+            {status === "open" ? t("connection.open") : t("connection.connecting")}
+          </span>
+        </header>
 
-      <section aria-label={t("output.live")} className="flex flex-col gap-1">
-        <span className="cp-label text-cp-live">
-          {t("output.live")}
-          {slide ? ` · ${slide.section}` : ""}
-        </span>
-        <div className="overflow-hidden rounded-cp border-cp">
-          <SlidePreview
-            text={slide?.text ?? ""}
-            textScale={state.text_scale}
-            blank={!state.visible}
-            blankLabel={t("output.blackedOut")}
-            background={background}
-            hideText={state.text_hidden}
-          />
-        </div>
-      </section>
-
-      {next && (
-        <section aria-label={t("slides.next")} className="flex flex-col gap-1">
-          <span className="cp-label text-cp-next">{t("output.next", { section: next.section })}</span>
-          <p className="m-0 line-clamp-2 rounded-cp border-cp bg-cp-panel px-3 py-2 text-sm whitespace-pre-line text-cp-muted">{next.text}</p>
+        <section aria-label={t("output.live")} className="flex flex-col gap-1">
+          <span className="cp-label text-cp-live">
+            {t("output.live")}
+            {slide ? ` · ${slide.section}` : ""}
+          </span>
+          <div className="overflow-hidden rounded-cp border-cp">
+            <SlidePreview
+              text={slide?.text ?? ""}
+              textScale={state.text_scale}
+              blank={!state.visible}
+              blankLabel={t("output.blackedOut")}
+              background={background}
+              hideText={state.text_hidden}
+            />
+          </div>
         </section>
-      )}
 
-      {jumps.length > 1 && (
-        <nav aria-label={t("remote.sections")} className="flex gap-2 overflow-x-auto pb-1">
-          {jumps.map((jump) => {
-            const on = jump === here;
-            return (
-              <button
-                key={jump.index}
-                type="button"
-                onClick={() => void send({ type: "go_to", index: jump.index })}
-                aria-current={on ? "true" : undefined}
-                title={jump.section}
-                className={`h-11 min-w-11 shrink-0 rounded-cp px-3 font-mono text-sm font-semibold ${on ? "bg-cp-live text-cp-on-live" : "border-cp bg-cp-surface"}`}
-              >
-                {jump.label}
-              </button>
-            );
-          })}
-        </nav>
-      )}
+        {next && (
+          <section aria-label={t("slides.next")} className="flex flex-col gap-1">
+            <span className="cp-label text-cp-next">{t("output.next", { section: next.section })}</span>
+            <p className="m-0 line-clamp-2 rounded-cp border-cp bg-cp-panel px-3 py-2 text-sm whitespace-pre-line text-cp-muted">{next.text}</p>
+          </section>
+        )}
 
-      {error && (
-        <p role="alert" className="m-0 text-sm text-cp-danger">
-          {error}
-        </p>
-      )}
+        {jumps.length > 1 && (
+          <nav aria-label={t("remote.sections")} className="flex gap-2 overflow-x-auto pb-1">
+            {jumps.map((jump) => {
+              const on = jump === here;
+              return (
+                <button
+                  key={jump.index}
+                  type="button"
+                  onClick={() => void send({ type: "go_to", index: jump.index })}
+                  aria-current={on ? "true" : undefined}
+                  title={jump.section}
+                  className={`h-11 min-w-11 shrink-0 rounded-cp px-3 font-mono text-sm font-semibold ${on ? "bg-cp-live text-cp-on-live" : "border-cp bg-cp-surface"}`}
+                >
+                  {jump.label}
+                </button>
+              );
+            })}
+          </nav>
+        )}
 
-      <div className="mt-auto flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => void send({ type: "toggle_visible" })}
-            aria-pressed={!state.visible}
-            className={`h-12 ${!state.visible ? "cp-btn-danger" : "cp-btn"}`}
-          >
-            {state.visible ? t("transport.blackOut") : t("transport.show")}
-          </button>
-          <button
-            type="button"
-            disabled={state.text_hidden}
-            onClick={() => void send({ type: "clear_text" })}
-            className="cp-btn h-12"
-          >
-            {t("transport.clearText")}
-          </button>
+        {error && (
+          <p role="alert" className="m-0 text-sm text-cp-danger">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-auto flex flex-col gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => void send({ type: "toggle_visible" })}
+              aria-pressed={!state.visible}
+              className={`h-12 ${!state.visible ? "cp-btn-danger" : "cp-btn"}`}
+            >
+              {state.visible ? t("transport.blackOut") : t("transport.show")}
+            </button>
+            <button
+              type="button"
+              disabled={state.text_hidden}
+              onClick={() => void send({ type: "clear_text" })}
+              className="cp-btn h-12"
+            >
+              {t("transport.clearText")}
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => void send({ type: "prev" })} className="cp-btn h-24 text-lg font-semibold">
+              {t("transport.prev")}
+            </button>
+            <button type="button" onClick={() => void send({ type: "next" })} className="cp-btn-live col-span-2 h-24 text-2xl">
+              {t("transport.next")}
+            </button>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button type="button" onClick={() => void send({ type: "prev" })} className="cp-btn h-24 text-lg font-semibold">
-            {t("transport.prev")}
-          </button>
-          <button type="button" onClick={() => void send({ type: "next" })} className="cp-btn-live col-span-2 h-24 text-2xl">
-            {t("transport.next")}
-          </button>
-        </div>
-      </div>
 
-      {picking && (
-        <SongPicker
-          live={state}
-          onClose={() => setPicking(false)}
-          onShowItem={(setlistId, itemId) => {
-            setPicking(false);
-            void run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: 0 }));
-          }}
-          onShowSong={(songId) => {
-            setPicking(false);
-            void run(() => api.showSong({ song_id: songId, slide_index: 0 }));
-          }}
-        />
-      )}
-    </main>
+        {picking && (
+          <SongPicker
+            live={state}
+            onClose={() => setPicking(false)}
+            onShowItem={(setlistId, itemId) => {
+              setPicking(false);
+              void run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: 0 }));
+            }}
+            onShowSong={(songId) => {
+              setPicking(false);
+              void run(() => api.showSong({ song_id: songId, slide_index: 0 }));
+            }}
+          />
+        )}
+      </main>
+    </LookContext.Provider>
   );
 }

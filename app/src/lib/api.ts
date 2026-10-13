@@ -91,6 +91,8 @@ export const api = {
 
   screens: () => request<Screens>("/api/screens"),
   showDisplayOn: (screen: number | null) => request<Screens>("/api/screens/output", json("POST", { screen })),
+  /** The Display window's F key: fullscreen where it is, or back to a window. */
+  toggleFullscreen: () => request<Screens>("/api/screens/toggle-fullscreen", { method: "POST" }),
 
   liveState: () => request<LiveState>("/api/live/state"),
   /** Change how every screen looks (copyright line, …). */
