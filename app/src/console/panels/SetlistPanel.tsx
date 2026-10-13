@@ -25,6 +25,7 @@ const move = <T,>(list: T[], from: number, to: number): T[] => {
 
 function itemLabel(item: SetlistItem): string {
   if (item.kind === "announcement") return item.title || t("setlist.announcement");
+  if (item.kind === "scripture") return item.title;
   return item.missing ? t("setlist.missingSong") : item.title;
 }
 

@@ -3,7 +3,7 @@ import type { Credits } from "../generated/Credits";
 import type { Look } from "../generated/Look";
 import { footerLines } from "./credits";
 
-const song: Credits = { title: "Way Maker", artist: "Sinach", copyright: "2016 Integrity Music", ccli_number: "7115744" };
+const song: Credits = { title: "Way Maker", artist: "Sinach", copyright: "2016 Integrity Music", ccli_number: "7115744", translation: null };
 const look: Pick<Look, "footer" | "ccli_licence"> = { footer: "first", ccli_licence: "123456" };
 
 describe("footerLines", () => {
@@ -18,8 +18,14 @@ describe("footerLines", () => {
   });
 
   it("shows public-domain songs without a licence number", () => {
-    const hymn: Credits = { title: "Amazing Grace", artist: "John Newton", copyright: "Public domain", ccli_number: null };
+    const hymn: Credits = { title: "Amazing Grace", artist: "John Newton", copyright: "Public domain", ccli_number: null, translation: null };
     expect(footerLines(hymn, look, 0)).toEqual(["Amazing Grace — John Newton", "Public domain"]);
+  });
+
+  it("shows a scripture reference on every slide", () => {
+    const john: Credits = { title: "John 3:16–17", artist: null, copyright: null, ccli_number: null, translation: "KJV" };
+    expect(footerLines(john, look, 1)).toEqual(["John 3:16–17 · KJV"]);
+    expect(footerLines(john, { ...look, footer: "off" }, 0)).toBeNull();
   });
 
   it("stays off for songs with nothing to credit, and for announcements", () => {

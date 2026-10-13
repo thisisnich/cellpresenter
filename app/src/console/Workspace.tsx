@@ -13,6 +13,7 @@ import { OutputPanel } from "./panels/OutputPanel";
 import { PlaceholderPanel } from "./panels/PlaceholderPanel";
 import { RecycleBinPanel } from "./panels/RecycleBinPanel";
 import { ScreenPanel } from "./panels/ScreenPanel";
+import { ScripturePanel } from "./panels/ScripturePanel";
 import { SetlistPanel } from "./panels/SetlistPanel";
 import { SlidesPanel } from "./panels/SlidesPanel";
 import { SongSearchPanel } from "./panels/SongSearchPanel";
@@ -30,6 +31,7 @@ const components = {
   screen: ScreenPanel,
   backup: BackupPanel,
   bin: RecycleBinPanel,
+  scripture: ScripturePanel,
 };
 
 // One page's dockable workspace. Panels are plain components; the page's

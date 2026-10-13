@@ -8,6 +8,7 @@ Free, open-source worship lyrics presenter, made for cell groups and small churc
 
 - **Songs:** paste lyrics (with or without chords) and they become slides. Sections (verse, chorus, bridge) are colour-coded, and arrangements can repeat them (V1 C V2 C B C).
 - **Find songs online:** search for a song's lyrics (from LRCLIB), or paste a link to a chord sheet on Ultimate Guitar. The song opens in the editor already split into sections and slides, with repeats worked out, so you only check it and save.
+- **Scripture:** the King James Version and the World English Bible are built in, so they work offline. Type a reference like `John 3:16-18`, `1 Cor 13` or `Ps 23:1-4, 6`, or pick a book, chapter and verses; the passage is split into slides with the reference on screen. Show it straight away or add it to the setlist.
 - **Setlists:** build tonight's list of songs and announcements. Preview a song before it goes live, and Next carries on into the next item.
 - **Backgrounds:** pictures work like in ProPresenter. Click one to put it on screen, or cue it on a slide or a whole section so it switches when that part comes up.
 - **Any screen is a display:** the projector window, a TV, or phones and tablets. Every screen shows the same layout. Press **F** on the Display (or double-click it) to fill the screen; **F** or **Esc** again brings the window back.
@@ -68,6 +69,8 @@ Deleted songs and setlists go to the **Recycle bin** panel (Edit page), where **
 Songs belong to their writers and publishers. Projecting a song at church usually needs a licence, such as a [CCLI](https://ccli.com) Church Copyright Licence; check what applies where you are. Only import songs you have the rights to use.
 
 CCLI asks for a copyright line on screen. Fill in each song's **Copyright** and **CCLI song #** in the song editor, and your church's licence number in the **Screen** panel (next to Live output). The line shows on a song's first slide, every slide, or not at all, centred along the bottom or small in the bottom corner.
+
+Bible translations: the World English Bible is public domain, and the King James Version is public domain everywhere except the UK, where the Crown's letters patent cover it. Both come from [eBible.org](https://ebible.org) (`scripts/bibles.py` rebuilds them).
 
 CellPresenter isn't affiliated with Ultimate Guitar or LRCLIB. It fetches only the song you pick, when you pick it; it never searches Ultimate Guitar itself, and it ships no song content except public-domain hymns. Ultimate Guitar's terms allow personal, non-commercial use of its content, so whether you may use a sheet from there is between you and them.
 

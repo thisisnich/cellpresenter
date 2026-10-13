@@ -967,11 +967,18 @@ async fn bible_info() -> ApiResult<BibleInfo> {
         .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "bible_failed"))
 }
 
-/// The verses of a reference, to preview before showing.
-async fn bible_passage(Json(r): Json<PassageRequest>) -> ApiResult<Passage> {
-    bible::passage(&r.translation, &r.passage)
-        .map(Json)
-        .map_err(bible_error)
+/// A passage and the slides it makes, to preview before showing.
+#[derive(Serialize, TS)]
+#[ts(export)]
+pub struct PassagePreview {
+    pub passage: Passage,
+    pub slides: Vec<Slide>,
+}
+
+async fn bible_passage(Json(r): Json<PassageRequest>) -> ApiResult<PassagePreview> {
+    let passage = bible::passage(&r.translation, &r.passage).map_err(bible_error)?;
+    let slides = bible::passage_slides(&passage);
+    Ok(Json(PassagePreview { passage, slides }))
 }
 
 /// Put a passage on air, outside any setlist.

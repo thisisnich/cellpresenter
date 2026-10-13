@@ -54,9 +54,14 @@ const OPEN_SETLIST_KEY = "cellpresenter.setlist";
 
 /** A setlist item as the server takes it back (ids kept). */
 export function itemInput(item: SetlistItem): SetlistItemInput {
-  return item.kind === "song"
-    ? { kind: "song", id: item.id, song_id: item.song_id }
-    : { kind: "announcement", id: item.id, title: item.title, text: item.text, background_id: item.background_id };
+  switch (item.kind) {
+    case "song":
+      return { kind: "song", id: item.id, song_id: item.song_id };
+    case "scripture":
+      return { kind: "scripture", id: item.id, translation: item.translation, passage: item.passage, title: item.title };
+    case "announcement":
+      return { kind: "announcement", id: item.id, title: item.title, text: item.text, background_id: item.background_id };
+  }
 }
 
 function defaultSetlistName(date: Date): string {
@@ -169,6 +174,10 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
       if (!item) return null;
       if (item.kind === "announcement")
         return { title: item.title, slides: announcementSlides(item.title, item.text), songId: null, cue: mediaUrl(item.background_id) };
+      if (item.kind === "scripture") {
+        const preview = await api.biblePassage(item.translation, item.passage).catch(() => null);
+        return preview && { title: preview.passage.label, slides: preview.slides, songId: null, cue: null };
+      }
       const s = await song(item.song_id);
       return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
     },

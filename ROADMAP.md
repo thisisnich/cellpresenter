@@ -33,7 +33,7 @@ The bar: a volunteer at another church installs it and runs a Sunday with no hel
 |---|---|
 | v0.2 | Song search and import (**done**) |
 | v0.3 | Copyright footer on slides (**done**: copyright and CCLI song # in the editor; licence number and first slide / every slide / off in the Screen panel) · text style (**done**: five bundled fonts, bold, ALL CAPS, colour, shadow, top / middle / lower third, margins, in the Screen panel) · backups (**done**: daily automatic backups to Documents/CellPresenter Backups, Back up now, restore from the list or a file, which also moves a library to another computer; copyright line can sit in the bottom corner) · ChordPro and OpenLyrics file import (**done**: ChordPro, SongSelect ChordPro / text / .usr, OpenLyrics, plain text; one file opens in the editor, several are saved; SongSelect no longer offers an integration, so its downloads are the way in) · recycle bin (**done**) |
-| v0.4 | Scripture: public-domain translations (KJV, WEB) bundled, search by reference, verses split into slides |
+| v0.4 | Scripture (**done**: KJV and WEB built in, references like "Jn 3:16-18" or picking book / chapter / verses, passages split into slides with the reference on screen, shown live or added to a setlist) |
 | v0.5 | Auto-update (Tauri updater, signed) |
 | v1.0 | First-run guide · Notes and Stage panels built or hidden (no "coming soon") · polish · **launch video** made with [`/brag`](https://github.com/latent-spaces/brag) (a Claude Code skill that reads the repo and renders a ~20 s video with music and captions) for the README, release notes and socials |
 | v1.1 | Mac signing and notarisation (Apple Developer, US$99/yr) · Windows signing (Azure Trusted Signing) |
@@ -52,6 +52,7 @@ Remote editing from another PC · team invites · opt-in media upload with tempo
 
 Written down so they aren't lost; not scheduled yet.
 
+- **More Bible translations (NIV, ESV, NASB…).** They're copyrighted, so they can't ship in the app. Instead each church brings its own access: a free non-commercial key from the ESV API (api.esv.org; 500 verses a request, 5,000 requests a day) or API.Bible (NASB, NIV and others; the free plan is non-commercial with three copyrighted translations). The app fetches only the passages shown and keeps them for the service. A church projecting these usually also needs to show the translation's name, which the reference line already does.
 - **Licensed song sources.** Bundled public-domain hymns, and any song service that offers an official API or licence for apps.
 
 - **Panels in their own windows.** Drag a tab out of the console to open it in a new window, like a browser tab (for example a dedicated Chords window on a second screen). Every panel already gets its data from the embedded server, so a panel can be its own page (`/panel/chords`) in a native window. Dragging a tab past the window edge opens that window. About one or two sessions. Dockview's built-in popout uses `window.open`, which Tauri blocks by default, so our own windows are the sturdier route. A plain "Open in new window" tab action comes first.

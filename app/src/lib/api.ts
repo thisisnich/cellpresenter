@@ -3,6 +3,7 @@
 // and /ws to the embedded server; in prod that server serves this app itself,
 // so same-origin holds in both worlds.
 import type { BackupInfo } from "../generated/BackupInfo";
+import type { BibleInfo } from "../generated/BibleInfo";
 import type { BackupList } from "../generated/BackupList";
 import type { Command } from "../generated/Command";
 import type { LiveState } from "../generated/LiveState";
@@ -10,10 +11,12 @@ import type { Look } from "../generated/Look";
 import type { Media } from "../generated/Media";
 import type { NetworkInfo } from "../generated/NetworkInfo";
 import type { OnlineSong } from "../generated/OnlineSong";
+import type { PassagePreview } from "../generated/PassagePreview";
 import type { PinInfo } from "../generated/PinInfo";
 import type { RecycleBin } from "../generated/RecycleBin";
 import type { RestoredCounts } from "../generated/RestoredCounts";
 import type { Screens } from "../generated/Screens";
+import type { ScriptureRef } from "../generated/ScriptureRef";
 import type { SearchHit } from "../generated/SearchHit";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
@@ -104,6 +107,12 @@ export const api = {
   liveCommand: (command: LiveCommand) => request<LiveState>("/api/live/command", json("POST", command)),
   showSong: (args: ShowSong) => request<LiveState>("/api/live/show-song", json("POST", args)),
   showItem: (args: ShowItem) => request<LiveState>("/api/live/show-item", json("POST", args)),
+
+  bibleInfo: () => request<BibleInfo>("/api/bible"),
+  biblePassage: (translation: string, passage: ScriptureRef) =>
+    request<PassagePreview>("/api/bible/passage", json("POST", { translation, passage })),
+  showScripture: (translation: string, passage: ScriptureRef) =>
+    request<LiveState>("/api/live/show-scripture", json("POST", { translation, passage })),
 
   listSongs: () => request<SongSummary[]>("/api/songs"),
   getSong: (id: string) => request<Song>(`/api/songs/${encodeURIComponent(id)}`),

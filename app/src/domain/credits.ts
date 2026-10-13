@@ -8,6 +8,8 @@ import type { Look } from "../generated/Look";
 /** The footer's lines for this slide, or null when it shouldn't show. */
 export function footerLines(credits: Credits | null, look: Pick<Look, "footer" | "ccli_licence">, slideIndex: number): string[] | null {
   if (!credits || look.footer === "off") return null;
+  // Scripture: the reference and translation, on every slide.
+  if (credits.translation) return [`${credits.title} · ${credits.translation}`];
   if (look.footer === "first" && slideIndex > 0) return null;
   const copyright = credits.copyright?.trim();
   const songNumber = credits.ccli_number?.trim();
