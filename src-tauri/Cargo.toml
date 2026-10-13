@@ -1,6 +1,6 @@
 [package]
 name = "cellpresenter"
-version = "0.5.2"
+version = "0.6.0"
 description = "CellPresenter desktop — local-first worship lyrics presentation"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/thisisnich/cellpresenter"
