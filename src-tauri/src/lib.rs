@@ -352,24 +352,13 @@ async fn open_library(app: &AppHandle) -> Result<Db, String> {
     Ok(db)
 }
 
-/// The AppImage carries its own (older) WebKit, built on Ubuntu 22.04, and
-/// runs under XWayland. With accelerated compositing on, that WebKit aborts
-/// when a window is made fullscreen on newer distributions (seen on Fedora
-/// 44 with an NVIDIA card). Without it, pages draw the same, on the CPU.
-/// Installed packages (.deb, .rpm) use the system's WebKit and keep it on.
-fn work_around_appimage_webkit() {
-    #[cfg(target_os = "linux")]
-    if std::env::var_os("APPIMAGE").is_some()
-        && std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none()
-    {
-        // Before any other thread starts, so nothing reads the environment
-        // while it changes.
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-    }
-}
-
 pub fn run() {
-    work_around_appimage_webkit();
+    // Compositing stays on. Turning it off (WEBKIT_DISABLE_COMPOSITING_MODE)
+    // used to stop an AppImage fullscreen crash, but it also paints video on
+    // the CPU, so backgrounds stutter. The crash was the AppImage's own
+    // libwayland; the release build leaves that out and uses the system's.
+    // If a machine still aborts when the Display goes fullscreen, set that
+    // variable before launching.
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
@@ -397,6 +386,19 @@ pub fn run() {
             let media_dir = data.join("media");
             let media = MediaStore::new(media_dir.clone())
                 .map_err(|e| report(format!("can't create {}: {e}", media_dir.display())))?;
+            // 4K uploads are scaled to 1080p before any window opens, so the
+            // first play isn't the laggy original. This also moves a late
+            // file index to the front. It can take a while for a long clip.
+            let scaled = media.repack_videos();
+            if !scaled.is_empty() {
+                tauri::async_runtime::block_on(async {
+                    for (hash, size) in &scaled {
+                        if let Err(e) = db.set_media_file_size(hash, *size).await {
+                            eprintln!("cellpresenter: couldn't record scaled video: {e}");
+                        }
+                    }
+                });
+            }
             let outputs = Arc::new(WindowOutputs {
                 app: handle.clone(),
                 port,

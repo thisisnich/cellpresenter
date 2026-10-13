@@ -824,8 +824,10 @@ async fn upload_media(
     Ok((StatusCode::CREATED, Json(media)))
 }
 
-/// Upload a video background. It's stored as sent (no re-encoding), so
-/// it is streamed to disk and hashed on the way rather than held in memory.
+/// Upload a video background. It's streamed to disk and hashed on the way
+/// rather than held in memory. An MP4 or MOV larger than 1080p is scaled
+/// down so the projector doesn't decode 4K; the index is moved to the
+/// front of the file so playback can start and loop without a stall.
 async fn upload_video(
     State(s): State<ServerState>,
     Query(params): Query<UploadParams>,
@@ -833,7 +835,7 @@ async fn upload_video(
 ) -> Result<(StatusCode, Json<Media>), ApiError> {
     let tmp = s.media.upload_path();
     let received = receive_upload(&tmp, body, media::MAX_VIDEO_BYTES).await;
-    let (hash, size, head) = match received {
+    let (hash, _size, head) = match received {
         Ok(r) => r,
         Err(e) => {
             let _ = tokio::fs::remove_file(&tmp).await;
@@ -844,7 +846,20 @@ async fn upload_video(
         let _ = tokio::fs::remove_file(&tmp).await;
         return Err(ApiError(StatusCode::UNSUPPORTED_MEDIA_TYPE, "not_a_video"));
     };
-    s.media.store_video(&tmp, &hash, ext).map_err(|e| {
+    // Remuxing a large file copies it; don't block the server on that.
+    let stored = tokio::task::spawn_blocking({
+        let store = s.media.clone();
+        let tmp = tmp.clone();
+        let hash = hash.clone();
+        let ext = ext.to_string();
+        move || store.store_video(&tmp, &hash, &ext)
+    })
+    .await
+    .map_err(|e| {
+        eprintln!("cellpresenter: couldn't store video: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage_failed")
+    })?
+    .map_err(|e| {
         eprintln!("cellpresenter: couldn't store video: {e}");
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "storage_failed")
     })?;
@@ -860,7 +875,7 @@ async fn upload_video(
             ext,
             width: params.width.unwrap_or(0),
             height: params.height.unwrap_or(0),
-            size_bytes: size,
+            size_bytes: usize::try_from(stored).unwrap_or(usize::MAX),
         })
         .await?;
     Ok((StatusCode::CREATED, Json(media)))
@@ -2320,7 +2335,7 @@ mod tests {
         .await;
         assert_eq!(status, StatusCode::CREATED, "{body}");
         let media: Media = serde_json::from_str(&body).unwrap();
-        assert!(media.video && media.url.ends_with(".mp4"));
+        assert!(media.video && media.url.contains(".mp4?v="));
         assert_eq!((media.width, media.height), (1920, 1080));
         assert_eq!(
             media.thumb_url, media.url,

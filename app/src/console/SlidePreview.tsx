@@ -40,12 +40,14 @@ export function SlidePreview({
   const checker = transparent && !background && !blank;
   const preview = (
     <div className={`relative aspect-video w-full overflow-hidden ${checker ? "cp-checker" : "bg-black"}`}>
-      <Stage clear={checker}>
+      <Stage
+        clear={checker}
+        backdrop={!blank && background ? <SlideBackground url={background} still={!playVideo} /> : null}
+      >
         {blank ? (
           blankLabel && <p className="text-5xl text-white/40">{blankLabel}</p>
         ) : (
           <>
-            <SlideBackground url={background} still={!playVideo} />
             {!hideText && <LyricSlide text={text} textScale={textScale} />}
             {!hideText && footer && <CreditsFooter lines={footer} />}
           </>

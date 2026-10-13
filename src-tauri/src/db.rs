@@ -10,7 +10,7 @@ use sqlx::{FromRow, Sqlite, Transaction};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use crate::media::{image_url, is_video_ext, thumb_url, Media};
+use crate::media::{image_url, is_video_ext, thumb_url, video_url, Media};
 use crate::setlist::{
     Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary, StoredScripture,
 };
@@ -1209,19 +1209,22 @@ struct MediaRow {
     ext: String,
     width: i64,
     height: i64,
+    size_bytes: i64,
     created_at: i64,
 }
 
 impl From<MediaRow> for Media {
     fn from(r: MediaRow) -> Self {
+        let video = is_video_ext(&r.ext);
+        let url = if video {
+            video_url(&r.hash, &r.ext, r.size_bytes)
+        } else {
+            image_url(&r.hash, &r.ext)
+        };
         Media {
-            url: image_url(&r.hash, &r.ext),
-            thumb_url: if is_video_ext(&r.ext) {
-                image_url(&r.hash, &r.ext)
-            } else {
-                thumb_url(&r.hash)
-            },
-            video: is_video_ext(&r.ext),
+            thumb_url: if video { url.clone() } else { thumb_url(&r.hash) },
+            url,
+            video,
             id: r.id,
             name: r.name,
             hash: r.hash,
@@ -1245,7 +1248,7 @@ pub struct NewMedia<'a> {
 impl Db {
     pub async fn list_media(&self) -> DbResult<Vec<Media>> {
         let rows: Vec<MediaRow> = sqlx::query_as(
-            "SELECT id, name, hash, ext, width, height, created_at FROM media
+            "SELECT id, name, hash, ext, width, height, size_bytes, created_at FROM media
              WHERE library_id = ? AND deleted_at IS NULL ORDER BY created_at DESC",
         )
         .bind(&self.library_id)
@@ -1256,7 +1259,7 @@ impl Db {
 
     pub async fn get_media(&self, id: &str) -> DbResult<Option<Media>> {
         let row: Option<MediaRow> = sqlx::query_as(
-            "SELECT id, name, hash, ext, width, height, created_at FROM media
+            "SELECT id, name, hash, ext, width, height, size_bytes, created_at FROM media
              WHERE id = ? AND library_id = ? AND deleted_at IS NULL",
         )
         .bind(id)
@@ -1270,7 +1273,7 @@ impl Db {
     /// existing entry instead of a duplicate.
     pub async fn add_media(&self, m: &NewMedia<'_>) -> DbResult<Media> {
         let existing: Option<MediaRow> = sqlx::query_as(
-            "SELECT id, name, hash, ext, width, height, created_at FROM media
+            "SELECT id, name, hash, ext, width, height, size_bytes, created_at FROM media
              WHERE library_id = ? AND hash = ? AND deleted_at IS NULL",
         )
         .bind(&self.library_id)
@@ -1299,6 +1302,22 @@ impl Db {
         .execute(&self.pool)
         .await?;
         Ok(self.get_media(&id).await?.expect("media just added"))
+    }
+
+    /// The file on disk was rewritten (a 4K video scaled to 1080p). The
+    /// size is part of the URL, so players fetch the new bytes.
+    pub async fn set_media_file_size(&self, hash: &str, size: u64) -> DbResult<()> {
+        sqlx::query(
+            "UPDATE media SET size_bytes = ?, updated_at = ?
+             WHERE library_id = ? AND hash = ? AND deleted_at IS NULL",
+        )
+        .bind(i64::try_from(size).unwrap_or(i64::MAX))
+        .bind(now_ms())
+        .bind(&self.library_id)
+        .bind(hash)
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Soft-delete. The file stays on disk (another library entry or a
