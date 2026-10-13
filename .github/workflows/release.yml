@@ -98,6 +98,13 @@ jobs:
           prerelease: false
           updaterJsonPreferNsis: true
 
+      - name: Build only (no tag)
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
+
       - name: Check the AppImage leaves out Wayland
         if: runner.os == 'Linux'
         run: |
@@ -108,13 +115,6 @@ jobs:
             ls squashfs-root/usr/lib | grep '^libwayland'
             exit 1
           fi
-
-      - name: Build only (no tag)
-        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
 
       - name: Keep the installers
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
