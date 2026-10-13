@@ -29,6 +29,10 @@ export function SongSearchPanel({ params }: IDockviewPanelProps<SearchParams>) {
   const [error, setError] = useState<string | null>(null);
   const latest = useRef(0);
   const link = songLink(query);
+  // After "Search on Ultimate Guitar", a box to paste the song's link into.
+  const [linkBox, setLinkBox] = useState(false);
+  const [pasted, setPasted] = useState("");
+  const pastedLink = songLink(pasted);
 
   const open = useCallback(
     async (hit: { source: Source; id: string }) => {
@@ -69,6 +73,7 @@ export function SongSearchPanel({ params }: IDockviewPanelProps<SearchParams>) {
 
   const searchUg = async () => {
     const q = query.trim();
+    setLinkBox(true);
     if (!onThisComputer()) {
       window.open(ugSearchUrl(q), "_blank", "noopener");
       return;
@@ -125,6 +130,39 @@ export function SongSearchPanel({ params }: IDockviewPanelProps<SearchParams>) {
         <button type="button" onClick={() => void searchUg()} className="cp-btn self-start px-3 py-1.5">
           {words ? t("search.onUgFor", { query: words }) : t("search.onUg")}
         </button>
+        {linkBox && (
+          <form
+            className="flex flex-col gap-1.5"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (pastedLink) void open(pastedLink);
+            }}
+          >
+            <label htmlFor="ug-link" className="text-cp-text">
+              {t("search.pasteLink")}
+            </label>
+            <div className="flex gap-2">
+              <input
+                id="ug-link"
+                // Focus it so the link can be pasted as soon as the user is back.
+                autoFocus
+                value={pasted}
+                onChange={(e) => {
+                  setPasted(e.target.value);
+                  // A pasted link imports straight away.
+                  const found = songLink(e.target.value);
+                  if (found && opening === null) void open(found);
+                }}
+                placeholder="https://tabs.ultimate-guitar.com/tab/…"
+                className="min-w-0 flex-1 rounded-cp border-cp bg-cp-bg px-2.5 py-1.5 text-cp-text placeholder:text-cp-muted"
+              />
+              <button type="submit" disabled={!pastedLink || opening !== null} className="cp-btn px-3 py-1.5">
+                {opening && pastedLink ? t("search.opening") : t("search.import")}
+              </button>
+            </div>
+            {pasted.trim() && !pastedLink && <p className="m-0 text-[12px] text-cp-danger">{t("search.notALink")}</p>}
+          </form>
+        )}
       </section>
 
       <div className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2" aria-busy={searching}>
