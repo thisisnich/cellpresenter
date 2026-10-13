@@ -2,7 +2,9 @@
 
 Free, open-source worship lyrics presenter, made for cell groups and small churches. Put lyrics on a projector, TV or everyone's phones. Change slides from your phone. Give the musicians chords in their own key. Everything runs on your own computer and Wi-Fi, so no internet or account is needed.
 
-> **Status: early preview (v0.x).** It works for a cell group night, but expect rough edges. Back up your library (see [Your data](#your-data)) and [report problems](https://github.com/thisisnich/cellpresenter/issues).
+[![CellPresenter](brag-output/brag.jpg)](brag-output/brag.mp4)
+
+Introducing CellPresenter: a free worship lyrics presenter for cell groups and small churches. Lyrics on the projector. Chords on the musicians' phones. On your own Wi-Fi. ([Watch the film](brag-output/brag.mp4).)
 
 ## What it does
 
