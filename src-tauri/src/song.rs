@@ -138,6 +138,7 @@ impl Song {
             artist: self.artist.clone(),
             copyright: self.copyright.clone(),
             ccli_number: self.ccli_number.clone(),
+            translation: None,
         }
     }
 

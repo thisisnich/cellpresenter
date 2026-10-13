@@ -1,5 +1,6 @@
 mod auth;
 mod backup;
+mod bible;
 mod db;
 mod live;
 mod media;

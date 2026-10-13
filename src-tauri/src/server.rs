@@ -21,8 +21,9 @@ use uuid::Uuid;
 
 use crate::auth::{Denied, PinGuard};
 use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
+use crate::bible::{self, BibleError, BibleInfo, Passage, ScriptureRef};
 use crate::db::{Db, DbResult, NewMedia, RecycleBin, RestoredCounts};
-use crate::live::{Command, LiveState, Look, Slide};
+use crate::live::{Command, Credits, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
 use crate::online::{self, OnlineError, OnlineSong, SearchHit, Source};
@@ -131,6 +132,22 @@ impl ServerState {
 
 const LIVE_STATE_KEY: &str = "live";
 const LOOK_KEY: &str = "look";
+
+/// A passage as a setlist item or a live show: its slides, credited with
+/// its reference and translation.
+fn scripture_content(p: &Passage) -> ItemContent {
+    ItemContent {
+        song: None,
+        credits: Some(Credits {
+            title: p.label.clone(),
+            translation: Some(p.translation.clone()),
+            ..Credits::default()
+        }),
+        title: p.label.clone(),
+        slides: bible::passage_slides(p),
+        cue: None,
+    }
+}
 
 /// Put a library song on air, with its copyright details.
 fn put_song(l: &mut LiveState, song: &Song, slides: Vec<Slide>, slide_index: usize) {
@@ -253,6 +270,8 @@ impl ServerState {
 /// What a setlist item puts on screen.
 struct ItemContent {
     song: Option<Song>,
+    /// What isn't a song but still credits its source (scripture).
+    credits: Option<Credits>,
     title: String,
     slides: Vec<Slide>,
     /// The item's own background (announcements).
@@ -275,6 +294,7 @@ impl ServerState {
                     let slides = self.song_content(&song).await?;
                     Some(ItemContent {
                         title: song.title.clone(),
+                        credits: None,
                         song: Some(song),
                         slides,
                         cue: None,
@@ -291,11 +311,20 @@ impl ServerState {
                 let cue = self.background_url(background_id.as_deref()).await?;
                 Some(ItemContent {
                     song: None,
+                    credits: None,
                     title: title.clone(),
                     slides: announcement_slides(title, text),
                     cue,
                 })
             }
+            SetlistItem::Scripture {
+                translation,
+                passage,
+                ..
+            } => match bible::passage(translation, passage) {
+                Ok(p) => Some(scripture_content(&p)),
+                Err(_) => None,
+            },
         })
     }
 
@@ -355,13 +384,16 @@ impl ServerState {
         Ok(Some(self.mutate(|l| {
             match &content.song {
                 Some(song) => put_song(l, song, content.slides, slide_index),
-                None => l.show(
-                    None,
-                    content.title,
-                    content.slides,
-                    slide_index,
-                    content.cue,
-                ),
+                None => {
+                    l.show(
+                        None,
+                        content.title,
+                        content.slides,
+                        slide_index,
+                        content.cue,
+                    );
+                    l.credits = content.credits;
+                }
             }
             l.setlist_id = Some(setlist_id);
             l.item_id = Some(item_id);
@@ -911,6 +943,52 @@ async fn set_look(State(s): State<ServerState>, Json(look): Json<Look>) -> ApiRe
     Ok(Json(s.mutate(|l| l.look = look)))
 }
 
+// ---------- scripture ----------
+
+#[derive(Deserialize, TS)]
+#[ts(export)]
+pub struct PassageRequest {
+    pub translation: String,
+    pub passage: ScriptureRef,
+}
+
+fn bible_error(e: BibleError) -> ApiError {
+    match e {
+        BibleError::UnknownTranslation => ApiError(StatusCode::BAD_REQUEST, "unknown_translation"),
+        BibleError::NotFound => NOT_FOUND,
+    }
+}
+
+async fn bible_info() -> ApiResult<BibleInfo> {
+    // The first call unpacks the Bibles, which takes a moment.
+    tokio::task::spawn_blocking(bible::info)
+        .await
+        .map(Json)
+        .map_err(|_| ApiError(StatusCode::INTERNAL_SERVER_ERROR, "bible_failed"))
+}
+
+/// The verses of a reference, to preview before showing.
+async fn bible_passage(Json(r): Json<PassageRequest>) -> ApiResult<Passage> {
+    bible::passage(&r.translation, &r.passage)
+        .map(Json)
+        .map_err(bible_error)
+}
+
+/// Put a passage on air, outside any setlist.
+async fn live_show_scripture(
+    State(s): State<ServerState>,
+    Json(r): Json<PassageRequest>,
+) -> ApiResult<LiveState> {
+    let p = bible::passage(&r.translation, &r.passage).map_err(bible_error)?;
+    let content = scripture_content(&p);
+    Ok(Json(s.mutate(|l| {
+        l.show(None, content.title, content.slides, 0, None);
+        l.credits = content.credits;
+        l.setlist_id = None;
+        l.item_id = None;
+    })))
+}
+
 // ---------- recycle bin ----------
 
 async fn recycle_bin(State(s): State<ServerState>) -> ApiResult<RecycleBin> {
@@ -1221,6 +1299,7 @@ pub fn router(state: ServerState) -> Router {
             axum::routing::put(set_section_background),
         )
         .route("/screens/output", post(set_output))
+        .route("/live/show-scripture", post(live_show_scripture))
         .route("/recycle-bin", get(recycle_bin))
         .route("/songs/{id}/undelete", post(undelete_song))
         .route("/setlists/{id}/undelete", post(undelete_setlist))
@@ -1258,6 +1337,8 @@ pub fn router(state: ServerState) -> Router {
         .route("/live/state", get(live_state))
         .route("/songs", get(list_songs))
         .route("/songs/{id}", get(get_song))
+        .route("/bible", get(bible_info))
+        .route("/bible/passage", post(bible_passage))
         .route("/setlists", get(list_setlists))
         .route("/media", get(list_media))
         .route("/screens", get(list_screens))
@@ -1513,6 +1594,57 @@ mod tests {
         assert_eq!(live.slide_index, 2);
         assert!(!live.visible);
         assert_ne!(live.session, first.snapshot().session);
+    }
+
+    #[tokio::test]
+    async fn scripture_shows_live_and_from_a_setlist() {
+        let (router, state) = app(LOCAL).await;
+        let john = r#"{"book":43,"ranges":[{"from":{"chapter":3,"verse":16},"to":{"chapter":3,"verse":17}}]}"#;
+        let ask = format!(r#"{{"translation":"kjv","passage":{john}}}"#);
+        let (status, body) = call(&router, "POST", "/api/bible/passage", Some(&ask), None).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("John 3:16–17"), "{body}");
+
+        let (status, _) = call(
+            &router,
+            "POST",
+            "/api/live/show-scripture",
+            Some(&ask),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let live = state.snapshot();
+        assert_eq!(live.title, "John 3:16–17");
+        assert_eq!(
+            live.credits.as_ref().and_then(|c| c.translation.as_deref()),
+            Some("KJV")
+        );
+        assert!(live.slides[0].text.starts_with("16 For God"));
+
+        let setlist = format!(
+            r#"{{"name":"Sunday","items":[{{"kind":"scripture","translation":"web","passage":{john},"title":"John 3:16–17"}}]}}"#
+        );
+        let (status, body) = call(&router, "POST", "/api/setlists", Some(&setlist), None).await;
+        assert_eq!(status, StatusCode::CREATED, "{body}");
+        let saved: Setlist = serde_json::from_str(&body).unwrap();
+        let SetlistItem::Scripture { id, passage, .. } = &saved.items[0] else {
+            panic!("{saved:?}");
+        };
+        assert_eq!(passage.book, 43);
+        let show = format!(r#"{{"setlist_id":"{}","item_id":"{id}"}}"#, saved.id);
+        let (status, body) = call(&router, "POST", "/api/live/show-item", Some(&show), None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let live = state.snapshot();
+        assert_eq!(
+            live.credits.as_ref().and_then(|c| c.translation.as_deref()),
+            Some("WEB")
+        );
+        assert!(live.slides[0].text.contains("For God so loved the world"));
+
+        let unknown = format!(r#"{{"translation":"niv","passage":{john}}}"#);
+        let (status, _) = call(&router, "POST", "/api/bible/passage", Some(&unknown), None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
     }
 
     #[tokio::test]

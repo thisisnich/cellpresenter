@@ -34,6 +34,10 @@ pub struct Credits {
     pub artist: Option<String>,
     pub copyright: Option<String>,
     pub ccli_number: Option<String>,
+    /// Scripture: the translation's short name ("KJV"); `title` is the
+    /// reference. The reference line then shows on every slide.
+    #[serde(default)]
+    pub translation: Option<String>,
 }
 
 /// When the copyright line shows.

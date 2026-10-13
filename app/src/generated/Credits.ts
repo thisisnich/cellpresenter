@@ -3,4 +3,9 @@
 /**
  * Who wrote a song and who owns it, for the copyright line on screen.
  */
-export type Credits = { title: string, artist: string | null, copyright: string | null, ccli_number: string | null, };
+export type Credits = { title: string, artist: string | null, copyright: string | null, ccli_number: string | null, 
+/**
+ * Scripture: the translation's short name ("KJV"); `title` is the
+ * reference. The reference line then shows on every slide.
+ */
+translation: string | null, };

@@ -11,7 +11,9 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::media::{image_url, thumb_url, Media};
-use crate::setlist::{Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary};
+use crate::setlist::{
+    Setlist, SetlistInput, SetlistItem, SetlistItemInput, SetlistSummary, StoredScripture,
+};
 use crate::song::{LyricLine, SectionInput, Song, SongInput, SongSection, SongSlide, SongSummary};
 
 pub type DbResult<T> = Result<T, sqlx::Error>;
@@ -929,6 +931,23 @@ impl Db {
                         title: i.song_title.unwrap_or_default(),
                         key: i.song_key,
                     },
+                    "scripture" => match serde_json::from_str::<StoredScripture>(
+                        i.body.as_deref().unwrap_or(""),
+                    ) {
+                        Ok(stored) => SetlistItem::Scripture {
+                            id: i.id,
+                            translation: stored.translation,
+                            passage: stored.passage,
+                            title: i.title.unwrap_or_default(),
+                        },
+                        // Unreadable: keep it visible as a note rather than lose it.
+                        Err(_) => SetlistItem::Announcement {
+                            id: i.id,
+                            title: i.title.unwrap_or_default(),
+                            text: String::new(),
+                            background_id: None,
+                        },
+                    },
                     _ => SetlistItem::Announcement {
                         id: i.id,
                         title: i.title.unwrap_or_default(),
@@ -1031,9 +1050,30 @@ impl Db {
                 .collect();
         let mut kept = HashSet::new();
         for (position, item) in items.iter().enumerate() {
+            let stored;
             let (requested, kind, song_id, title, body, background_id) = match item {
                 SetlistItemInput::Song { id, song_id } => {
                     (id, "song", Some(song_id.as_str()), None, None, None)
+                }
+                SetlistItemInput::Scripture {
+                    id,
+                    translation,
+                    passage,
+                    title,
+                } => {
+                    stored = serde_json::to_string(&StoredScripture {
+                        translation: translation.clone(),
+                        passage: passage.clone(),
+                    })
+                    .map_err(|e| sqlx::Error::Encode(Box::new(e)))?;
+                    (
+                        id,
+                        "scripture",
+                        None,
+                        Some(title.trim()),
+                        Some(stored.as_str()),
+                        None,
+                    )
                 }
                 SetlistItemInput::Announcement {
                     id,

@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::bible::ScriptureRef;
 use crate::live::Slide;
 
 /// One entry in a setlist.
@@ -27,14 +28,31 @@ pub enum SetlistItem {
         /// Background image (a media id); `None` uses the default.
         background_id: Option<String>,
     },
+    Scripture {
+        id: String,
+        /// "kjv" or "web".
+        translation: String,
+        passage: ScriptureRef,
+        /// "John 3:16–18", as it was when added.
+        title: String,
+    },
 }
 
 impl SetlistItem {
     pub fn id(&self) -> &str {
         match self {
-            SetlistItem::Song { id, .. } | SetlistItem::Announcement { id, .. } => id,
+            SetlistItem::Song { id, .. }
+            | SetlistItem::Announcement { id, .. }
+            | SetlistItem::Scripture { id, .. } => id,
         }
     }
+}
+
+/// How a scripture item is kept in a setlist row's `body`.
+#[derive(Serialize, Deserialize)]
+pub struct StoredScripture {
+    pub translation: String,
+    pub passage: ScriptureRef,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -76,6 +94,13 @@ pub enum SetlistItemInput {
         text: String,
         #[serde(default)]
         background_id: Option<String>,
+    },
+    Scripture {
+        #[serde(default)]
+        id: Option<String>,
+        translation: String,
+        passage: ScriptureRef,
+        title: String,
     },
 }
 
