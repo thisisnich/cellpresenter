@@ -80,7 +80,7 @@ export function LibraryPanel() {
       }}
     >
       <div className="flex flex-col gap-2 border-b-cp p-3">
-        <div className="flex gap-2">
+        <div className="flex gap-2" data-guide="add-songs">
           <button type="button" onClick={() => editSong(null)} className="cp-btn flex-1">
             {t("library.newSong")}
           </button>

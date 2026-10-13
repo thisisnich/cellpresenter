@@ -98,7 +98,7 @@ export function DisplayLink() {
 
   return (
     <div ref={root} className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="cp-btn">
+      <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="cp-btn" data-guide="display-link">
         {t("displayLink.button")}
       </button>
       {open && (

@@ -79,7 +79,7 @@ export function SetlistPanel() {
               </option>
             ))}
           </select>
-          <button type="button" onClick={() => void createSetlist()} className="cp-btn px-2.5">
+          <button type="button" onClick={() => void createSetlist()} className="cp-btn px-2.5" data-guide="setlist-new">
             {t("setlist.new")}
           </button>
         </div>

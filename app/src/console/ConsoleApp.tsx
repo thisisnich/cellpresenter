@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { DEFAULT_LOOK, LookContext } from "../display/look";
+import { GuideProvider } from "./FirstRunGuide";
 import { DEFAULT_THEME } from "../theme/tokens";
 import { Header } from "./Header";
 import { addPanel, resetLayout } from "./layout";
@@ -73,8 +74,10 @@ export default function ConsoleApp() {
       <LiveLook>
         <ConsoleProvider>
           <PagesProvider>
-            <TransportKeys />
-            <Shell />
+            <GuideProvider>
+              <TransportKeys />
+              <Shell />
+            </GuideProvider>
           </PagesProvider>
         </ConsoleProvider>
       </LiveLook>

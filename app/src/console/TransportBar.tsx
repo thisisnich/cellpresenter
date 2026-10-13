@@ -92,7 +92,7 @@ export function TransportBar() {
         <button type="button" disabled={disabled} onClick={() => send({ type: "prev" })} className="cp-btn px-4 font-semibold">
           {t("transport.prev")}
         </button>
-        <button type="button" disabled={disabled} onClick={() => send({ type: "next" })} className="cp-btn-live">
+        <button type="button" disabled={disabled} onClick={() => send({ type: "next" })} className="cp-btn-live" data-guide="next">
           {t("transport.next")}
         </button>
       </div>

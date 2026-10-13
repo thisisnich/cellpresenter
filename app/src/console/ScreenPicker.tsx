@@ -30,7 +30,7 @@ export function ScreenPicker() {
   };
 
   return (
-    <label className="flex min-w-0 items-center gap-1.5">
+    <label className="flex min-w-0 items-center gap-1.5" data-guide="screens">
       <span className="sr-only">{t("screens.label")}</span>
       <select
         value={screens.output ?? ""}

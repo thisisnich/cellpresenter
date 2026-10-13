@@ -5,6 +5,7 @@ import { DisplayLink } from "./DisplayLink";
 import { PANEL_KINDS, type PanelKind } from "./layout";
 import { PAGES, type Page } from "./pages";
 import { useLive } from "./LiveContext";
+import { useGuide } from "./FirstRunGuide";
 import { UpdateButton } from "./UpdateButton";
 
 function useClock(): string {
@@ -33,6 +34,7 @@ export function Header({
   const [layoutOpen, setLayoutOpen] = useState(false);
   const { status } = useLive();
   const clock = useClock();
+  const guide = useGuide();
   const [pin, setPin] = useState<string | null>(null);
   useEffect(() => {
     api
@@ -109,6 +111,15 @@ export function Header({
           {t(`connection.${status}`)}
         </span>
         <UpdateButton />
+        <button
+          type="button"
+          onClick={() => guide?.open()}
+          aria-label={t("guide.open")}
+          title={t("guide.open")}
+          className="size-8 rounded-full border-cp text-cp-muted hover:text-cp-text"
+        >
+          ?
+        </button>
         <DisplayLink />
       </div>
     </header>
