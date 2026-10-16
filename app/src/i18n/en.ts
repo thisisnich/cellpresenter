@@ -62,7 +62,7 @@ export const en = {
   "about.open": "About CellPresenter",
   "about.title": "About CellPresenter",
   "about.version": "Version {version}",
-  "about.body": "Hi, I'm Nicholas. I built CellPresenter for my own cell group, so whoever's leading worship can get lyrics on a screen without a church-sized setup. I work on it in my spare time, and it's free and open source.\n\nIf it's made your Friday nights easier, a coffee keeps me going.",
+  "about.body": "Hi! Nicholas here. My mission for this app is free, self-hosted presenting, and I'll keep it that way! I first designed it for my own cell group, and here we are.\n\nIf you want to support my work, buy me a coffee :)",
   "about.tip": "Buy me a coffee ☕",
   "about.tipHelp": "Opens Ko-fi in your browser. Tipping is entirely optional; everything in the app stays free.",
   "about.back": "Back",
