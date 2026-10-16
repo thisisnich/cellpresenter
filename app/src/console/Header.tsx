@@ -11,32 +11,46 @@ import { Mark } from "../brand/Mark";
 
 const NEW_ISSUE = "https://github.com/thisisnich/cellpresenter/issues/new";
 const TIP_JAR = "https://ko-fi.com/ndubs";
+const THIS_VERSION = `https://github.com/thisisnich/cellpresenter/blob/v${__APP_VERSION__}`;
+const PAGES_OUT = { tip: TIP_JAR, license: `${THIS_VERSION}/LICENSE`, privacy: `${THIS_VERSION}/PRIVACY.md` };
 const onThisComputer = () => ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
 
 // The computer opens its own browser (issues with the version filled in); a
 // phone or another computer opens the page in its own browser.
 function openLink(link: OutsideLink) {
-  const plain = () => window.open(link === "tip" ? TIP_JAR : `${NEW_ISSUE}?template=${link}.yml`, "_blank", "noopener");
+  const plain = () =>
+    window.open(link === "bug" || link === "feature" ? `${NEW_ISSUE}?template=${link}.yml` : PAGES_OUT[link], "_blank", "noopener");
   if (!onThisComputer()) return plain();
   api.openLink(link).catch(plain);
 }
 
 /** Who makes CellPresenter, and a way to say thanks. Only when asked for. */
 function About({ onBack }: { onBack: () => void }) {
-  const [version, setVersion] = useState<string | null>(null);
+  // The running app's version; this page's own build until it answers.
+  const [version, setVersion] = useState(__APP_VERSION__);
   useEffect(() => {
     api
       .health()
       .then((h) => setVersion(h.version))
-      .catch(() => setVersion(null));
+      .catch(() => {});
   }, []);
   return (
     <div className="flex flex-col gap-3 p-3">
       <div>
         <h2 className="m-0 text-sm font-semibold">{t("about.title")}</h2>
-        {version && <p className="m-0 mt-0.5 text-[12px] text-cp-muted">{t("about.version", { version })}</p>}
+        <p className="m-0 mt-0.5 text-[12px] text-cp-muted">{t("about.version", { version })}</p>
       </div>
       <p className="m-0 leading-relaxed whitespace-pre-line text-cp-muted">{t("about.body")}</p>
+      <p className="m-0 text-[12px] leading-relaxed text-cp-muted">
+        {t("about.license")}{" "}
+        <button type="button" onClick={() => openLink("license")} title={t("about.licenseHelp")} className="text-cp-text underline underline-offset-2 hover:text-cp-live">
+          {t("about.licenseRead")}
+        </button>{" "}
+        ·{" "}
+        <button type="button" onClick={() => openLink("privacy")} title={t("about.privacyHelp")} className="text-cp-text underline underline-offset-2 hover:text-cp-live">
+          {t("about.privacy")}
+        </button>
+      </p>
       <div className="flex items-center justify-between gap-2">
         <button type="button" onClick={onBack} className="cp-btn px-3 py-1">
           {t("about.back")}

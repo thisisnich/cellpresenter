@@ -87,6 +87,8 @@ CellPresenter isn't affiliated with Ultimate Guitar or LRCLIB. It fetches only t
 
 ## Your data
 
+Everything stays on your computer: no accounts, analytics or tracking. [PRIVACY.md](PRIVACY.md) lists the few times the app goes online (update checks, song search, copyrighted Bibles) and what it sends.
+
 **Backups:** everything (songs, setlists, settings and pictures) is backed up once a day when the app starts, to `CellPresenter Backups` in your Documents folder; the last 7 automatic backups are kept. On the **Edit** page, the **Backups** panel has **Back up now**, a list of backups to restore, and **Restore from a file…** to bring a `.cpbackup` file from another computer. Restoring brings back the songs, setlists and pictures in the backup as they were, and keeps anything added since.
 
 The library itself is one file, `library.db`, with pictures in the `media` folder next to it:

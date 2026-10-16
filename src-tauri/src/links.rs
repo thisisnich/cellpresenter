@@ -1,8 +1,10 @@
 //! The few outside pages the app opens in the browser: a GitHub issue (bug
-//! or idea) with the version and computer already filled in, and the tip jar.
+//! or idea) with the version and computer already filled in, the tip jar,
+//! and this version's licence and privacy note.
 
 use serde::Deserialize;
 
+const REPO: &str = "https://github.com/thisisnich/cellpresenter";
 const NEW_ISSUE: &str = "https://github.com/thisisnich/cellpresenter/issues/new";
 pub const TIP_JAR: &str = "https://ko-fi.com/ndubs";
 
@@ -12,6 +14,8 @@ pub enum Link {
     Bug,
     Feature,
     Tip,
+    License,
+    Privacy,
 }
 
 /// Where `link` goes, with the fields the app knows filled in.
@@ -20,6 +24,8 @@ pub fn url(link: Link, version: &str, os: &str) -> String {
         Link::Bug => "bug.yml",
         Link::Feature => "feature.yml",
         Link::Tip => return TIP_JAR.to_string(),
+        Link::License => return format!("{REPO}/blob/v{version}/LICENSE"),
+        Link::Privacy => return format!("{REPO}/blob/v{version}/PRIVACY.md"),
     };
     let mut url = reqwest::Url::parse(NEW_ISSUE).expect("valid issue url");
     url.query_pairs_mut()
@@ -58,6 +64,22 @@ mod tests {
         assert_eq!(
             url(Link::Feature, "1.0.1", "Linux"),
             "https://github.com/thisisnich/cellpresenter/issues/new?template=feature.yml&version=1.0.1"
+        );
+    }
+
+    #[test]
+    fn license_is_this_versions() {
+        assert_eq!(
+            url(Link::License, "1.0.2", "Linux"),
+            "https://github.com/thisisnich/cellpresenter/blob/v1.0.2/LICENSE"
+        );
+    }
+
+    #[test]
+    fn privacy_is_this_versions() {
+        assert_eq!(
+            url(Link::Privacy, "1.0.2", "Linux"),
+            "https://github.com/thisisnich/cellpresenter/blob/v1.0.2/PRIVACY.md"
         );
     }
 

@@ -34,7 +34,7 @@ import type { Source } from "../generated/Source";
 
 export type LiveCommand = Command;
 /** The outside pages the app opens: a GitHub issue, or the tip jar. */
-export type OutsideLink = "bug" | "feature" | "tip";
+export type OutsideLink = "bug" | "feature" | "tip" | "license" | "privacy";
 
 export interface Health {
   status: string;
