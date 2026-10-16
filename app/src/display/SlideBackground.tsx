@@ -161,13 +161,15 @@ export function SlideBackground({
 }) {
   if (!url) return null;
   return (
-    <div className={`absolute inset-0 ${paused ? "invisible" : ""}`}>
+    // `isolate` keeps the layers' stacking order inside the background, so
+    // it never covers the words drawn after it.
+    <div className={`absolute inset-0 isolate ${paused ? "invisible" : ""}`}>
       {still ? (
         isVideoUrl(url) ? <VideoStill url={url} /> : <img src={url} alt="" draggable={false} className={frameClass} />
       ) : (
         <Layers url={url} paused={paused} fadeMs={fadeMs} upcoming={upcoming} />
       )}
-      <div className="absolute inset-0 bg-black/35" />
+      <div className="absolute inset-0 z-10 bg-black/35" />
     </div>
   );
 }
