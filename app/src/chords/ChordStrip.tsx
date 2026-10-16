@@ -48,12 +48,12 @@ export function ChordStrip({
             onClick={() => onPin(!pinned)}
             aria-pressed={pinned}
             title={pinned ? t("chords.unpin") : t("chords.pinHelp")}
-            className={`flex h-8 items-center gap-1.5 rounded-cp-sm px-2 text-[12px] ${pinned ? "text-cp-live" : "text-cp-muted"} hover:bg-cp-surface-hi`}
+            className={`flex h-8 items-center gap-1.5 rounded-cp-sm px-2 text-[12px] ${pinned ? "text-cp-live" : "text-cp-muted"} hover:bg-cp-hover`}
           >
             <PinIcon on={pinned} />
             {pinned ? t("chords.pinned") : t("chords.pin")}
           </button>
-          <button type="button" onClick={onHide} className="h-8 rounded-cp-sm px-2 text-[12px] text-cp-muted hover:bg-cp-surface-hi">
+          <button type="button" onClick={onHide} className="h-8 rounded-cp-sm px-2 text-[12px] text-cp-muted hover:bg-cp-hover">
             {t("chords.hideDiagrams")}
           </button>
         </span>
@@ -67,7 +67,7 @@ export function ChordStrip({
               type="button"
               onClick={() => onOpen(chord)}
               title={t("chords.showShapes", { chord })}
-              className="flex shrink-0 flex-col items-center rounded-cp px-1 pt-1 hover:bg-cp-surface-hi"
+              className="flex shrink-0 flex-col items-center rounded-cp px-1 pt-1 hover:bg-cp-hover"
             >
               <b className="font-mono text-[14px] text-cp-live">{chord}</b>
               {shape ? <ChordDiagram shape={shape} size={0.7} label="" /> : <span className="flex h-[73px] items-center text-[11px] text-cp-muted">?</span>}

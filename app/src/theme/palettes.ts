@@ -20,6 +20,8 @@ export const PALETTES: Theme[] = [
       panel: "#1B1C1F",
       surface: "#26282C",
       surfaceHi: "#34363C",
+      hover: "#3D3424",
+      hoverLine: "#F7C066",
       line: "#2C2E33",
       text: "#ECECEE",
       muted: "#A0A3AA",
@@ -44,6 +46,8 @@ export const PALETTES: Theme[] = [
       panel: "#1B1921",
       surface: "#28242F",
       surfaceHi: "#36313F",
+      hover: "#362D52",
+      hoverLine: "#B9A3FF",
       line: "#2E2A36",
       text: "#EEECF2",
       muted: "#A49FB0",
@@ -69,6 +73,8 @@ export const PALETTES: Theme[] = [
       panel: "#F8FAFB",
       surface: "#FFFFFF",
       surfaceHi: "#DCE2E8",
+      hover: "#DCE6FF",
+      hoverLine: "#2F66F0",
       line: "#D1D8DF",
       text: "#20252B",
       muted: "#5A646E",
@@ -93,11 +99,12 @@ export const PALETTES: Theme[] = [
 
 export type ColorName = keyof ThemeColors;
 
-export type ColorGroup = "accent" | "logo" | "surfaces" | "text" | "status" | "sections";
+export type ColorGroup = "accent" | "hover" | "logo" | "surfaces" | "text" | "status" | "sections";
 
 /** The colour editor's groups, in the order the Settings page shows them. */
 export const COLOR_GROUPS: { id: ColorGroup; colors: ColorName[] }[] = [
   { id: "accent", colors: ["live", "onLive", "next"] },
+  { id: "hover", colors: ["hover", "hoverLine"] },
   { id: "logo", colors: ["markInk", "markCorner", "markPlay", "iconTile", "iconInk"] },
   { id: "surfaces", colors: ["bg", "chrome", "panel", "surface", "surfaceHi", "line", "checkerA", "checkerB"] },
   { id: "text", colors: ["text", "muted"] },

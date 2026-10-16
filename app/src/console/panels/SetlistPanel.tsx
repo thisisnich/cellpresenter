@@ -122,7 +122,7 @@ export function SetlistPanel() {
           return (
             <div
               key={item.id}
-              className={`group flex items-stretch rounded-cp ${selected ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}
+              className={`group flex items-stretch rounded-cp ${selected ? "bg-cp-surface-hi" : "hover:bg-cp-hover"}`}
               style={onAir ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
             >
               <button
@@ -158,7 +158,7 @@ export function SetlistPanel() {
                     type="button"
                     onClick={() => setDraft({ id: item.id, title: item.title, text: item.text, backgroundId: item.background_id })}
                     aria-label={t("setlist.editItem", { title: itemLabel(item) })}
-                    className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:text-cp-text"
+                    className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:bg-cp-hover hover:text-cp-text"
                   >
                     ✎
                   </button>
@@ -168,7 +168,7 @@ export function SetlistPanel() {
                   disabled={index === 0}
                   onClick={() => void saveSetlist((items) => move(items, index, index - 1))}
                   aria-label={t("setlist.moveUp", { title: itemLabel(item) })}
-                  className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:text-cp-text disabled:opacity-30"
+                  className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:bg-cp-hover hover:text-cp-text disabled:opacity-30"
                 >
                   ↑
                 </button>
@@ -177,7 +177,7 @@ export function SetlistPanel() {
                   disabled={index === setlist.items.length - 1}
                   onClick={() => void saveSetlist((items) => move(items, index, index + 1))}
                   aria-label={t("setlist.moveDown", { title: itemLabel(item) })}
-                  className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:text-cp-text disabled:opacity-30"
+                  className="rounded-cp-sm px-1.5 py-1 text-cp-muted hover:bg-cp-hover hover:text-cp-text disabled:opacity-30"
                 >
                   ↓
                 </button>

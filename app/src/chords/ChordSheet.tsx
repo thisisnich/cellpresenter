@@ -56,7 +56,7 @@ export function ChordSheet({
             onHide={() => setStrip({ shown: false })}
           />
         ) : (
-          <button type="button" onClick={() => setStrip({ shown: true })} className="self-start rounded-cp-sm px-3 py-1 text-[12px] text-cp-muted hover:bg-cp-surface-hi">
+          <button type="button" onClick={() => setStrip({ shown: true })} className="self-start rounded-cp-sm px-3 py-1 text-[12px] text-cp-muted hover:bg-cp-hover">
             {t("chords.showDiagrams")}
           </button>
         ))}
@@ -76,7 +76,7 @@ export function ChordSheet({
             onKeyDown={onPick ? (e) => (e.key === "Enter" || e.key === " ") && e.target === e.currentTarget && (e.preventDefault(), onPick(i)) : undefined}
             tabIndex={onPick ? 0 : undefined}
             title={onPick && !isLive ? t("chords.goToSlide") : undefined}
-            className={`rounded-cp px-3 py-2 ${isLive ? "bg-cp-surface-hi" : onPick ? "cursor-pointer hover:bg-cp-surface" : ""}`}
+            className={`rounded-cp px-3 py-2 ${isLive ? "bg-cp-surface-hi" : onPick ? "cursor-pointer hover:bg-cp-hover" : ""}`}
             style={isLive ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
           >
             {startsSection && (
@@ -103,7 +103,7 @@ export function ChordSheet({
                             type="button"
                             onClick={() => setOpen(chunk.chord ?? null)}
                             title={t("chords.showShapes", { chord: chunk.chord })}
-                            className="cursor-pointer rounded-cp-sm font-bold underline decoration-dotted underline-offset-2 hover:bg-cp-surface-hi"
+                            className="cursor-pointer rounded-cp-sm font-bold underline decoration-dotted underline-offset-2 hover:bg-cp-hover"
                           >
                             {chunk.chord}
                           </button>

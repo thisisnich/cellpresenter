@@ -125,7 +125,7 @@ export function ArrangementEditor({
             key={section.id}
             type="button"
             onClick={() => set([...current, section.id])}
-            className="rounded-cp-sm border-cp px-2 py-0.5 text-[12px] text-cp-text hover:bg-cp-surface-hi"
+            className="rounded-cp-sm border-cp px-2 py-0.5 text-[12px] text-cp-text hover:bg-cp-hover"
           >
             + {section.name}
           </button>

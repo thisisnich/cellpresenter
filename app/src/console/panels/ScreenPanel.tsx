@@ -38,7 +38,7 @@ function Segmented<T extends string>({
           type="button"
           onClick={() => onPick(option)}
           aria-pressed={value === option}
-          className={`rounded-cp-sm px-2.5 py-1 ${value === option ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:text-cp-text"}`}
+          className={`rounded-cp-sm px-2.5 py-1 ${value === option ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
         >
           {name(option)}
         </button>
@@ -53,7 +53,7 @@ function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange:
       type="button"
       onClick={() => onChange(!on)}
       aria-pressed={on}
-      className={`rounded-cp border-cp px-2.5 py-1 ${on ? "bg-cp-surface-hi font-semibold text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+      className={`rounded-cp border-cp px-2.5 py-1 ${on ? "bg-cp-surface-hi font-semibold text-cp-text" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
     >
       {label}
     </button>

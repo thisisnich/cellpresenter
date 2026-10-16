@@ -55,7 +55,7 @@ export function UpdateButton() {
       disabled={stage === "installing"}
       onClick={() => setStage("confirm")}
       title={update.notes ?? undefined}
-      className="rounded-cp border-cp px-2.5 py-1 text-cp-live hover:bg-cp-surface"
+      className="rounded-cp border-cp px-2.5 py-1 text-cp-live hover:bg-cp-hover"
     >
       {stage === "installing"
         ? t("update.installing")

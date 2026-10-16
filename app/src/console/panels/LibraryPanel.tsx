@@ -142,7 +142,7 @@ export function LibraryPanel() {
           return (
             <div
               key={song.id}
-              className={`group flex items-stretch rounded-cp ${selected ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}
+              className={`group flex items-stretch rounded-cp ${selected ? "bg-cp-surface-hi" : "hover:bg-cp-hover"}`}
               style={onAir ? { boxShadow: "inset 0 0 0 var(--cp-highlight-width) var(--cp-live)" } : undefined}
             >
               <button
@@ -171,7 +171,7 @@ export function LibraryPanel() {
                 onClick={() => editSong(song.id, song.title)}
                 aria-label={t("library.edit", { title: song.title })}
                 title={t("library.edit", { title: song.title })}
-                className="px-2 text-cp-muted opacity-60 group-hover:opacity-100 hover:text-cp-text focus-visible:opacity-100"
+                className="px-2 text-cp-muted opacity-60 group-hover:opacity-100 hover:bg-cp-hover hover:text-cp-text focus-visible:opacity-100"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M12 20h9" />
@@ -182,7 +182,7 @@ export function LibraryPanel() {
           );
         })}
         {query.trim() && (
-          <button type="button" onClick={() => findOnline(query.trim())} className="mt-1 rounded-cp px-2 py-2 text-left text-cp-muted hover:bg-cp-surface hover:text-cp-text">
+          <button type="button" onClick={() => findOnline(query.trim())} className="mt-1 rounded-cp px-2 py-2 text-left text-cp-muted hover:bg-cp-hover hover:text-cp-text">
             {t("library.findOnline", { query: query.trim() })}
           </button>
         )}

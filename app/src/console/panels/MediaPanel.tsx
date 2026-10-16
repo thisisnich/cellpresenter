@@ -135,7 +135,7 @@ export function MediaPanel() {
                 onClick={() => void setBackground(onScreen ? null : m.id)}
                 aria-pressed={onScreen}
                 title={onScreen ? t("media.takeOff") : t("media.show")}
-                className="relative aspect-video cursor-pointer border-0 bg-black p-0"
+                className="relative aspect-video cursor-pointer border-0 bg-black p-0 hover:outline-2 hover:-outline-offset-2 hover:outline-cp-hover-line"
               >
                 <MediaThumb media={m} alt={m.name} />
                 {m.video && (

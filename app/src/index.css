@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Hover styles whenever the pointer is over something. Tailwind 4 only
+   applies them when the device says it can hover, and WebKitGTK (the Linux
+   app) often says it can't, which left the whole console without hover. */
+@custom-variant hover (&:hover);
+
 /* Theme tokens (theme/tokens.ts sets the --cp-* variables at boot) exposed
    as Tailwind utilities: bg-cp-panel, text-cp-muted, rounded-cp, … */
 @theme inline {
@@ -8,6 +13,8 @@
   --color-cp-panel: var(--cp-panel);
   --color-cp-surface: var(--cp-surface);
   --color-cp-surface-hi: var(--cp-surface-hi);
+  --color-cp-hover: var(--cp-hover);
+  --color-cp-hover-line: var(--cp-hover-line);
   --color-cp-line: var(--cp-line);
   --color-cp-text: var(--cp-text);
   --color-cp-muted: var(--cp-muted);
@@ -54,9 +61,22 @@ body,
   font-family: "Inter Variable", system-ui, sans-serif;
 }
 
+/* Anything clickable shows the hand (Tailwind 4 resets buttons to the arrow). */
+@layer base {
+  button:not(:disabled),
+  [role="button"],
+  select:not(:disabled),
+  summary,
+  input[type="color"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: pointer;
+  }
+}
+
 @layer components {
   .cp-btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-cp border-cp bg-cp-surface px-3.5 py-2 text-[13px] text-cp-text transition-colors hover:bg-cp-surface-hi disabled:cursor-not-allowed disabled:opacity-40;
+    @apply inline-flex items-center justify-center gap-2 rounded-cp border-cp bg-cp-surface px-3.5 py-2 text-[13px] text-cp-text transition-colors hover:bg-cp-hover disabled:cursor-not-allowed disabled:opacity-40;
   }
   .cp-btn-live {
     @apply inline-flex items-center justify-center gap-2 rounded-cp bg-cp-live px-6 py-2 text-[13px] font-bold text-cp-on-live transition-[filter] hover:brightness-110 disabled:opacity-40;
@@ -94,7 +114,7 @@ body,
   --dv-sash-color: transparent;
   --dv-drag-over-background-color: color-mix(in srgb, var(--cp-live) 18%, transparent);
   --dv-drag-over-border-color: var(--cp-live);
-  --dv-icon-hover-background-color: var(--cp-surface-hi);
+  --dv-icon-hover-background-color: var(--cp-hover);
   --dv-scrollbar-background-color: var(--cp-surface-hi);
   --dv-floating-box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
   --dv-floating-border: var(--cp-border-width) solid var(--cp-line);

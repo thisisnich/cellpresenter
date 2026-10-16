@@ -172,7 +172,7 @@ export function ScripturePanel() {
             onClick={() => setShowKeys((v) => !v)}
             aria-expanded={showKeys}
             title={t("scripture.moreTranslations")}
-            className={`rounded-cp border-cp px-2 ${showKeys ? "bg-cp-surface-hi" : "text-cp-muted hover:text-cp-text"}`}
+            className={`rounded-cp border-cp px-2 ${showKeys ? "bg-cp-surface-hi" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
           >
             {t("scripture.more")}
           </button>
@@ -220,7 +220,7 @@ export function ScripturePanel() {
                       key={name}
                       type="button"
                       onClick={() => setQuery(`${name} 1`)}
-                      className="rounded-cp-sm border-cp px-1.5 py-0.5 text-[12px] text-cp-muted hover:bg-cp-surface hover:text-cp-text"
+                      className="rounded-cp-sm border-cp px-1.5 py-0.5 text-[12px] text-cp-muted hover:bg-cp-hover hover:text-cp-text"
                     >
                       {name}
                     </button>
@@ -239,7 +239,7 @@ export function ScripturePanel() {
               disabled={chapter <= 1}
               onClick={() => (setQuery(referenceText(book, chapter - 1)), setAnchor(null))}
               aria-label={t("scripture.previousChapter")}
-              className="rounded-cp-sm px-1.5 text-cp-muted hover:text-cp-text disabled:opacity-30"
+              className="rounded-cp-sm px-1.5 text-cp-muted hover:bg-cp-hover hover:text-cp-text disabled:opacity-30"
             >
               ‹
             </button>
@@ -263,7 +263,7 @@ export function ScripturePanel() {
               disabled={chapter >= chapters}
               onClick={() => (setQuery(referenceText(book, chapter + 1)), setAnchor(null))}
               aria-label={t("scripture.nextChapter")}
-              className="rounded-cp-sm px-1.5 text-cp-muted hover:text-cp-text disabled:opacity-30"
+              className="rounded-cp-sm px-1.5 text-cp-muted hover:bg-cp-hover hover:text-cp-text disabled:opacity-30"
             >
               ›
             </button>
@@ -282,7 +282,7 @@ export function ScripturePanel() {
                   // Click picks a verse; Shift-click picks through to another.
                   onClick={(e) => pickVerse(v.verse, e.shiftKey)}
                   aria-pressed={chosen.has(`${v.chapter}:${v.verse}`)}
-                  className={`w-full rounded-cp px-2 py-1 text-left ${chosen.has(`${v.chapter}:${v.verse}`) ? "bg-cp-surface-hi" : "hover:bg-cp-surface"}`}
+                  className={`w-full rounded-cp px-2 py-1 text-left ${chosen.has(`${v.chapter}:${v.verse}`) ? "bg-cp-surface-hi" : "hover:bg-cp-hover"}`}
                 >
                   <sup className="mr-1 font-semibold text-cp-muted">{v.verse}</sup>
                   {v.text}

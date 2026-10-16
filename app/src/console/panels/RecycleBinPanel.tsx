@@ -55,7 +55,7 @@ export function RecycleBinPanel({ api: panel }: IDockviewPanelProps) {
       {items.length === 0 && <p className="m-0 text-cp-muted">{t("bin.empty")}</p>}
       <ul className="m-0 flex list-none flex-col gap-0.5 p-0">
         {items.map((item) => (
-          <li key={item.id} className="flex items-center gap-2 rounded-cp px-2 py-1.5 hover:bg-cp-surface">
+          <li key={item.id} className="flex items-center gap-2 rounded-cp px-2 py-1.5 hover:bg-cp-hover">
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{item.title}</span>
               <span className="truncate text-[12px] text-cp-muted">

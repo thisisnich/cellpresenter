@@ -14,6 +14,10 @@ export interface ThemeColors {
   surface: string;
   /** Pressed / selected buttons, selected rows. */
   surfaceHi: string;
+  /** Behind a button or row the pointer is over: what a click will hit. */
+  hover: string;
+  /** Ring around a slide or picture tile the pointer is over. */
+  hoverLine: string;
   line: string;
   text: string;
   muted: string;
@@ -71,6 +75,8 @@ export const DEFAULT_THEME: Theme = {
     panel: "#191C21",
     surface: "#242930",
     surfaceHi: "#323841",
+    hover: "#2B3A57",
+    hoverLine: "#7FA2FF",
     line: "#2A2F37",
     text: "#ECEEF1",
     muted: "#9EA5AF",

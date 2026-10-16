@@ -242,7 +242,7 @@ export function SettingsPage({ onClose }: { onClose: () => void }) {
                           onClick={() => resetColor(name)}
                           disabled={!own}
                           title={t("settings.resetHelp")}
-                          className="w-12 rounded-cp-sm px-1 py-0.5 text-[11px] text-cp-muted enabled:hover:text-cp-text disabled:invisible"
+                          className="w-12 rounded-cp-sm px-1 py-0.5 text-[11px] text-cp-muted enabled:hover:bg-cp-hover hover:text-cp-text disabled:invisible"
                         >
                           {t("settings.reset")}
                         </button>

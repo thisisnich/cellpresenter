@@ -158,7 +158,7 @@ export function BibleKeys({ onChange }: { onChange: () => void }) {
             {shown.length === 0 && <li className="p-1 text-[12px] text-cp-muted">{t("bibleKeys.noneAvailable")}</li>}
             {shown.map((b) => (
               <li key={b.id}>
-                <label className="flex items-center gap-2 rounded-cp px-1.5 py-1 hover:bg-cp-surface">
+                <label className="flex items-center gap-2 rounded-cp px-1.5 py-1 hover:bg-cp-hover">
                   <input
                     type="checkbox"
                     checked={chosen.has(b.id)}

@@ -120,7 +120,7 @@ export function Header({
               onClick={() => onPage(m)}
               title={t(`mode.${m}Help`)}
               aria-pressed={page === m && !settingsOpen}
-              className={`rounded-cp-sm px-3.5 py-1 ${page === m && !settingsOpen ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:text-cp-text"}`}
+              className={`rounded-cp-sm px-3.5 py-1 ${page === m && !settingsOpen ? "bg-cp-surface-hi font-semibold" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
             >
               {t(`mode.${m}`)}
             </button>
@@ -132,7 +132,7 @@ export function Header({
             onClick={() => setLayoutOpen((o) => !o)}
             aria-expanded={layoutOpen}
             data-guide="layout"
-            className={`rounded-cp border-cp px-2.5 py-1 ${layoutOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+            className={`rounded-cp border-cp px-2.5 py-1 ${layoutOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
           >
             {t("layout.label")} {layoutOpen ? "‹" : "›"}
           </button>
@@ -155,7 +155,7 @@ export function Header({
                   </option>
                 ))}
               </select>
-              <button type="button" onClick={onResetLayout} title={t("layout.resetHelp")} className="rounded-cp border-cp px-2.5 py-1 text-cp-muted hover:text-cp-text">
+              <button type="button" onClick={onResetLayout} title={t("layout.resetHelp")} className="rounded-cp border-cp px-2.5 py-1 text-cp-muted hover:bg-cp-hover hover:text-cp-text">
                 {t("layout.reset")}
               </button>
             </>
@@ -182,7 +182,7 @@ export function Header({
           onClick={onSettings}
           aria-pressed={settingsOpen}
           title={t("settings.open")}
-          className={`rounded-cp border-cp px-2.5 py-1 ${settingsOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+          className={`rounded-cp border-cp px-2.5 py-1 ${settingsOpen ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
         >
           {t("settings.open")}
         </button>
@@ -201,7 +201,7 @@ export function Header({
             aria-label={t("guide.open")}
             title={t("guide.open")}
             data-guide="guide"
-            className="size-8 rounded-full border-cp text-cp-muted hover:text-cp-text"
+            className="size-8 rounded-full border-cp text-cp-muted hover:bg-cp-hover hover:text-cp-text"
           >
             ?
           </button>
@@ -219,7 +219,7 @@ export function Header({
                         setGuideOpen(false);
                         guide?.open(tour);
                       }}
-                      className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-surface-hi"
+                      className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-hover"
                     >
                       {tour === "start" ? t("guide.startTour") : t("guide.pageTour", { page: t(`mode.${page}`) })}
                     </button>
@@ -234,7 +234,7 @@ export function Header({
                         setGuideOpen(false);
                         openLink(kind);
                       }}
-                      className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-surface-hi"
+                      className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-hover"
                     >
                       {t(`feedback.${kind}`)}
                     </button>
@@ -242,7 +242,7 @@ export function Header({
                   <button
                     type="button"
                     onClick={() => setAboutOpen(true)}
-                    className="rounded-cp-sm px-3 py-2 text-left text-cp-muted hover:bg-cp-surface-hi hover:text-cp-text"
+                    className="rounded-cp-sm px-3 py-2 text-left text-cp-muted hover:bg-cp-hover hover:text-cp-text"
                   >
                     {t("about.open")}
                   </button>

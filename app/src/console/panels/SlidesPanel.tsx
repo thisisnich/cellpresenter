@@ -127,7 +127,7 @@ export function SlidesPanel() {
               onClick={() => setEditingOrder((e) => !e)}
               aria-expanded={editingOrder}
               title={t("arrangement.editHelp")}
-              className={`ml-1 rounded-cp-sm border-cp px-2 py-0.5 text-[12px] ${editingOrder ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:text-cp-text"}`}
+              className={`ml-1 rounded-cp-sm border-cp px-2 py-0.5 text-[12px] ${editingOrder ? "bg-cp-surface-hi text-cp-text" : "text-cp-muted hover:bg-cp-hover hover:text-cp-text"}`}
             >
               {editingOrder ? t("arrangement.done") : t("arrangement.edit")}
             </button>
@@ -169,7 +169,7 @@ export function SlidesPanel() {
                 onClick={() => void goLive(i)}
                 aria-label={t("slides.goTo", { number: i + 1, section: slide.section })}
                 aria-current={isLive ? "true" : undefined}
-                className="flex w-full flex-col overflow-hidden rounded-cp bg-cp-chrome text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cp-live"
+                className="flex w-full flex-col overflow-hidden rounded-cp bg-cp-chrome text-left hover:outline-2 hover:outline-offset-2 hover:outline-cp-hover-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cp-live"
                 style={{ border: `${width} solid ${dropAt === i ? "var(--cp-next)" : ring}` }}
               >
                 <SlidePreview text={slide.text} background={slide.background ?? (i === 0 ? itemCue : null)} transparent />

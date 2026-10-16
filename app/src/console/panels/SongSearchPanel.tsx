@@ -182,7 +182,7 @@ export function SongSearchPanel({ params }: IDockviewPanelProps<SearchParams>) {
               disabled={opening !== null}
               onClick={() => void open(hit)}
               aria-label={t("search.open", { title: hit.title, artist: hit.artist ?? "" })}
-              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-cp px-2 py-2 text-left hover:bg-cp-surface disabled:opacity-60"
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 rounded-cp px-2 py-2 text-left hover:bg-cp-hover disabled:opacity-60"
             >
               <span className="truncate">{hit.title}</span>
               <span className="justify-self-end text-[11px] text-cp-muted">
