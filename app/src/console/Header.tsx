@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
 import { t } from "../i18n";
-import { api } from "../lib/api";
+import { api, type FeedbackKind } from "../lib/api";
 import { DisplayLink } from "./DisplayLink";
 import { PANEL_KINDS, type PanelKind } from "./layout";
 import { PAGES, type Page } from "./pages";
 import { useLive } from "./LiveContext";
 import { useGuide } from "./FirstRunGuide";
 import { UpdateButton } from "./UpdateButton";
+
+const NEW_ISSUE = "https://github.com/thisisnich/cellpresenter/issues/new";
+const onThisComputer = () => ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+
+// The computer opens its own browser with the version filled in; a phone or
+// another computer opens the form in its own browser.
+function openFeedback(kind: FeedbackKind) {
+  const plain = () => window.open(`${NEW_ISSUE}?template=${kind}.yml`, "_blank", "noopener");
+  if (!onThisComputer()) return plain();
+  api.openFeedback(kind).catch(plain);
+}
 
 function useClock(): string {
   const format = () => new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -142,6 +153,21 @@ export function Header({
                   className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-surface-hi"
                 >
                   {tour === "start" ? t("guide.startTour") : t("guide.pageTour", { page: t(`mode.${page}`) })}
+                </button>
+              ))}
+              <div className="my-1 border-t-cp" role="separator" />
+              {(["bug", "feature"] as const).map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  title={t("feedback.help")}
+                  onClick={() => {
+                    setGuideOpen(false);
+                    openFeedback(kind);
+                  }}
+                  className="rounded-cp-sm px-3 py-2 text-left text-cp-text hover:bg-cp-surface-hi"
+                >
+                  {t(`feedback.${kind}`)}
                 </button>
               ))}
             </div>

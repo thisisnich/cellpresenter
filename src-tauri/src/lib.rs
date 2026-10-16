@@ -3,6 +3,7 @@ mod backup;
 mod bible;
 mod bible_online;
 mod db;
+mod feedback;
 mod live;
 mod media;
 mod network;

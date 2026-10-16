@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in CellPresenter isn't working the way it should.
+title: "Bug: "
+labels: [bug, triage]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+      placeholder: I pressed Next on the last slide of a song and the Display went blank instead of moving to the next song.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How can we make it happen again?
+      description: The steps, one per line. Leave it empty if you're not sure.
+      placeholder: |
+        1. Open a setlist with two songs
+        2. Go Live on the first song
+        3. Press Next until the end
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Paste or drag a screenshot or screen recording here if you have one.
+  - type: input
+    id: version
+    attributes:
+      label: CellPresenter version
+      description: Filled in for you when you report from the app.
+      placeholder: "1.0.1"
+  - type: input
+    id: os
+    attributes:
+      label: Computer
+      description: Filled in for you when you report from the app.
+      placeholder: macOS / Linux (which distro?)

@@ -1,0 +1,29 @@
+name: Feature request
+description: An idea that would make CellPresenter better for your group.
+title: "Idea: "
+labels: [enhancement, triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Tell us about the moment in your meeting or service where CellPresenter gets in the way or falls short.
+      placeholder: When someone shares a testimony, I'd like to show their name on screen without making a whole slide.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: How you picture it working. Rough is fine.
+  - type: textarea
+    id: today
+    attributes:
+      label: What do you do today instead?
+      description: Another app, a workaround, or just doing without.
+  - type: input
+    id: version
+    attributes:
+      label: CellPresenter version
+      description: Filled in for you when you ask from the app.
+      placeholder: "1.0.1"

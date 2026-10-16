@@ -33,6 +33,7 @@ import type { SongSummary } from "../generated/SongSummary";
 import type { Source } from "../generated/Source";
 
 export type LiveCommand = Command;
+export type FeedbackKind = "bug" | "feature";
 
 export interface Health {
   status: string;
@@ -142,6 +143,8 @@ export const api = {
   searchLyrics: (query: string) => request<SearchHit[]>(`/api/online/search?q=${encodeURIComponent(query)}`),
   /** Open Ultimate Guitar's search in this computer's browser (the computer only). */
   openUgSearch: (query: string) => request<void>("/api/online/open-ug-search", json("POST", { q: query })),
+  /** Open a new GitHub issue in this computer's browser (the computer only). */
+  openFeedback: (kind: FeedbackKind) => request<void>("/api/feedback/open", json("POST", { kind })),
   onlineSong: (source: Source, id: string) =>
     request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
 

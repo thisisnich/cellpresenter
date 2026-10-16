@@ -24,6 +24,7 @@ use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
 use crate::bible::{self, BibleError, BibleInfo, Passage, ScriptureRef};
 use crate::bible_online::{self, BibleSources, Keys, OnlineBible, OnlineBibleError};
 use crate::db::{Db, DbResult, NewMedia, RecycleBin, RestoredCounts};
+use crate::feedback;
 use crate::live::{Command, Credits, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
@@ -1508,6 +1509,28 @@ async fn open_ug_search(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Deserialize)]
+struct FeedbackQuery {
+    kind: feedback::Kind,
+}
+
+/// Open a new GitHub issue (bug or idea) in this computer's browser, with
+/// the version and computer filled in. A phone opens the page on its own.
+async fn open_feedback(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Json(query): Json<FeedbackQuery>,
+) -> Result<StatusCode, ApiError> {
+    if !peer.ip().is_loopback() {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    let url = feedback::issue_url(query.kind, env!("CARGO_PKG_VERSION"), feedback::this_os());
+    open::that_detached(&url).map_err(|e| {
+        eprintln!("cellpresenter: can't open the browser: {e}");
+        ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// The Display window's F key: fullscreen where it is, or back to a window.
 async fn toggle_fullscreen(State(s): State<ServerState>) -> ApiResult<Screens> {
     let outputs = s.outputs.ok_or(NO_SCREENS)?;
@@ -1679,6 +1702,7 @@ pub fn router(state: ServerState) -> Router {
         .route("/online/search", get(search_online))
         .route("/online/song", get(fetch_online))
         .route("/online/open-ug-search", post(open_ug_search))
+        .route("/feedback/open", post(open_feedback))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",
