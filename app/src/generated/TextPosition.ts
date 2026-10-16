@@ -3,4 +3,4 @@
 /**
  * Where the words sit on the screen.
  */
-export type TextPosition = "middle" | "bottom" | "top";
+export type TextPosition = "middle" | "bottom" | "top" | "custom";

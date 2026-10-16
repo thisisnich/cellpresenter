@@ -131,7 +131,7 @@ export function EditorPanel({ params, api: panel }: IDockviewPanelProps<EditorPa
       setDirty(false);
       notifyLibraryChanged();
       if (andShow) {
-        await showSong(song.id);
+        await showSong(song.id, 0, true);
         setPage("show");
       }
     } catch (err) {

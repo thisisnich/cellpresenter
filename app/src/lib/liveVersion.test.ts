@@ -12,6 +12,8 @@ const state = (session: string, version: number): LiveState => ({
   title: "",
   slides: [],
   slide_index: 0,
+  title_card: false,
+  next_item_background: null,
   visible: true,
   text_hidden: false,
   background: null,

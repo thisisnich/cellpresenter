@@ -4,11 +4,13 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
-import { footerLines } from "../domain/credits";
+import type { LiveState } from "../lib/ws";
+import { footerLines, titleCard } from "../domain/credits";
 import { CreditsFooter } from "./CreditsFooter";
+import { TitleSlide } from "./TitleSlide";
 import { DEFAULT_LOOK, LookContext } from "./look";
 import { LyricSlide } from "./LyricSlide";
-import { isVideoUrl, SlideBackground } from "./SlideBackground";
+import { SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 
 // Stateless renderer: everything it shows comes from the live state pushed
@@ -28,13 +30,10 @@ export default function DisplayApp() {
   const textScale = state?.text_scale ?? 1;
   // The background layer, which slide cues switch on the server.
   const background = state?.background ?? null;
-  const nextBackground = state?.slides[state.slide_index + 1]?.background ?? null;
-  const footer = state ? footerLines(state.credits, state.look, state.slide_index) : null;
+  const upcoming = state ? upcomingBackgrounds(state) : [];
+  const card = state?.title_card ? titleCard(state.credits, state.look) : null;
+  const footer = state && !card ? footerLines(state.credits, state.look, state.slide_index) : null;
 
-  // Load the next slide's background ahead of time so it never pops in.
-  useEffect(() => {
-    if (nextBackground && !isVideoUrl(nextBackground)) new Image().src = nextBackground;
-  }, [nextBackground]);
 
   // `?diag=1` overlays diagnostics so we can confirm every client runs the
   // same bundle, has the font loaded, and computes the same stage scale.
@@ -64,7 +63,7 @@ export default function DisplayApp() {
   return (
     <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>
       <main className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(appWindow)}>
-        <Stage backdrop={state && background ? <SlideBackground url={background} paused={!shown} /> : null}>
+        <Stage backdrop={state && background ? <SlideBackground url={background} paused={!shown} fadeMs={state.look.fade_ms} upcoming={upcoming} /> : null}>
           {/* Sizes here are stage pixels (1920 wide), so messages stay readable
               when the stage is scaled down to a phone. Blacked out = nothing. */}
           {!state && (
@@ -72,7 +71,8 @@ export default function DisplayApp() {
               {status === "closed" ? t("display.noSignal") : t("connection.connecting")}
             </p>
           )}
-          {state && shown && !state.text_hidden && state.slides.length > 0 && (
+          {state && shown && !state.text_hidden && card && <TitleSlide card={card} />}
+          {state && shown && !state.text_hidden && !card && state.slides.length > 0 && (
             <LyricSlide text={active} textScale={textScale} />
           )}
           {state && shown && !state.text_hidden && footer && <CreditsFooter lines={footer} />}
@@ -133,4 +133,12 @@ function useFullscreenKey(appWindow: boolean): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [appWindow]);
+}
+
+/** The backgrounds coming up, soonest first: this song's later slide cues,
+ *  then the setlist's next item. The display loads them ahead of time. */
+function upcomingBackgrounds(state: LiveState): string[] {
+  const from = state.title_card ? 0 : state.slide_index + 1;
+  const cues = state.slides.slice(from).map((s) => s.background);
+  return [...cues, state.next_item_background].filter((u): u is string => Boolean(u));
 }

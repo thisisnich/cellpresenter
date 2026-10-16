@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { announcementSlides, playedSlides, withArrangement } from "../domain/played";
+import type { Credits } from "../generated/Credits";
 import type { Media } from "../generated/Media";
 import type { Setlist } from "../generated/Setlist";
 import type { SetlistInput } from "../generated/SetlistInput";
@@ -23,7 +24,17 @@ export interface Content {
   songId: string | null;
   /** The song's or announcement's own background cue (image URL). */
   cue: string | null;
+  /** A song's copyright details, for its title slide (null otherwise). */
+  credits: Credits | null;
 }
+
+const creditsOf = (s: Song): Credits => ({
+  title: s.title,
+  artist: s.artist,
+  copyright: s.copyright,
+  ccli_number: s.ccli_number,
+  translation: null,
+});
 
 interface ConsoleValue {
   selection: Selection | null;
@@ -174,21 +185,21 @@ export function ConsoleProvider({ children }: { children: ReactNode }) {
     async (sel: Selection): Promise<Content | null> => {
       if (sel.kind === "song") {
         const s = await song(sel.songId);
-        return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
+        return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null, credits: creditsOf(s) };
       }
       const list = setlist?.id === sel.setlistId ? setlist : await api.getSetlist(sel.setlistId).catch(() => null);
       const item = list?.items.find((i) => i.id === sel.itemId);
       if (!item) return null;
       if (item.kind === "announcement")
-        return { title: item.title, slides: announcementSlides(item.title, item.text), songId: null, cue: mediaUrl(item.background_id) };
+        return { title: item.title, slides: announcementSlides(item.title, item.text), songId: null, cue: mediaUrl(item.background_id), credits: null };
       if (item.kind === "scripture") {
         const preview = await api.biblePassage(item.translation, item.passage).catch(() => null);
-        return preview && { title: preview.passage.label, slides: preview.slides, songId: null, cue: null };
+        return preview && { title: preview.passage.label, slides: preview.slides, songId: null, cue: null, credits: null };
       }
       const found = await song(item.song_id);
       // In this setlist's order, if it has its own.
       const s = found && withArrangement(found, item.arrangement);
-      return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null };
+      return s && { title: s.title, slides: playedSlides(s, mediaUrl), songId: s.id, cue: null, credits: creditsOf(s) };
     },
     [setlist, song, mediaUrl],
   );

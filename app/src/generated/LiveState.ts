@@ -58,4 +58,13 @@ credits: Credits | null,
 /**
  * How the screens look; changed from the console's Screen panel.
  */
-look: Look, };
+look: Look, 
+/**
+ * The song's title slide is up, before its first slide.
+ */
+title_card: boolean, 
+/**
+ * The first background of the setlist's next item, so displays can
+ * load it before Next gets there.
+ */
+next_item_background: string | null, };

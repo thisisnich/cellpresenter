@@ -147,11 +147,17 @@ export function SlideBackground({
   url,
   still = false,
   paused = false,
+  fadeMs = 0,
+  upcoming = [],
 }: {
   url: string | null | undefined;
   still?: boolean;
   /** Keep the file loaded but don't play it (a blacked-out screen). */
   paused?: boolean;
+  /** Fade a new background in over this long; 0 cuts straight to it. */
+  fadeMs?: number;
+  /** Backgrounds coming up, loaded now so changing to them is instant. */
+  upcoming?: string[];
 }) {
   if (!url) return null;
   return (
@@ -159,97 +165,157 @@ export function SlideBackground({
       {still ? (
         isVideoUrl(url) ? <VideoStill url={url} /> : <img src={url} alt="" draggable={false} className={frameClass} />
       ) : (
-        <Layers url={url} paused={paused} />
+        <Layers url={url} paused={paused} fadeMs={fadeMs} upcoming={upcoming} />
       )}
       <div className="absolute inset-0 bg-black/35" />
     </div>
   );
 }
 
-export interface Layer {
-  id: number;
-  url: string;
-  ready: boolean;
+/** What's on screen, what's loading to replace it, and what's fading out. */
+export interface Swap {
+  shown: string;
+  pending: string | null;
+  leaving: string | null;
 }
 
-/** Start loading `url` under what's on screen. A background still loading
- *  from an earlier change is dropped in favour of this one. */
-export function withNext(layers: Layer[], url: string, id: number): Layer[] {
-  const shown = layers.filter((l) => l.ready).slice(-1);
-  if (shown[0]?.url === url) return shown;
-  return [...shown, { id, url, ready: false }];
+/** A new background was picked: load it under the one on screen. */
+export function picked(s: Swap, url: string): Swap {
+  return url === s.shown ? { ...s, pending: null } : { ...s, pending: url };
 }
 
-/** The layer `id` can play: it alone stays. */
-export function onceReady(layers: Layer[], id: number): Layer[] {
-  const layer = layers.find((l) => l.id === id);
-  return layer && !layer.ready ? [{ ...layer, ready: true }] : layers;
+/** `url` can play: it goes on screen, and the old one fades out. A
+ *  background that's no longer wanted finishing late changes nothing. */
+export function loaded(s: Swap, url: string): Swap {
+  return url === s.pending ? { shown: url, pending: null, leaving: s.shown } : s;
 }
 
-/** How long a new background may take to load before it's shown anyway. */
-const READY_TIMEOUT_MS = 4000;
+/** The fade is over: the old background can stop. */
+export function faded(s: Swap, url: string): Swap {
+  return url === s.leaving ? { ...s, leaving: null } : s;
+}
 
-// A new background loads underneath the one on screen, which stays until
-// the new one can play. Swapping straight away shows black (and a stalled
-// first frame) while a large video loads.
-function Layers({ url, paused }: { url: string; paused: boolean }) {
-  const nextId = useRef(1);
-  const [layers, setLayers] = useState<Layer[]>(() => [{ id: 0, url, ready: true }]);
+/** How many coming backgrounds are kept loaded (each video holds a decoder). */
+export const WARM_LIMIT = 3;
 
+/** Every background to keep a player for: on screen, loading, fading out,
+ *  and the next few coming up. */
+export function playersFor(s: Swap, upcoming: string[]): string[] {
+  const now = [s.shown, s.pending, s.leaving].filter((u): u is string => Boolean(u));
+  const warm = [...new Set(upcoming)].filter((u) => !now.includes(u)).slice(0, WARM_LIMIT);
+  return [...new Set([...now, ...warm])];
+}
+
+// Every background has its own player, kept by URL: one coming up is
+// loaded early (paused, hidden), so when a slide changes to it the very
+// same player is shown at once. A new background loads underneath the one
+// on screen, which stays until the new one can play, then fades in on top.
+function Layers({ url, paused, fadeMs, upcoming }: { url: string; paused: boolean; fadeMs: number; upcoming: string[] }) {
+  const [swap, setSwap] = useState<Swap>(() => ({ shown: url, pending: null, leaving: null }));
+
+  useEffect(() => setSwap((s) => picked(s, url)), [url]);
+
+  // After the fade, the old background stops (or goes back to waiting).
   useEffect(() => {
-    setLayers((ls) => (ls[ls.length - 1]?.url === url ? ls : withNext(ls, url, nextId.current++)));
-  }, [url]);
-
-  const ready = (id: number) => setLayers((ls) => onceReady(ls, id));
+    if (!swap.leaving) return;
+    const leaving = swap.leaving;
+    const timer = window.setTimeout(() => setSwap((s) => faded(s, leaving)), fadeMs);
+    return () => window.clearTimeout(timer);
+  }, [swap.leaving, fadeMs]);
 
   return (
     <>
-      {/* The one loading sits underneath, so the screen never goes black. */}
-      {[...layers].reverse().map((l) => (
-        <BackgroundLayer key={l.id} url={l.url} paused={paused} onReady={() => ready(l.id)} />
-      ))}
+      {playersFor(swap, upcoming).map((u) => {
+        const role = u === swap.shown ? "shown" : u === swap.pending ? "pending" : u === swap.leaving ? "leaving" : "warm";
+        return (
+          <BackgroundLayer
+            key={u}
+            url={u}
+            role={role}
+            paused={paused}
+            fadeMs={fadeMs}
+            onReady={() => setSwap((s) => loaded(s, u))}
+          />
+        );
+      })}
     </>
   );
 }
 
-function BackgroundLayer({ url, paused, onReady }: { url: string; paused: boolean; onReady: () => void }) {
+type Role = "shown" | "pending" | "leaving" | "warm";
+
+function BackgroundLayer({
+  url,
+  role,
+  paused,
+  fadeMs,
+  onReady,
+}: {
+  url: string;
+  role: Role;
+  paused: boolean;
+  fadeMs: number;
+  onReady: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
   const done = useRef(onReady);
   done.current = onReady;
+  const playing = (role === "shown" || role === "pending" || role === "leaving") && !paused;
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (paused) video.pause();
-    else void video.play().catch(() => undefined);
-  }, [paused]);
+    if (playing) void video.play().catch(() => undefined);
+    else video.pause();
+  }, [playing]);
 
-  // A file that never loads mustn't keep the old background up forever.
+  // Picked: ready now if it was loaded early, otherwise when it plays (or
+  // after a while, so a file that never loads can't hold the old one up).
   useEffect(() => {
+    if (role !== "pending") return;
+    const video = videoRef.current;
+    const img = imgRef.current;
+    if ((video && video.readyState >= 3) || (img && img.complete && img.naturalWidth > 0)) {
+      done.current();
+      return;
+    }
     const timer = window.setTimeout(() => done.current(), READY_TIMEOUT_MS);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [role]);
+
+  const visible = role === "shown" || role === "leaving";
+  const style = {
+    // On top while it fades in; the one leaving stays visible beneath it.
+    zIndex: role === "shown" ? 2 : role === "leaving" ? 1 : 0,
+    opacity: visible ? 1 : 0,
+    transition: role === "shown" && fadeMs > 0 ? `opacity ${fadeMs}ms ease` : "none",
+  };
+  const ready = () => role === "pending" && done.current();
 
   if (!isVideoUrl(url)) {
-    return <img src={url} alt="" draggable={false} className={frameClass} onLoad={() => done.current()} onError={() => done.current()} />;
+    return <img ref={imgRef} src={url} alt="" draggable={false} className={frameClass} style={style} onLoad={ready} onError={ready} />;
   }
   return (
     <video
       ref={videoRef}
       src={url}
-      autoPlay={!paused}
       muted
       loop
       playsInline
       preload="auto"
       disablePictureInPicture
       className={frameClass}
-      onPlaying={() => done.current()}
-      onCanPlay={(e) => paused && e.currentTarget.readyState >= 3 && done.current()}
-      onError={() => done.current()}
+      style={style}
+      onPlaying={ready}
+      onCanPlay={(e) => paused && e.currentTarget.readyState >= 3 && ready()}
+      onError={ready}
     />
   );
 }
+
+/** How long a new background may take to load before it's shown anyway. */
+const READY_TIMEOUT_MS = 4000;
 
 /**
  * The background a slide would appear with: the first of its own cue, its

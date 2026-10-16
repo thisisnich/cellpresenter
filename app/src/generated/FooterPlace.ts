@@ -3,4 +3,4 @@
 /**
  * Where the copyright line sits.
  */
-export type FooterPlace = "centre" | "corner";
+export type FooterPlace = "centre" | "corner" | "bottom_left" | "top_left" | "top_centre" | "top_right" | "custom";

@@ -4,7 +4,7 @@ import { GuideProvider } from "./FirstRunGuide";
 import { useTheme } from "../theme/palettes";
 import { appIconPng } from "../brand/appIcon";
 import { api } from "../lib/api";
-import { SettingsPage } from "./SettingsPage";
+import { onOpenSettings, SettingsPage, type SettingsSection } from "./SettingsPage";
 import { Header } from "./Header";
 import { addPanel, resetLayout } from "./layout";
 import { PAGES, PagesProvider, usePages, type Page } from "./pages";
@@ -28,7 +28,9 @@ function Shell() {
   const { state } = useLive();
   const { selection } = useConsole();
   const theme = useTheme();
-  const [settings, setSettings] = useState(false);
+  // The Settings page, at a section, instead of the console page.
+  const [settings, setSettings] = useState<SettingsSection | null>(null);
+  useEffect(() => onOpenSettings(setSettings), []);
   // The app's own window and Dock icon follow this console's colours. Only
   // the computer running the app may change it.
   useEffect(() => {
@@ -44,7 +46,7 @@ function Shell() {
   useEffect(() => setOpened((o) => (o.has(page) ? o : new Set(o).add(page))), [page]);
 
   const changePage = (next: Page) => {
-    setSettings(false);
+    setSettings(null);
     // Going to Edit with nothing open: edit the song being previewed, else
     // the song on air.
     const edit = dockOf("edit");
@@ -67,10 +69,10 @@ function Shell() {
           const dock = dockOf(page);
           if (dock) addPanel(dock, kind);
         }}
-        settingsOpen={settings}
-        onSettings={() => setSettings((o) => !o)}
+        settingsOpen={settings !== null}
+        onSettings={() => setSettings((o) => (o ? null : "colours"))}
       />
-      {settings && <SettingsPage onClose={() => setSettings(false)} />}
+      {settings && <SettingsPage section={settings} onSection={setSettings} onClose={() => setSettings(null)} />}
       {PAGES.filter((p) => opened.has(p) || p === page).map((p) => (
         <div key={p} className={p === page && !settings ? "min-h-0 flex-1" : "hidden"}>
           <Workspace theme={theme} page={p} onReady={(api) => register(p, api)} />

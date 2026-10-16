@@ -63,6 +63,12 @@ pub enum FooterPlace {
     Centre,
     /// Small, in the bottom-right corner.
     Corner,
+    BottomLeft,
+    TopLeft,
+    TopCentre,
+    TopRight,
+    /// Wherever it was dragged to: `footer_x`, `footer_y`.
+    Custom,
 }
 
 /// Lyric typefaces. They ship with the app, so every screen draws (and
@@ -89,6 +95,52 @@ pub enum TextPosition {
     /// The bottom third, e.g. over a livestream or a video.
     Bottom,
     Top,
+    /// Wherever the box was dragged to: `text_area`.
+    Custom,
+}
+
+/// A box on the screen, in percent of its width and height.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub struct Area {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl Default for Area {
+    fn default() -> Self {
+        Self {
+            x: 10.0,
+            y: 10.0,
+            w: 80.0,
+            h: 80.0,
+        }
+    }
+}
+
+/// Smallest box the words may be squeezed into, in percent.
+const MIN_AREA: f32 = 5.0;
+
+impl Area {
+    /// Inside the screen and not too small; None for nonsense numbers.
+    fn checked(self) -> Option<Self> {
+        if ![self.x, self.y, self.w, self.h]
+            .iter()
+            .all(|v| v.is_finite())
+        {
+            return None;
+        }
+        let w = self.w.clamp(MIN_AREA, 100.0);
+        let h = self.h.clamp(MIN_AREA, 100.0);
+        Some(Self {
+            x: self.x.clamp(0.0, 100.0 - w),
+            y: self.y.clamp(0.0, 100.0 - h),
+            w,
+            h,
+        })
+    }
 }
 
 /// How every screen looks, set once for the church.
@@ -110,7 +162,23 @@ pub struct Look {
     pub position: TextPosition,
     /// Space kept clear around the words, in percent of the screen (0–20).
     pub margin: u8,
+    /// Where the words go when `position` is Custom.
+    pub text_area: Area,
+    /// Where the copyright line goes when `footer_place` is Custom, in
+    /// percent of the screen. The line's own edges line up with the point
+    /// in the same proportion, so 0 and 100 sit it against an edge.
+    pub footer_x: f32,
+    pub footer_y: f32,
+    /// Start each song on a title slide: its title, writers, copyright and
+    /// CCLI numbers.
+    pub title_slide: bool,
+    /// How long a new background takes to fade in, in milliseconds (0 cuts
+    /// straight to it).
+    pub fade_ms: u16,
 }
+
+/// Longest background fade.
+pub const MAX_FADE_MS: u16 = 3000;
 
 pub const MAX_MARGIN: u8 = 20;
 
@@ -127,6 +195,11 @@ impl Default for Look {
             shadow: true,
             position: TextPosition::default(),
             margin: 5,
+            text_area: Area::default(),
+            footer_x: 50.0,
+            footer_y: 96.0,
+            title_slide: false,
+            fade_ms: 0,
         }
     }
 }
@@ -148,6 +221,15 @@ impl Look {
         self.color = self.color.to_ascii_lowercase();
         if self.margin > MAX_MARGIN {
             return Err("bad_margin");
+        }
+        self.text_area = self.text_area.checked().ok_or("bad_area")?;
+        if !self.footer_x.is_finite() || !self.footer_y.is_finite() {
+            return Err("bad_footer_position");
+        }
+        self.footer_x = self.footer_x.clamp(0.0, 100.0);
+        self.footer_y = self.footer_y.clamp(0.0, 100.0);
+        if self.fade_ms > MAX_FADE_MS {
+            return Err("bad_fade");
         }
         Ok(self)
     }
@@ -188,6 +270,13 @@ pub struct LiveState {
     pub credits: Option<Credits>,
     /// How the screens look; changed from the console's Screen panel.
     pub look: Look,
+    /// The song's title slide is up, before its first slide.
+    #[serde(default)]
+    pub title_card: bool,
+    /// The first background of the setlist's next item, so displays can
+    /// load it before Next gets there.
+    #[serde(default)]
+    pub next_item_background: Option<String>,
 }
 
 /// Every change to live state, from any client. Local buttons, the phone
@@ -216,6 +305,8 @@ pub enum Command {
     SetTextScale {
         scale: f64,
     },
+    /// Show the song's title slide (when the look has one).
+    ShowTitle,
 }
 
 pub const TEXT_SCALE_MIN: f64 = 0.5;
@@ -244,6 +335,8 @@ impl LiveState {
         cue: Option<String>,
     ) {
         self.slide_index = slide_index.min(slides.len().saturating_sub(1));
+        self.title_card = false;
+        self.next_item_background = None;
         self.song_id = song_id;
         self.title = title;
         self.slides = slides;
@@ -272,12 +365,26 @@ impl LiveState {
     /// ignored rather than rejected, so a stale client can never wedge state.
     pub fn apply(&mut self, command: Command) {
         match command {
+            // From the title slide, Next shows the first slide.
+            Command::Next if self.title_card => {
+                self.title_card = false;
+                self.text_hidden = false;
+            }
             Command::Next => self.step(1),
+            Command::Prev if self.slide_index == 0 && !self.title_card => self.open_on_title(),
             Command::Prev => self.step(-1),
             Command::NextItem | Command::PrevItem => {}
             Command::GoTo { index } => {
                 if index < self.slides.len() {
                     self.slide_index = index;
+                    self.title_card = false;
+                    self.slide_changed();
+                }
+            }
+            Command::ShowTitle => {
+                if self.has_title() {
+                    self.slide_index = 0;
+                    self.title_card = true;
                     self.slide_changed();
                 }
             }
@@ -307,11 +414,34 @@ impl LiveState {
     }
 
     pub fn at_last_slide(&self) -> bool {
-        self.slide_index + 1 >= self.slides.len()
+        !self.title_card && self.slide_index + 1 >= self.slides.len()
     }
 
+    /// On the first thing a song shows: its title slide when it has one.
     pub fn at_first_slide(&self) -> bool {
-        self.slide_index == 0
+        if self.has_title() {
+            self.title_card
+        } else {
+            self.slide_index == 0
+        }
+    }
+
+    /// Whether what's on air gets a title slide: a song with the look's
+    /// title slide on (not scripture or an announcement).
+    pub fn has_title(&self) -> bool {
+        self.look.title_slide
+            && self
+                .credits
+                .as_ref()
+                .is_some_and(|c| c.translation.is_none())
+    }
+
+    /// Show the title slide if what's on air has one and is at its start.
+    pub fn open_on_title(&mut self) {
+        if self.has_title() && self.slide_index == 0 {
+            self.title_card = true;
+            self.text_hidden = false;
+        }
     }
 }
 
@@ -372,6 +502,99 @@ mod tests {
             s.apply(c.clone());
         }
         s
+    }
+
+    /// The fixture as a song, with title slides on.
+    fn titled() -> LiveState {
+        let mut s = fixture();
+        s.look.title_slide = true;
+        s.credits = Some(Credits {
+            title: "Song".into(),
+            ..Credits::default()
+        });
+        s.open_on_title();
+        s
+    }
+
+    #[test]
+    fn a_song_opens_on_its_title_slide_and_next_leaves_it() {
+        let mut s = titled();
+        assert!(s.title_card && s.at_first_slide() && !s.at_last_slide());
+        s.apply(Command::Next);
+        assert!(!s.title_card);
+        assert_eq!(s.slide_index, 0);
+        assert!(!s.at_first_slide());
+        s.apply(Command::Prev);
+        assert!(
+            s.title_card,
+            "Prev on the first slide goes back to the title"
+        );
+        s.apply(Command::GoTo { index: 2 });
+        assert!(!s.title_card);
+        s.apply(Command::ShowTitle);
+        assert!(s.title_card);
+        assert_eq!(s.slide_index, 0);
+    }
+
+    #[test]
+    fn no_title_slide_without_the_look_or_for_scripture() {
+        let mut s = fixture();
+        s.credits = Some(Credits::default());
+        s.open_on_title();
+        s.apply(Command::ShowTitle);
+        assert!(!s.title_card, "the look's title slide is off");
+        let mut s = titled();
+        s.title_card = false;
+        s.credits = Some(Credits {
+            translation: Some("KJV".into()),
+            ..Credits::default()
+        });
+        s.apply(Command::ShowTitle);
+        assert!(!s.title_card);
+        assert!(s.at_first_slide());
+    }
+
+    #[test]
+    fn showing_new_slides_drops_the_title_slide() {
+        let mut s = titled();
+        let slides = s.slides.clone();
+        s.show(None, "Notice".into(), slides, 0, None);
+        assert!(!s.title_card);
+    }
+
+    #[test]
+    fn areas_stay_on_screen() {
+        let area = Area {
+            x: 90.0,
+            y: -5.0,
+            w: 50.0,
+            h: 1.0,
+        }
+        .checked()
+        .unwrap();
+        assert_eq!(
+            area,
+            Area {
+                x: 50.0,
+                y: 0.0,
+                w: 50.0,
+                h: MIN_AREA
+            }
+        );
+        assert!(Area {
+            x: f32::NAN,
+            ..Area::default()
+        }
+        .checked()
+        .is_none());
+        let look = Look {
+            footer_x: 140.0,
+            footer_y: -3.0,
+            ..Look::default()
+        }
+        .checked()
+        .unwrap();
+        assert_eq!((look.footer_x, look.footer_y), (100.0, 0.0));
     }
 
     #[test]

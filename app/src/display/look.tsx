@@ -16,6 +16,11 @@ export const DEFAULT_LOOK: Look = {
   shadow: true,
   position: "middle",
   margin: 5,
+  text_area: { x: 10, y: 10, w: 80, h: 80 },
+  footer_x: 50,
+  footer_y: 96,
+  title_slide: false,
+  fade_ms: 0,
 };
 
 /** CSS font families of the bundled lyric fonts. */

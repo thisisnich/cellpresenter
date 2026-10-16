@@ -1,4 +1,6 @@
 import { CreditsFooter } from "../display/CreditsFooter";
+import { TitleSlide } from "../display/TitleSlide";
+import type { TitleCard } from "../domain/credits";
 import { LyricSlide } from "../display/LyricSlide";
 import { LookContext } from "../display/look";
 import type { Look } from "../generated/Look";
@@ -19,6 +21,7 @@ export function SlidePreview({
   footer = null,
   look,
   playVideo = false,
+  title = null,
 }: {
   text: string;
   textScale?: number;
@@ -36,6 +39,8 @@ export function SlidePreview({
   look?: Look;
   /** Play a video background (the live preview); thumbnails show a still. */
   playVideo?: boolean;
+  /** A song's title slide, shown instead of the words. */
+  title?: TitleCard | null;
 }) {
   const checker = transparent && !background && !blank;
   const preview = (
@@ -48,8 +53,8 @@ export function SlidePreview({
           blankLabel && <p className="text-5xl text-white/40">{blankLabel}</p>
         ) : (
           <>
-            {!hideText && <LyricSlide text={text} textScale={textScale} />}
-            {!hideText && footer && <CreditsFooter lines={footer} />}
+            {!hideText && (title ? <TitleSlide card={title} /> : <LyricSlide text={text} textScale={textScale} />)}
+            {!hideText && !title && footer && <CreditsFooter lines={footer} />}
           </>
         )}
       </Stage>

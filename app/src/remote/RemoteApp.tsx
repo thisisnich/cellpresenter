@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SlidePreview } from "../console/SlidePreview";
+import { titleCard } from "../domain/credits";
 import { LookContext } from "../display/look";
 import { currentJump, sectionJumps } from "../domain/sections";
 import type { LiveState } from "../generated/LiveState";
@@ -92,7 +93,8 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
   }
 
   const slide = state.slides[state.slide_index];
-  const next = state.slides[state.slide_index + 1];
+  const next = state.slides[state.title_card ? 0 : state.slide_index + 1];
+  const card = state.title_card ? titleCard(state.credits, state.look) : null;
   const jumps = sectionJumps(state.slides);
   const here = currentJump(jumps, state.slide_index);
   const background = state.background;
@@ -115,7 +117,7 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
         <section aria-label={t("output.live")} className="flex flex-col gap-1">
           <span className="cp-label text-cp-live">
             {t("output.live")}
-            {slide ? ` · ${slide.section}` : ""}
+            {card ? ` · ${t("slides.title")}` : slide ? ` · ${slide.section}` : ""}
           </span>
           <div className="overflow-hidden rounded-cp border-cp">
             <SlidePreview
@@ -125,6 +127,7 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
               blankLabel={t("output.blackedOut")}
               background={background}
               hideText={state.text_hidden}
+              title={card}
             />
           </div>
         </section>
@@ -197,11 +200,11 @@ function Remote({ onUnpaired }: { onUnpaired: () => void }) {
             onClose={() => setPicking(false)}
             onShowItem={(setlistId, itemId) => {
               setPicking(false);
-              void run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: 0 }));
+              void run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: 0, title: true }));
             }}
             onShowSong={(songId) => {
               setPicking(false);
-              void run(() => api.showSong({ song_id: songId, slide_index: 0 }));
+              void run(() => api.showSong({ song_id: songId, slide_index: 0, title: true }));
             }}
           />
         )}

@@ -1,18 +1,24 @@
+import { footerSpot } from "../domain/lyricLayout";
 import { FONT_FAMILY, useLook } from "./look";
 
-// The copyright line, centred along the bottom of the stage or small in the
-// bottom-right corner (canvas pixels, so it sits in the same place on every
-// screen). With the words in the lower third it moves to the top, so the
-// two never overlap.
+// The copyright line, at the look's spot on the stage: a preset (along the
+// top or bottom, left, centred or right) or wherever it was dragged. Canvas
+// pixels, so it sits in the same place on every screen.
 export function CreditsFooter({ lines }: { lines: string[] }) {
   const look = useLook();
-  const corner = look.footer_place === "corner";
-  const edge = look.position === "bottom" ? "top-9" : "bottom-9";
+  const spot = footerSpot(look);
+  const items = { left: "items-start", center: "items-center", right: "items-end" }[spot.align];
   return (
     <div
-      className={`absolute flex flex-col font-semibold ${edge} ${corner ? "right-12 max-w-[55%] items-end text-right" : "inset-x-0 items-center px-24 text-center"}`}
+      className={`absolute flex flex-col font-semibold ${items} ${spot.centred ? "w-full px-24" : "max-w-[55%]"}`}
       style={{
-        fontSize: corner ? 20 : 24,
+        left: `${spot.x}%`,
+        top: `${spot.y}%`,
+        // The line's box meets the point in the same proportion, so it never
+        // hangs off the stage.
+        transform: `translate(-${spot.x}%, -${spot.y}%)`,
+        textAlign: spot.align,
+        fontSize: spot.centred ? 24 : 20,
         lineHeight: 1.35,
         fontFamily: FONT_FAMILY[look.font],
         color: look.color,

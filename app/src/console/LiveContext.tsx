@@ -11,9 +11,9 @@ interface LiveContextValue {
   error: string | null;
   send: (command: LiveCommand) => Promise<void>;
   /** Put a library song on air. */
-  showSong: (songId: string, slideIndex?: number) => Promise<void>;
+  showSong: (songId: string, slideIndex?: number, title?: boolean) => Promise<void>;
   /** Put a setlist item on air. */
-  showItem: (setlistId: string, itemId: string, slideIndex?: number) => Promise<void>;
+  showItem: (setlistId: string, itemId: string, slideIndex?: number, title?: boolean) => Promise<void>;
   /** Put an image on the background layer now (null clears it). */
   setBackground: (mediaId: string | null) => Promise<void>;
 }
@@ -39,13 +39,14 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   );
   const send = useCallback((command: LiveCommand) => run(() => api.liveCommand(command)), [run]);
   const showSong = useCallback(
-    (songId: string, slideIndex = 0) => run(() => api.showSong({ song_id: songId, slide_index: slideIndex })),
+    // `title`: start on the song's title slide (when the look has one).
+    (songId: string, slideIndex = 0, title = false) => run(() => api.showSong({ song_id: songId, slide_index: slideIndex, title })),
     [run],
   );
 
   const showItem = useCallback(
-    (setlistId: string, itemId: string, slideIndex = 0) =>
-      run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: slideIndex })),
+    (setlistId: string, itemId: string, slideIndex = 0, title = false) =>
+      run(() => api.showItem({ setlist_id: setlistId, item_id: itemId, slide_index: slideIndex, title })),
     [run],
   );
 
@@ -66,5 +67,7 @@ export function useLive(): LiveContextValue {
 
 /** Index of the slide after the live one within the same item, if any. */
 export function nextIndex(state: LiveState): number | null {
+  // From the title slide, the song's first slide is next.
+  if (state.title_card) return state.slides.length > 0 ? 0 : null;
   return state.slide_index + 1 < state.slides.length ? state.slide_index + 1 : null;
 }

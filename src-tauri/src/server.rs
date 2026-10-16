@@ -208,8 +208,13 @@ impl ServerState {
             if let Ok(Some(setlist)) = self.db.get_setlist(setlist_id).await {
                 if let Some(index) = setlist.items.iter().position(|i| i.id() == item_id) {
                     restored = matches!(
-                        self.show_setlist_item(&setlist, index, SlideAt::Index(saved.slide_index))
-                            .await,
+                        self.show_setlist_item(
+                            &setlist,
+                            index,
+                            SlideAt::Index(saved.slide_index),
+                            false
+                        )
+                        .await,
                         Ok(Some(_))
                     );
                 }
@@ -389,12 +394,14 @@ impl ServerState {
         Ok(song.live_slides(|id| urls.get(id).cloned()))
     }
 
-    /// Put item `index` of `setlist` on air. None if it can't be shown.
+    /// Put item `index` of `setlist` on air, on its title slide when `title`
+    /// (and the look has one). None if it can't be shown.
     async fn show_setlist_item(
         &self,
         setlist: &Setlist,
         index: usize,
         at: SlideAt,
+        title: bool,
     ) -> DbResult<Option<LiveState>> {
         let Some(item) = setlist.items.get(index) else {
             return Ok(None);
@@ -407,6 +414,7 @@ impl ServerState {
             SlideAt::Last => content.slides.len().saturating_sub(1),
         };
         let (setlist_id, item_id) = (setlist.id.clone(), item.id().to_string());
+        let next_background = self.next_item_background(setlist, index).await?;
         Ok(Some(self.mutate(|l| {
             match &content.song {
                 Some(song) => put_song(l, song, content.slides, slide_index),
@@ -421,9 +429,32 @@ impl ServerState {
                     l.credits = content.credits;
                 }
             }
+            if title {
+                l.open_on_title();
+            }
+            l.next_item_background = next_background;
             l.setlist_id = Some(setlist_id);
             l.item_id = Some(item_id);
         })))
+    }
+
+    /// The first background of the item after `index` that can be shown, so
+    /// displays can load it early.
+    async fn next_item_background(
+        &self,
+        setlist: &Setlist,
+        index: usize,
+    ) -> DbResult<Option<String>> {
+        for item in setlist.items.iter().skip(index + 1) {
+            if let Some(content) = self.item_content(item).await? {
+                return Ok(content
+                    .slides
+                    .first()
+                    .and_then(|s| s.background.clone())
+                    .or(content.cue));
+            }
+        }
+        Ok(None)
     }
 
     /// Move to the next (`dir` = 1) or previous (-1) item of the setlist on
@@ -446,7 +477,13 @@ impl ServerState {
         let mut target = pos as isize + dir;
         while target >= 0 && (target as usize) < setlist.items.len() {
             if let Some(state) = self
-                .show_setlist_item(&setlist, target as usize, at)
+                // Moving on into an item starts at its title slide.
+                .show_setlist_item(
+                    &setlist,
+                    target as usize,
+                    at,
+                    matches!(at, SlideAt::Index(0)),
+                )
                 .await?
             {
                 return Ok(Some(state));
@@ -622,6 +659,9 @@ pub struct ShowItem {
     pub item_id: String,
     #[serde(default)]
     pub slide_index: usize,
+    /// Start on the title slide (when the look has one).
+    #[serde(default)]
+    pub title: bool,
 }
 
 /// Put a setlist item on air.
@@ -636,7 +676,12 @@ async fn live_show_item(
         .position(|i| i.id() == args.item_id)
         .ok_or(NOT_FOUND)?;
     let state = s
-        .show_setlist_item(&setlist, index, SlideAt::Index(args.slide_index))
+        .show_setlist_item(
+            &setlist,
+            index,
+            SlideAt::Index(args.slide_index),
+            args.title,
+        )
         .await?
         .ok_or(ApiError(StatusCode::CONFLICT, "song_missing"))?;
     Ok(Json(state))
@@ -648,6 +693,9 @@ pub struct ShowSong {
     pub song_id: String,
     #[serde(default)]
     pub slide_index: usize,
+    /// Start on the title slide (when the look has one).
+    #[serde(default)]
+    pub title: bool,
 }
 
 /// Put a library song on air.
@@ -659,6 +707,9 @@ async fn live_show_song(
     let slides = s.song_content(&song).await?;
     Ok(Json(s.mutate(|l| {
         put_song(l, &song, slides, args.slide_index);
+        if args.title {
+            l.open_on_title();
+        }
         l.setlist_id = None;
         l.item_id = None;
     })))
@@ -698,8 +749,11 @@ async fn update_song(
     if s.snapshot().song_id.as_deref() == Some(id.as_str()) {
         let slides = s.song_content(&song).await?;
         s.mutate(|l| {
-            let index = l.slide_index;
+            let (index, title) = (l.slide_index, l.title_card);
             put_song(l, &song, slides, index);
+            if title {
+                l.open_on_title();
+            }
         });
     }
     Ok(Json(song))
@@ -758,8 +812,13 @@ async fn update_setlist(
             .iter()
             .position(|i| Some(i.id()) == live.item_id.as_deref())
         {
-            s.show_setlist_item(&setlist, index, SlideAt::Index(live.slide_index))
-                .await?;
+            s.show_setlist_item(
+                &setlist,
+                index,
+                SlideAt::Index(live.slide_index),
+                live.title_card,
+            )
+            .await?;
         }
     }
     Ok(Json(setlist))
@@ -1073,7 +1132,13 @@ async fn set_look(State(s): State<ServerState>, Json(look): Json<Look>) -> ApiRe
         .map_err(|why| ApiError(StatusCode::UNPROCESSABLE_ENTITY, why))?;
     let json = serde_json::to_string(&look).expect("serialize look");
     s.db.set_state(LOOK_KEY, &json).await?;
-    Ok(Json(s.mutate(|l| l.look = look)))
+    Ok(Json(s.mutate(|l| {
+        l.look = look;
+        // Title slides turned off: the first slide takes its place.
+        if !l.has_title() {
+            l.title_card = false;
+        }
+    })))
 }
 
 // ---------- scripture ----------

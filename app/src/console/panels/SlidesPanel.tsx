@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { titleCard } from "../../domain/credits";
 import { arrangementOf, sectionAbbrev, sectionKind } from "../../domain/sections";
 import { t } from "../../i18n";
 import type { LiveState } from "../../lib/ws";
@@ -60,8 +61,19 @@ export function SlidesPanel() {
 
   const title = previewing ? (content?.title ?? "") : state.title;
   const slides = previewing ? (content?.slides ?? []) : state.slides;
-  const liveIndex = previewing ? -1 : state.slide_index;
+  const onTitle = !previewing && state.title_card;
+  const liveIndex = previewing || onTitle ? -1 : state.slide_index;
   const next = previewing ? -1 : (nextIndex(state) ?? -1);
+  // The song's title slide, when the look has them: a tile before slide 1.
+  const card = titleCard(previewing ? (content?.credits ?? null) : state.credits, state.look);
+
+  const goTitle = async () => {
+    if (!previewing) return send({ type: "show_title" });
+    if (!selection) return;
+    if (selection.kind === "item") await showItem(selection.setlistId, selection.itemId, 0, true);
+    else await showSong(selection.songId, 0, true);
+    select(null);
+  };
 
   const goLive = async (index: number) => {
     if (!previewing) return send({ type: "go_to", index });
@@ -103,7 +115,7 @@ export function SlidesPanel() {
           {previewing ? (
             <>
               <span className="rounded-cp-sm border-cp px-1.5 py-0.5 text-[11px] font-semibold text-cp-next">{t("slides.preview")}</span>
-              <button type="button" onClick={() => void goLive(0)} className="cp-btn-live px-3 py-1">
+              <button type="button" onClick={() => void (card ? goTitle() : goLive(0))} className="cp-btn-live px-3 py-1">
                 {t("slides.goLive")}
               </button>
               <button type="button" onClick={() => select(null)} className="cp-btn px-3 py-1">
@@ -139,6 +151,24 @@ export function SlidesPanel() {
       )}
 
       <div className="grid flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-3.5 overflow-y-auto p-4">
+        {card && (
+          <button
+            type="button"
+            onClick={() => void goTitle()}
+            aria-label={t("slides.goToTitle")}
+            aria-current={onTitle ? "true" : undefined}
+            className="flex w-full flex-col overflow-hidden rounded-cp bg-cp-chrome text-left hover:outline-2 hover:outline-offset-2 hover:outline-cp-hover-line focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cp-live"
+            style={{
+              border: `${onTitle ? "var(--cp-highlight-width)" : "var(--cp-border-width)"} solid ${onTitle ? "var(--cp-live)" : "var(--cp-line)"}`,
+            }}
+          >
+            <SlidePreview text="" background={slides[0]?.background ?? itemCue} title={card} transparent />
+            <span className="flex items-center justify-between gap-1.5 bg-cp-surface-hi px-2 py-1 text-[11px] font-semibold text-cp-text">
+              <span>{t("slides.title")}</span>
+              <span className="font-mono text-[10px] tracking-wide">{onTitle ? t("slides.live") : ""}</span>
+            </span>
+          </button>
+        )}
         {slides.map((slide, i) => {
           const isLive = i === liveIndex;
           const isNext = i === next;

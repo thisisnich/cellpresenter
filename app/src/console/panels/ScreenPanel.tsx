@@ -1,18 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { footerLines } from "../../domain/credits";
 import { DEFAULT_LOOK, FONT_FAMILY, FONT_NAME } from "../../display/look";
 import type { FooterMode } from "../../generated/FooterMode";
 import type { FooterPlace } from "../../generated/FooterPlace";
-import type { Look } from "../../generated/Look";
 import type { LyricFont } from "../../generated/LyricFont";
 import type { TextPosition } from "../../generated/TextPosition";
 import { t } from "../../i18n";
-import { api, ApiError } from "../../lib/api";
-import { useLive } from "../LiveContext";
+import { openSettings } from "../SettingsPage";
 import { SlidePreview } from "../SlidePreview";
+import { useLookDraft } from "../useLookDraft";
 
 const FOOTER_MODES: FooterMode[] = ["first", "all", "off"];
-const FOOTER_PLACES: FooterPlace[] = ["centre", "corner"];
+const FOOTER_PLACES: FooterPlace[] = ["centre", "corner", "bottom_left", "top_left", "top_centre", "top_right"];
 const FONTS: LyricFont[] = ["inter", "montserrat", "open_sans", "oswald", "lora"];
 const POSITIONS: TextPosition[] = ["top", "middle", "bottom"];
 const SAMPLE = "Amazing grace, how sweet the sound\nThat saved a wretch like me";
@@ -64,41 +63,15 @@ function Toggle({ on, label, onChange }: { on: boolean; label: string; onChange:
 // position…) and the copyright line under songs (CCLI). Changes reach every
 // display straight away.
 export function ScreenPanel() {
-  const { state } = useLive();
+  const { state, look, change, error } = useLookDraft();
   const saved = state?.look;
-  // Edits show here at once; the server gets them a moment later, so a
-  // dragged slider doesn't send a request per pixel.
-  const [draft, setDraft] = useState<Look | null>(null);
   const [licence, setLicence] = useState(saved?.ccli_licence ?? "");
-  const [error, setError] = useState<string | null>(null);
-  const timer = useRef<number | undefined>(undefined);
 
   // Follow changes made elsewhere (another console, a restart).
   useEffect(() => setLicence(saved?.ccli_licence ?? ""), [saved?.ccli_licence]);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  if (!saved || !state) return null;
-  const look = draft ?? saved;
+  if (!look || !state) return null;
 
-  const send = async (next: Look) => {
-    setError(null);
-    try {
-      await api.setLook(next);
-    } catch (err) {
-      const code = err instanceof ApiError ? err.code : "";
-      setError(
-        code === "pin_required" ? t("screen.needPin") : code === "licence_too_long" ? t("screen.licenceTooLong") : t("screen.saveFailed"),
-      );
-    } finally {
-      setDraft((d) => (d === next ? null : d));
-    }
-  };
-  const change = (patch: Partial<Look>, delay = 0) => {
-    const next = { ...look, ...patch };
-    setDraft(next);
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => void send(next), delay);
-  };
   const saveLicence = () => {
     const value = licence.trim() || null;
     if (value !== (look.ccli_licence ?? null)) change({ ccli_licence: value });
@@ -189,13 +162,21 @@ export function ScreenPanel() {
           name={(mode) => t(`screen.footer.${mode}`)}
           onPick={(footer) => change({ footer })}
         />
-        <Segmented
-          label={t("screen.footerPlace")}
-          options={FOOTER_PLACES}
-          value={look.footer_place}
-          name={(place) => t(`screen.footerPlace.${place}`)}
-          onPick={(footer_place) => change({ footer_place })}
-        />
+        <label className="flex flex-col gap-1">
+          <span className="text-cp-muted">{t("screen.footerPlace")}</span>
+          <select
+            value={look.footer_place}
+            onChange={(e) => change({ footer_place: e.target.value as FooterPlace })}
+            className="self-start rounded-cp border-cp bg-cp-bg px-2 py-1.5 text-cp-text"
+          >
+            {[...FOOTER_PLACES, ...(look.footer_place === "custom" ? (["custom"] as const) : [])].map((place) => (
+              <option key={place} value={place}>
+                {t(`screen.footerPlace.${place}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <Toggle on={look.title_slide} label={t("screen.titleSlide")} onChange={(title_slide) => change({ title_slide })} />
         <label className="flex flex-col gap-1">
           <span className="text-cp-muted">{t("screen.licence")}</span>
           <input
@@ -208,6 +189,9 @@ export function ScreenPanel() {
           />
         </label>
         <p className="m-0 text-[12px] text-cp-muted">{t("screen.footerHint")}</p>
+        <button type="button" onClick={() => openSettings("screen")} className="cp-btn self-start px-3 py-1">
+          {t("screen.openLayout")}
+        </button>
       </section>
 
       {error && (
