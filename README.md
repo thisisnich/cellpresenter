@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/mark-dark.svg">
+    <img src="docs/brand/mark.svg" alt="CellPresenter logo" width="96">
+  </picture>
+</p>
+
 # CellPresenter
 
 Free, open-source worship lyrics presenter, made for cell groups and small churches. Put lyrics on a projector, TV or everyone's phones. Change slides from your phone. Give the musicians chords in their own key. Everything runs on your own computer and Wi-Fi, so no internet or account is needed.

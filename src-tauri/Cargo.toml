@@ -63,3 +63,9 @@ opt-level = 3
 # The Display window goes fullscreen on a chosen monitor through GTK, which
 # also works on Wayland. Same version Tauri uses.
 gtk = "0.18"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# Sets the Dock icon to the console's colour palette. Same versions Tauri uses.
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSImage"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSData"] }

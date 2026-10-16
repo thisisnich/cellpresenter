@@ -10,7 +10,7 @@ import "@fontsource-variable/oswald";
 import "@fontsource-variable/lora";
 import App from "./App";
 import "./index.css";
-import { applyTheme, DEFAULT_THEME } from "./theme/tokens";
+import { applyColors } from "./theme/palettes";
 
 async function boot() {
   // The stage relies on identical font metrics on every device — a fallback
@@ -28,7 +28,7 @@ async function boot() {
     // Fonts API unavailable — render anyway rather than hanging.
   }
 
-  applyTheme(DEFAULT_THEME);
+  applyColors();
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>
       <App />

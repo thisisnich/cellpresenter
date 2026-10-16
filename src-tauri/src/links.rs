@@ -1,28 +1,31 @@
-//! Bug reports and feature requests: GitHub issues, opened from the app with
-//! the version and computer already filled in.
+//! The few outside pages the app opens in the browser: a GitHub issue (bug
+//! or idea) with the version and computer already filled in, and the tip jar.
 
 use serde::Deserialize;
 
 const NEW_ISSUE: &str = "https://github.com/thisisnich/cellpresenter/issues/new";
+pub const TIP_JAR: &str = "https://ko-fi.com/ndubs";
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum Kind {
+pub enum Link {
     Bug,
     Feature,
+    Tip,
 }
 
-/// The issue form for `kind`, with the fields the app knows filled in.
-pub fn issue_url(kind: Kind, version: &str, os: &str) -> String {
-    let template = match kind {
-        Kind::Bug => "bug.yml",
-        Kind::Feature => "feature.yml",
+/// Where `link` goes, with the fields the app knows filled in.
+pub fn url(link: Link, version: &str, os: &str) -> String {
+    let template = match link {
+        Link::Bug => "bug.yml",
+        Link::Feature => "feature.yml",
+        Link::Tip => return TIP_JAR.to_string(),
     };
     let mut url = reqwest::Url::parse(NEW_ISSUE).expect("valid issue url");
     url.query_pairs_mut()
         .append_pair("template", template)
         .append_pair("version", version);
-    if kind == Kind::Bug {
+    if link == Link::Bug {
         url.query_pairs_mut().append_pair("os", os);
     }
     url.to_string()
@@ -45,7 +48,7 @@ mod tests {
     #[test]
     fn bug_url_carries_version_and_os() {
         assert_eq!(
-            issue_url(Kind::Bug, "1.0.1", "macOS"),
+            url(Link::Bug, "1.0.1", "macOS"),
             "https://github.com/thisisnich/cellpresenter/issues/new?template=bug.yml&version=1.0.1&os=macOS"
         );
     }
@@ -53,8 +56,13 @@ mod tests {
     #[test]
     fn feature_url_carries_version_only() {
         assert_eq!(
-            issue_url(Kind::Feature, "1.0.1", "Linux"),
+            url(Link::Feature, "1.0.1", "Linux"),
             "https://github.com/thisisnich/cellpresenter/issues/new?template=feature.yml&version=1.0.1"
         );
+    }
+
+    #[test]
+    fn tip_jar_is_plain() {
+        assert_eq!(url(Link::Tip, "1.0.1", "Linux"), TIP_JAR);
     }
 }

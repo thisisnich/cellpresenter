@@ -1,7 +1,10 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { DEFAULT_LOOK, LookContext } from "../display/look";
 import { GuideProvider } from "./FirstRunGuide";
-import { DEFAULT_THEME } from "../theme/tokens";
+import { useTheme } from "../theme/palettes";
+import { appIconPng } from "../brand/appIcon";
+import { api } from "../lib/api";
+import { SettingsPage } from "./SettingsPage";
 import { Header } from "./Header";
 import { addPanel, resetLayout } from "./layout";
 import { PAGES, PagesProvider, usePages, type Page } from "./pages";
@@ -24,10 +27,24 @@ function Shell() {
   const { page, setPage, dockOf, register, editSong } = usePages();
   const { state } = useLive();
   const { selection } = useConsole();
+  const theme = useTheme();
+  const [settings, setSettings] = useState(false);
+  // The app's own window and Dock icon follow this console's colours. Only
+  // the computer running the app may change it.
+  useEffect(() => {
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname)) return;
+    const id = window.setTimeout(() => {
+      appIconPng(theme.colors)
+        .then(api.setAppIcon)
+        .catch(() => {}); // Not the desktop app (or an older one); the icon stays.
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [theme]);
   const [opened, setOpened] = useState<Set<Page>>(() => new Set([page]));
   useEffect(() => setOpened((o) => (o.has(page) ? o : new Set(o).add(page))), [page]);
 
   const changePage = (next: Page) => {
+    setSettings(false);
     // Going to Edit with nothing open: edit the song being previewed, else
     // the song on air.
     const edit = dockOf("edit");
@@ -50,13 +67,16 @@ function Shell() {
           const dock = dockOf(page);
           if (dock) addPanel(dock, kind);
         }}
+        settingsOpen={settings}
+        onSettings={() => setSettings((o) => !o)}
       />
+      {settings && <SettingsPage onClose={() => setSettings(false)} />}
       {PAGES.filter((p) => opened.has(p) || p === page).map((p) => (
-        <div key={p} className={p === page ? "min-h-0 flex-1" : "hidden"}>
-          <Workspace theme={DEFAULT_THEME} page={p} onReady={(api) => register(p, api)} />
+        <div key={p} className={p === page && !settings ? "min-h-0 flex-1" : "hidden"}>
+          <Workspace theme={theme} page={p} onReady={(api) => register(p, api)} />
         </div>
       ))}
-      {page !== "edit" && <TransportBar />}
+      {page !== "edit" && !settings && <TransportBar />}
     </div>
   );
 }

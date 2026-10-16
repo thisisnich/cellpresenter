@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "typecheck": "tsc --noEmit",
-    "gen:icon": "node scripts/gen-icon.mjs && tauri icon src-tauri/app-icon.png",
+    "gen:icon": "node scripts/gen-icon.mjs && tauri icon docs/brand/icon.svg",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
     "build:watch": "vite build --watch"

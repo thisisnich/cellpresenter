@@ -3,7 +3,9 @@ mod backup;
 mod bible;
 mod bible_online;
 mod db;
-mod feedback;
+#[cfg(target_os = "linux")]
+mod desktop_icon;
+mod links;
 mod live;
 mod media;
 mod network;
@@ -66,9 +68,15 @@ fn open_display(app: &AppHandle, port: u16) -> tauri::Result<tauri::WebviewWindo
 }
 
 /// The Display window on real screens, for the console's screen picker.
+/// An app icon as RGBA pixels, width and height.
+type IconPixels = std::sync::Mutex<Option<(Vec<u8>, u32, u32)>>;
+
 struct WindowOutputs {
     app: AppHandle,
     port: u16,
+    /// The icon in the console's palette (RGBA, width, height), for windows
+    /// opened later too.
+    icon: Arc<IconPixels>,
 }
 
 impl Outputs for WindowOutputs {
@@ -120,14 +128,17 @@ impl Outputs for WindowOutputs {
             ),
             None => None,
         };
-        let (app, port) = (self.app.clone(), self.port);
+        let (app, port, icon) = (self.app.clone(), self.port, self.icon.clone());
         // Windows are created and moved on the main thread.
         self.app
             .run_on_main_thread(move || {
                 let window = match app.get_webview_window(DISPLAY) {
                     Some(w) => w,
                     None => match open_display(&app, port) {
-                        Ok(w) => w,
+                        Ok(w) => {
+                            apply_icon(&w, &icon);
+                            w
+                        }
                         Err(e) => return eprintln!("cellpresenter: can't open the display: {e}"),
                     },
                 };
@@ -141,6 +152,56 @@ impl Outputs for WindowOutputs {
     fn toggle_fullscreen(&self) -> Result<(), String> {
         self.toggle()
     }
+
+    fn set_icon(&self, png: Vec<u8>) -> Result<(), String> {
+        let rgba = image::load_from_memory_with_format(&png, image::ImageFormat::Png)
+            .map_err(|e| e.to_string())?
+            .into_rgba8();
+        let (width, height) = rgba.dimensions();
+        #[cfg(target_os = "linux")]
+        {
+            let image = rgba.clone();
+            std::thread::spawn(move || desktop_icon::update(&image));
+        }
+        *self.icon.lock().map_err(|e| e.to_string())? = Some((rgba.into_raw(), width, height));
+        let (app, icon) = (self.app.clone(), self.icon.clone());
+        self.app
+            .run_on_main_thread(move || {
+                for window in app.webview_windows().values() {
+                    apply_icon(window, &icon);
+                }
+                #[cfg(target_os = "macos")]
+                set_dock_icon(&png);
+            })
+            .map_err(|e| e.to_string())
+    }
+}
+
+fn apply_icon(window: &tauri::WebviewWindow, icon: &IconPixels) {
+    let Ok(guard) = icon.lock() else { return };
+    let Some((rgba, width, height)) = guard.as_ref() else {
+        return;
+    };
+    let image = tauri::image::Image::new_owned(rgba.clone(), *width, *height);
+    if let Err(e) = window.set_icon(image) {
+        eprintln!("cellpresenter: can't set the window icon: {e}");
+    }
+}
+
+/// macOS shows the app's icon in the Dock, not on windows.
+#[cfg(target_os = "macos")]
+fn set_dock_icon(png: &[u8]) {
+    use objc2::{AllocAnyThread, MainThreadMarker};
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let Some(image) = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(png)) else {
+        return eprintln!("cellpresenter: can't read the Dock icon");
+    };
+    // SAFETY: on the main thread, with a valid image.
+    unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
 }
 
 impl WindowOutputs {
@@ -403,6 +464,7 @@ pub fn run() {
             let outputs = Arc::new(WindowOutputs {
                 app: handle.clone(),
                 port,
+                icon: Default::default(),
             });
             // Backups go where people can find them: Documents/CellPresenter
             // Backups (a dev build keeps its own beside its library).

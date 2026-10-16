@@ -44,4 +44,9 @@ pub trait Outputs: Send + Sync {
     fn toggle_fullscreen(&self) -> Result<(), String> {
         Err("not supported".into())
     }
+    /// Use this PNG as the app's icon (its windows, and the Dock on macOS),
+    /// so the icon follows the console's colour palette.
+    fn set_icon(&self, _png: Vec<u8>) -> Result<(), String> {
+        Err("not supported".into())
+    }
 }

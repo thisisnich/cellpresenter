@@ -1,0 +1,47 @@
+{
+  "palette": {
+    "ink": "#20252B",
+    "accent": "#477BFF",
+    "paper": "#FFFFFF",
+    "mist": "#DDE3E8",
+    "slate": "#67717A"
+  },
+  "word": {
+    "font": "Lexend",
+    "weight": 500,
+    "tracking": -2,
+    "a": "Cell",
+    "b": "Presenter",
+    "colorA": "ink",
+    "colorB": "ink",
+    "pPlay": true,
+    "pColor": "accent",
+    "px": 0.2,
+    "py": 0.27,
+    "ps": 0.2,
+    "pr": 1,
+    "tagline": "Present with clarity",
+    "showTag": true,
+    "tagColor": "accent",
+    "tagTrack": 22,
+    "tagSize": 0.26,
+    "markScale": 1.35,
+    "gap": 0.45
+  },
+  "icon": {
+    "bg": "ink",
+    "radius": 22,
+    "pad": 20,
+    "invert": true
+  },
+  "parts": [
+    { "id": "pi8bz0rh", "name": "Column", "kind": "block", "x": 1, "y": 1, "w": 26, "h": 71, "r": 2.3, "rot": 0, "sl": 0, "sr": 0, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "p1rj4fws", "name": "Column copy", "kind": "block", "x": 73, "y": 31, "w": 26, "h": 41, "r": 2.3, "rot": 0, "sl": 0, "sr": 0, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "p2avgagj", "name": "Screen", "kind": "block", "x": 73, "y": 1, "w": 26, "h": 26, "r": 2.3, "rot": 0, "sl": 0, "sr": 0, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 13, "fill": "accent", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "pcrcf8hi", "name": "Cursor", "kind": "play", "x": 43, "y": 39, "w": 20, "h": 24, "r": 2.3, "rot": 0, "sl": 0, "sr": 0, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "accent", "stroke": "ink", "sw": 0, "visible": true },
+    { "id": "pl5kyzhj", "name": "Cell copy", "kind": "block", "x": 31, "y": 1, "w": 39, "h": 26, "r": 2.3, "rot": 0, "sl": 0, "sr": 0, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "ppa63tp9", "name": "Base left", "kind": "block", "x": 1, "y": 77, "w": 19, "h": 21, "r": 2.3, "rot": 0, "sl": 0, "sr": -9, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "pdnijebr", "name": "Base left copy", "kind": "block", "x": 74, "y": 77, "w": 25, "h": 21, "r": 2.3, "rot": 0, "sl": -9, "sr": 0.3, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true },
+    { "id": "ptendgvo", "name": "Base centre", "kind": "block", "x": 24, "y": 77, "w": 46, "h": 21, "r": 2.3, "rot": 0, "sl": 9, "sr": 9, "ctl": 0, "ctr": 0, "cbr": 0, "cbl": 0, "fill": "ink", "stroke": "none", "sw": 0, "visible": true }
+  ]
+}

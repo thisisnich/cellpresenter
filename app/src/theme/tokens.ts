@@ -36,6 +36,14 @@ export interface ThemeColors {
   sectionChorus: string;
   sectionBridge: string;
   sectionOther: string;
+  /** The CellPresenter mark: its blocks, the accent corner block and the
+   *  play triangle. */
+  markInk: string;
+  markCorner: string;
+  markPlay: string;
+  /** The app icon: its tile and its blocks (corner and play as the mark). */
+  iconTile: string;
+  iconInk: string;
 }
 
 export interface Theme {
@@ -51,31 +59,39 @@ export interface Theme {
   panelGap: number;
 }
 
+// The logo's blue, and the app's accent in the default palette.
+export const BRAND_BLUE = "#477BFF";
+
 export const DEFAULT_THEME: Theme = {
-  name: "Graphite",
+  name: "CellPresenter",
   scheme: "dark",
   colors: {
-    bg: "#17181A",
-    chrome: "#1F2023",
-    panel: "#1B1C1F",
-    surface: "#26282C",
-    surfaceHi: "#34363C",
-    line: "#2C2E33",
-    text: "#ECECEE",
-    muted: "#A0A3AA",
-    live: "#F5A524",
-    onLive: "#1A1206",
-    next: "#6EA8FF",
+    bg: "#15181C",
+    chrome: "#1C2025",
+    panel: "#191C21",
+    surface: "#242930",
+    surfaceHi: "#323841",
+    line: "#2A2F37",
+    text: "#ECEEF1",
+    muted: "#9EA5AF",
+    live: BRAND_BLUE,
+    onLive: "#FFFFFF",
+    next: "#F5A524",
     ok: "#3DD68C",
     danger: "#FF8A8E",
     dangerBg: "#3A1D1F",
     dangerLine: "#5A2A2C",
-    checkerA: "#141517",
-    checkerB: "#202226",
+    checkerA: "#121519",
+    checkerB: "#1E2228",
     sectionVerse: "#2563EB",
     sectionChorus: "#7C3AED",
     sectionBridge: "#C2410C",
     sectionOther: "#4B5563",
+    markInk: "#ECEEF1",
+    markCorner: BRAND_BLUE,
+    markPlay: BRAND_BLUE,
+    iconTile: "#20252B",
+    iconInk: "#FFFFFF",
   },
   radius: 6,
   borderWidth: 1,

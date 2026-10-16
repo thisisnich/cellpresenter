@@ -24,7 +24,7 @@ use crate::backup::{BackupError, BackupInfo, BackupList, Backups};
 use crate::bible::{self, BibleError, BibleInfo, Passage, ScriptureRef};
 use crate::bible_online::{self, BibleSources, Keys, OnlineBible, OnlineBibleError};
 use crate::db::{Db, DbResult, NewMedia, RecycleBin, RestoredCounts};
-use crate::feedback;
+use crate::links::{self, Link};
 use crate::live::{Command, Credits, LiveState, Look, Slide};
 use crate::media::{self, Media, MediaError, MediaStore};
 use crate::network::{self, NetworkInfo};
@@ -1510,23 +1510,41 @@ async fn open_ug_search(
 }
 
 #[derive(Deserialize)]
-struct FeedbackQuery {
-    kind: feedback::Kind,
+struct LinkQuery {
+    link: Link,
 }
 
-/// Open a new GitHub issue (bug or idea) in this computer's browser, with
-/// the version and computer filled in. A phone opens the page on its own.
-async fn open_feedback(
+/// Open a bug report, feature request or the tip jar in this computer's
+/// browser. A phone opens the page on its own.
+async fn open_link(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Json(query): Json<FeedbackQuery>,
+    Json(query): Json<LinkQuery>,
 ) -> Result<StatusCode, ApiError> {
     if !peer.ip().is_loopback() {
         return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
     }
-    let url = feedback::issue_url(query.kind, env!("CARGO_PKG_VERSION"), feedback::this_os());
+    let url = links::url(query.link, env!("CARGO_PKG_VERSION"), links::this_os());
     open::that_detached(&url).map_err(|e| {
         eprintln!("cellpresenter: can't open the browser: {e}");
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
+    })?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// The console's colour palette, as the app's own icon. Only the computer
+/// running the app may change it.
+async fn set_app_icon(
+    State(s): State<ServerState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    png: axum::body::Bytes,
+) -> Result<StatusCode, ApiError> {
+    if !peer.ip().is_loopback() {
+        return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
+    }
+    let outputs = s.outputs.ok_or(NO_SCREENS)?;
+    outputs.set_icon(png.to_vec()).map_err(|e| {
+        eprintln!("cellpresenter: can't set the app icon: {e}");
+        ApiError(StatusCode::BAD_REQUEST, "bad_icon")
     })?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -1697,12 +1715,13 @@ pub fn router(state: ServerState) -> Router {
         )
         .route("/backups/open-folder", post(open_backup_folder))
         .route("/screens/toggle-fullscreen", post(toggle_fullscreen))
+        .route("/app/icon", post(set_app_icon))
         .route("/look", axum::routing::put(set_look))
         // Reaching out to the internet is for whoever runs the show.
         .route("/online/search", get(search_online))
         .route("/online/song", get(fetch_online))
         .route("/online/open-ug-search", post(open_ug_search))
-        .route("/feedback/open", post(open_feedback))
+        .route("/links/open", post(open_link))
         .route("/setlists", post(create_setlist))
         .route(
             "/setlists/{id}",

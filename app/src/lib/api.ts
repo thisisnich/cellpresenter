@@ -33,7 +33,8 @@ import type { SongSummary } from "../generated/SongSummary";
 import type { Source } from "../generated/Source";
 
 export type LiveCommand = Command;
-export type FeedbackKind = "bug" | "feature";
+/** The outside pages the app opens: a GitHub issue, or the tip jar. */
+export type OutsideLink = "bug" | "feature" | "tip";
 
 export interface Health {
   status: string;
@@ -143,8 +144,10 @@ export const api = {
   searchLyrics: (query: string) => request<SearchHit[]>(`/api/online/search?q=${encodeURIComponent(query)}`),
   /** Open Ultimate Guitar's search in this computer's browser (the computer only). */
   openUgSearch: (query: string) => request<void>("/api/online/open-ug-search", json("POST", { q: query })),
-  /** Open a new GitHub issue in this computer's browser (the computer only). */
-  openFeedback: (kind: FeedbackKind) => request<void>("/api/feedback/open", json("POST", { kind })),
+  /** Open an outside page in this computer's browser (the computer only). */
+  openLink: (link: OutsideLink) => request<void>("/api/links/open", json("POST", { link })),
+  /** The app's own window and Dock icon, in this console's colours (this computer only). */
+  setAppIcon: (png: Blob) => request<void>("/api/app/icon", { method: "POST", body: png }, "image/png"),
   onlineSong: (source: Source, id: string) =>
     request<OnlineSong>(`/api/online/song?source=${source}&id=${encodeURIComponent(id)}`),
 
