@@ -28,6 +28,9 @@ pub const MAX_VIDEO_BYTES: usize = 1024 * 1024 * 1024;
 /// 4K is what makes the screen lag.
 const PLAYBACK_W: u32 = 1920;
 const PLAYBACK_H: u32 = 1080;
+/// A moving background needs no more frames than this, and each one is
+/// work for the decoder.
+const PLAYBACK_FPS: f32 = 30.0;
 
 /// A stored background image, as clients see it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -318,12 +321,47 @@ impl MediaStore {
     }
 }
 
-fn fits_playback(width: u32, height: u32) -> bool {
-    width > 0 && height > 0 && width <= PLAYBACK_W && height <= PLAYBACK_H
+/// What ffprobe says about a video's first stream.
+#[derive(Debug, Clone, PartialEq)]
+struct VideoInfo {
+    codec: String,
+    profile: String,
+    width: u32,
+    height: u32,
+    fps: f32,
 }
 
-/// Width and height of the first video stream, if ffprobe can read them.
-fn probe_size(path: &Path) -> Option<(u32, u32)> {
+/// Whether a video is ready to play as it is: H.264 in a simple profile, at
+/// most 1080p and 30 frames a second. Those start and play quickly with
+/// any decoder; anything else (4K, 60 fps, High profile, other codecs) is
+/// converted once when it's stored.
+fn fits_playback(v: &VideoInfo) -> bool {
+    v.codec == "h264"
+        && matches!(
+            v.profile.as_str(),
+            "Baseline" | "Constrained Baseline" | "Main"
+        )
+        && v.width > 0
+        && v.height > 0
+        && v.width <= PLAYBACK_W
+        && v.height <= PLAYBACK_H
+        && v.fps <= PLAYBACK_FPS + 0.5
+}
+
+/// "30000/1001" or "30" as frames a second.
+fn parse_rate(rate: &str) -> Option<f32> {
+    match rate.split_once('/') {
+        Some((n, d)) => {
+            let (n, d) = (n.trim().parse::<f32>().ok()?, d.trim().parse::<f32>().ok()?);
+            (d > 0.0).then(|| n / d)
+        }
+        None => rate.trim().parse().ok(),
+    }
+}
+
+/// The first video stream's codec, profile, size and frame rate, if
+/// ffprobe can read them.
+fn probe(path: &Path) -> Option<VideoInfo> {
     let output = crate::host::command("ffprobe")
         .args([
             "-v",
@@ -331,9 +369,9 @@ fn probe_size(path: &Path) -> Option<(u32, u32)> {
             "-select_streams",
             "v:0",
             "-show_entries",
-            "stream=width,height",
+            "stream=codec_name,profile,width,height,avg_frame_rate,r_frame_rate",
             "-of",
-            "csv=p=0",
+            "default=noprint_wrappers=1",
         ])
         .arg(path)
         .stdin(std::process::Stdio::null())
@@ -342,18 +380,31 @@ fn probe_size(path: &Path) -> Option<(u32, u32)> {
     if !output.status.success() {
         return None;
     }
-    let text = String::from_utf8(output.stdout).ok()?;
-    let mut nums = text
-        .lines()
-        .next()?
-        .split(',')
-        .filter_map(|part| part.trim().parse::<u32>().ok());
-    let width = nums.next()?;
-    let height = nums.next()?;
-    if width == 0 || height == 0 {
-        return None;
-    }
-    Some((width, height))
+    parse_probe(&String::from_utf8(output.stdout).ok()?)
+}
+
+fn parse_probe(text: &str) -> Option<VideoInfo> {
+    let field = |key: &str| {
+        text.lines()
+            .find_map(|l| l.strip_prefix(key)?.strip_prefix('='))
+            .map(str::trim)
+    };
+    let width = field("width")?.parse().ok()?;
+    let height = field("height")?.parse().ok()?;
+    // The average rate is what plays; the stream's base rate can be far
+    // higher for variable-rate phone videos.
+    let fps = field("avg_frame_rate")
+        .and_then(parse_rate)
+        .filter(|f| *f > 0.0)
+        .or_else(|| field("r_frame_rate").and_then(parse_rate))
+        .unwrap_or(0.0);
+    Some(VideoInfo {
+        codec: field("codec_name")?.to_string(),
+        profile: field("profile").unwrap_or("").to_string(),
+        width,
+        height,
+        fps,
+    })
 }
 
 fn h264_encoder() -> Option<&'static str> {
@@ -376,14 +427,21 @@ fn h264_encoder() -> Option<&'static str> {
     })
 }
 
-/// Scale `path` in place so it fits in 1080p as H.264. A failure leaves
+/// Convert `path` in place to H.264 Baseline, at most 1080p and 30 frames
+/// a second, which every decoder starts and plays quickly. A failure leaves
 /// the original bytes alone.
-fn downscale(path: &Path, width: u32, height: u32) -> bool {
+fn convert(path: &Path, v: &VideoInfo) -> bool {
+    let VideoInfo {
+        width, height, fps, ..
+    } = v;
     let Some(encoder) = h264_encoder() else {
         eprintln!("cellpresenter: ffmpeg has no H.264 encoder; leaving {width}x{height} video as uploaded");
         return false;
     };
-    eprintln!("cellpresenter: scaling a {width}x{height} video down to 1080p so it plays smoothly");
+    eprintln!(
+        "cellpresenter: converting a {width}x{height} {fps:.0} fps {} {} video so it plays smoothly",
+        v.codec, v.profile
+    );
     let out = path.with_extension("playback");
     let mut cmd = crate::host::command("ffmpeg");
     cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
@@ -394,11 +452,20 @@ fn downscale(path: &Path, width: u32, height: u32) -> bool {
             "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2",
             "-pix_fmt",
             "yuv420p",
+            "-fpsmax",
+            "30",
             "-c:v",
             encoder,
         ]);
     if encoder == "libx264" {
-        cmd.args(["-preset", "veryfast", "-crf", "20"]);
+        cmd.args([
+            "-profile:v",
+            "baseline",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "20",
+        ]);
     } else {
         cmd.args(["-b:v", "8M"]);
     }
@@ -408,9 +475,7 @@ fn downscale(path: &Path, width: u32, height: u32) -> bool {
         .stdin(std::process::Stdio::null())
         .output();
     let ok = match result {
-        Ok(output) if output.status.success() => {
-            probe_size(&out).is_some_and(|(w, h)| fits_playback(w, h))
-        }
+        Ok(output) if output.status.success() => probe(&out).is_some_and(|v| fits_playback(&v)),
         Ok(output) => {
             let err = String::from_utf8_lossy(&output.stderr);
             eprintln!("cellpresenter: couldn't scale video: {}", err.trim());
@@ -431,8 +496,8 @@ fn downscale(path: &Path, width: u32, height: u32) -> bool {
 /// Make `path` something the display can play smoothly: 1080p at most, with
 /// the index at the front of the file.
 fn prepare_playback(path: &Path) {
-    if let Some((width, height)) = probe_size(path) {
-        if !fits_playback(width, height) && downscale(path, width, height) {
+    if let Some(v) = probe(path) {
+        if !fits_playback(&v) && convert(path, &v) {
             return;
         }
     }
@@ -529,13 +594,68 @@ pub mod tests {
         assert!(!is_media_file_name(&format!("{}.exe", "a".repeat(64))));
     }
 
+    fn video(codec: &str, profile: &str, width: u32, height: u32, fps: f32) -> VideoInfo {
+        VideoInfo {
+            codec: codec.into(),
+            profile: profile.into(),
+            width,
+            height,
+            fps,
+        }
+    }
+
     #[test]
-    fn only_a_frame_bigger_than_the_screen_is_scaled_down() {
-        assert!(fits_playback(1920, 1080));
-        assert!(fits_playback(1280, 720));
-        assert!(!fits_playback(3840, 2160));
-        assert!(!fits_playback(2160, 3840));
-        assert!(!fits_playback(0, 1080));
+    fn simple_1080p_h264_plays_as_it_is_and_the_rest_is_converted() {
+        assert!(fits_playback(&video("h264", "Baseline", 1920, 1080, 24.0)));
+        assert!(fits_playback(&video("h264", "Main", 1280, 720, 29.97)));
+        assert!(fits_playback(&video(
+            "h264",
+            "Constrained Baseline",
+            1920,
+            1080,
+            30.0
+        )));
+        assert!(
+            !fits_playback(&video("h264", "Baseline", 3840, 2160, 24.0)),
+            "4K"
+        );
+        assert!(
+            !fits_playback(&video("h264", "Baseline", 1080, 1920, 24.0)),
+            "portrait"
+        );
+        assert!(
+            !fits_playback(&video("h264", "Baseline", 1920, 1080, 60.0)),
+            "60 fps"
+        );
+        assert!(
+            !fits_playback(&video("h264", "High", 1920, 1080, 24.0)),
+            "High profile"
+        );
+        assert!(
+            !fits_playback(&video("hevc", "Main", 1920, 1080, 24.0)),
+            "HEVC"
+        );
+        assert!(!fits_playback(&video("h264", "Baseline", 0, 1080, 24.0)));
+    }
+
+    #[test]
+    fn reads_ffprobe_output() {
+        let text = "codec_name=h264\nprofile=High\nwidth=3840\nheight=2160\nr_frame_rate=60/1\navg_frame_rate=30000/1001\n";
+        let v = parse_probe(text).unwrap();
+        assert_eq!(
+            (v.codec.as_str(), v.profile.as_str(), v.width, v.height),
+            ("h264", "High", 3840, 2160)
+        );
+        assert!((v.fps - 29.97).abs() < 0.01, "average rate wins");
+        assert_eq!(
+            parse_probe(
+                "codec_name=h264\nwidth=640\nheight=360\navg_frame_rate=0/0\nr_frame_rate=25/1\n"
+            )
+            .unwrap()
+            .fps,
+            25.0
+        );
+        assert!(parse_probe("codec_name=h264\n").is_none());
     }
 
     #[test]

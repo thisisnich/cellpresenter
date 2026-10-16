@@ -295,6 +295,23 @@ fn on_main_thread<T: Send + 'static>(
     rx.recv_timeout(std::time::Duration::from_secs(2)).ok()
 }
 
+/// GStreamer (which plays video in the Linux webview) picks NVIDIA's
+/// decoder first when there is one. Each new player then waits for the GPU
+/// and CUDA to start (250–350 ms, measured), and closing one freezes the
+/// page for 80 ms, so slides and backgrounds lag. Ranked below the others,
+/// it's still used for anything they can't play. Someone who set their own
+/// ranks keeps them.
+#[cfg(target_os = "linux")]
+fn prefer_quick_video_decoders() {
+    const VAR: &str = "GST_PLUGIN_FEATURE_RANK";
+    if std::env::var_os(VAR).is_none() {
+        std::env::set_var(
+            VAR,
+            "nvh264dec:MARGINAL,nvh265dec:MARGINAL,nvvp9dec:MARGINAL,nvav1dec:MARGINAL,openh264dec:SECONDARY",
+        );
+    }
+}
+
 /// Whether the window fills a screen. On Linux this asks GTK, because the
 /// fullscreen-on-a-monitor call below goes around Tauri's own bookkeeping.
 fn is_fullscreen(window: &tauri::WebviewWindow) -> bool {
@@ -416,6 +433,8 @@ async fn open_library(app: &AppHandle) -> Result<Db, String> {
 }
 
 pub fn run() {
+    #[cfg(target_os = "linux")]
+    prefer_quick_video_decoders();
     // Compositing stays on. Turning it off (WEBKIT_DISABLE_COMPOSITING_MODE)
     // used to stop an AppImage fullscreen crash, but it also paints video on
     // the CPU, so backgrounds stutter. The crash was the AppImage's own

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { LiveState } from "../lib/ws";
 
 // A background filling its box (the whole screen on a display), cropped to
 // fit and darkened slightly so white lyrics stay readable. Pictures and
@@ -331,4 +332,15 @@ const READY_TIMEOUT_MS = 4000;
  */
 export function backgroundFor(...candidates: (string | null | undefined)[]): string | null {
   return candidates.find((c) => c) ?? null;
+}
+
+/** Backgrounds near the slide on screen, the ones Next would reach first:
+ *  this song's later slide cues, the setlist's next item, then the cues
+ *  just shown (for Prev). The display keeps them loaded. */
+export function nearbyBackgrounds(state: LiveState): string[] {
+  const at = state.title_card ? 0 : state.slide_index;
+  const cue = (i: number) => state.slides[i]?.background;
+  const ahead = state.slides.slice(state.title_card ? 0 : at + 1).map((s) => s.background);
+  const behind = state.slides.slice(0, at).map((_, i) => cue(at - 1 - i));
+  return [...ahead, state.next_item_background, ...behind].filter((u): u is string => Boolean(u));
 }

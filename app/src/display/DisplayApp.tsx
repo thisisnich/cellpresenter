@@ -4,13 +4,12 @@ import { t } from "../i18n";
 import { api } from "../lib/api";
 import { useTransportKeys } from "../lib/transportKeys";
 import { useLiveState } from "../lib/useLiveState";
-import type { LiveState } from "../lib/ws";
 import { footerLines, titleCard } from "../domain/credits";
 import { CreditsFooter } from "./CreditsFooter";
 import { TitleSlide } from "./TitleSlide";
 import { DEFAULT_LOOK, LookContext } from "./look";
 import { LyricSlide } from "./LyricSlide";
-import { SlideBackground } from "./SlideBackground";
+import { nearbyBackgrounds, SlideBackground } from "./SlideBackground";
 import { Stage, STAGE_HEIGHT, STAGE_WIDTH } from "./Stage";
 
 // Stateless renderer: everything it shows comes from the live state pushed
@@ -133,15 +132,4 @@ function useFullscreenKey(appWindow: boolean): void {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [appWindow]);
-}
-
-/** Backgrounds near the slide on screen, the ones Next would reach first:
- *  this song's later slide cues, the setlist's next item, then the cues
- *  just shown (for Prev). The display keeps them loaded. */
-function nearbyBackgrounds(state: LiveState): string[] {
-  const at = state.title_card ? 0 : state.slide_index;
-  const cue = (i: number) => state.slides[i]?.background;
-  const ahead = state.slides.slice(state.title_card ? 0 : at + 1).map((s) => s.background);
-  const behind = state.slides.slice(0, at).map((_, i) => cue(at - 1 - i));
-  return [...ahead, state.next_item_background, ...behind].filter((u): u is string => Boolean(u));
 }

@@ -1,6 +1,6 @@
 import { footerLines, titleCard } from "../../domain/credits";
 import { t } from "../../i18n";
-import { backgroundFor } from "../../display/SlideBackground";
+import { backgroundFor, nearbyBackgrounds } from "../../display/SlideBackground";
 import { useConsole, useContent, type Selection } from "../ConsoleContext";
 import { nextIndex, useLive } from "../LiveContext";
 import { ScreenPicker } from "../ScreenPicker";
@@ -47,6 +47,8 @@ export function OutputPanel() {
             hideText={state.text_hidden}
             footer={footerLines(state.credits, state.look, state.slide_index)}
             title={state.title_card ? titleCard(state.credits, state.look) : null}
+            fadeMs={state.look.fade_ms}
+            upcoming={nearbyBackgrounds(state)}
             playVideo
           />
         </div>

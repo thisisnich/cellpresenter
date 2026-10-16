@@ -22,6 +22,8 @@ export function SlidePreview({
   look,
   playVideo = false,
   title = null,
+  fadeMs = 0,
+  upcoming,
 }: {
   text: string;
   textScale?: number;
@@ -41,13 +43,17 @@ export function SlidePreview({
   playVideo?: boolean;
   /** A song's title slide, shown instead of the words. */
   title?: TitleCard | null;
+  /** Background fade (the live preview), as on the screens. */
+  fadeMs?: number;
+  /** Backgrounds to keep loaded so changing to them is instant. */
+  upcoming?: string[];
 }) {
   const checker = transparent && !background && !blank;
   const preview = (
     <div className={`relative aspect-video w-full overflow-hidden ${checker ? "cp-checker" : "bg-black"}`}>
       <Stage
         clear={checker}
-        backdrop={!blank && background ? <SlideBackground url={background} still={!playVideo} /> : null}
+        backdrop={!blank && background ? <SlideBackground url={background} still={!playVideo} fadeMs={fadeMs} upcoming={upcoming} /> : null}
       >
         {blank ? (
           blankLabel && <p className="text-5xl text-white/40">{blankLabel}</p>
