@@ -153,40 +153,101 @@ export function SlideBackground({
   /** Keep the file loaded but don't play it (a blacked-out screen). */
   paused?: boolean;
 }) {
+  if (!url) return null;
+  return (
+    <div className={`absolute inset-0 ${paused ? "invisible" : ""}`}>
+      {still ? (
+        isVideoUrl(url) ? <VideoStill url={url} /> : <img src={url} alt="" draggable={false} className={frameClass} />
+      ) : (
+        <Layers url={url} paused={paused} />
+      )}
+      <div className="absolute inset-0 bg-black/35" />
+    </div>
+  );
+}
+
+export interface Layer {
+  id: number;
+  url: string;
+  ready: boolean;
+}
+
+/** Start loading `url` under what's on screen. A background still loading
+ *  from an earlier change is dropped in favour of this one. */
+export function withNext(layers: Layer[], url: string, id: number): Layer[] {
+  const shown = layers.filter((l) => l.ready).slice(-1);
+  if (shown[0]?.url === url) return shown;
+  return [...shown, { id, url, ready: false }];
+}
+
+/** The layer `id` can play: it alone stays. */
+export function onceReady(layers: Layer[], id: number): Layer[] {
+  const layer = layers.find((l) => l.id === id);
+  return layer && !layer.ready ? [{ ...layer, ready: true }] : layers;
+}
+
+/** How long a new background may take to load before it's shown anyway. */
+const READY_TIMEOUT_MS = 4000;
+
+// A new background loads underneath the one on screen, which stays until
+// the new one can play. Swapping straight away shows black (and a stalled
+// first frame) while a large video loads.
+function Layers({ url, paused }: { url: string; paused: boolean }) {
+  const nextId = useRef(1);
+  const [layers, setLayers] = useState<Layer[]>(() => [{ id: 0, url, ready: true }]);
+
+  useEffect(() => {
+    setLayers((ls) => (ls[ls.length - 1]?.url === url ? ls : withNext(ls, url, nextId.current++)));
+  }, [url]);
+
+  const ready = (id: number) => setLayers((ls) => onceReady(ls, id));
+
+  return (
+    <>
+      {/* The one loading sits underneath, so the screen never goes black. */}
+      {[...layers].reverse().map((l) => (
+        <BackgroundLayer key={l.id} url={l.url} paused={paused} onReady={() => ready(l.id)} />
+      ))}
+    </>
+  );
+}
+
+function BackgroundLayer({ url, paused, onReady }: { url: string; paused: boolean; onReady: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const done = useRef(onReady);
+  done.current = onReady;
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     if (paused) video.pause();
     else void video.play().catch(() => undefined);
-  }, [paused, url]);
+  }, [paused]);
 
-  if (!url) return null;
+  // A file that never loads mustn't keep the old background up forever.
+  useEffect(() => {
+    const timer = window.setTimeout(() => done.current(), READY_TIMEOUT_MS);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  if (!isVideoUrl(url)) {
+    return <img src={url} alt="" draggable={false} className={frameClass} onLoad={() => done.current()} onError={() => done.current()} />;
+  }
   return (
-    <div className={`absolute inset-0 ${paused ? "invisible" : ""}`}>
-      {isVideoUrl(url) ? (
-        still ? (
-          <VideoStill url={url} />
-        ) : (
-          <video
-            ref={videoRef}
-            key={url}
-            src={url}
-            autoPlay
-            muted
-            loop
-            playsInline
-            preload="auto"
-            disablePictureInPicture
-            className={frameClass}
-          />
-        )
-      ) : (
-        <img src={url} alt="" draggable={false} className={frameClass} />
-      )}
-      <div className="absolute inset-0 bg-black/35" />
-    </div>
+    <video
+      ref={videoRef}
+      src={url}
+      autoPlay={!paused}
+      muted
+      loop
+      playsInline
+      preload="auto"
+      disablePictureInPicture
+      className={frameClass}
+      onPlaying={() => done.current()}
+      onCanPlay={(e) => paused && e.currentTarget.readyState >= 3 && done.current()}
+      onError={() => done.current()}
+    />
   );
 }
 
