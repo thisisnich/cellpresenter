@@ -33,8 +33,30 @@ function releaseDecoder() {
 
 const frameClass = "absolute inset-0 h-full w-full object-cover";
 
+/**
+ * The still the server saved for a stored video (`/media/thumbs/<hash>.jpg`,
+ * keeping the video's `?v=` so a rescaled file's new still isn't cached
+ * over), or null for a URL that isn't one of ours.
+ */
+export function savedStillUrl(url: string): string | null {
+  const m = /^(.*\/media\/)([0-9a-f]{64})\.(?:mp4|webm|mov)(\?[^#]*)?/.exec(url);
+  return m ? `${m[1]}thumbs/${m[2]}.jpg${m[3] ?? ""}` : null;
+}
+
 /** A single frame of a video, then no decoder. */
 export function VideoStill({ url, label }: { url: string; label?: string }) {
+  // The server's still when there is one: the webview's own frame grab
+  // comes out black for some files.
+  const saved = savedStillUrl(url);
+  const [missing, setMissing] = useState<string | null>(null);
+  if (saved && missing !== saved) {
+    return <img src={saved} alt={label ?? ""} draggable={false} className={frameClass} onError={() => setMissing(saved)} />;
+  }
+  return <GrabbedStill url={url} label={label} />;
+}
+
+/** A frame grabbed by decoding the video here, then no decoder. */
+function GrabbedStill({ url, label }: { url: string; label?: string }) {
   const [poster, setPoster] = useState<string | null>(null);
   const [src, setSrc] = useState<string | null>(null);
   const holding = useRef(false);

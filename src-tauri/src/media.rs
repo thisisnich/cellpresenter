@@ -207,17 +207,63 @@ impl MediaStore {
         let path = self.dir.join(format!("{hash}.{ext}"));
         if path.exists() {
             std::fs::remove_file(tmp)?;
+            if !self.poster_path(hash).exists() {
+                self.write_poster(&path, hash);
+            }
             return Ok(std::fs::metadata(&path)?.len());
         }
         if ext == "mp4" || ext == "mov" {
             prepare_playback(tmp);
         }
         std::fs::rename(tmp, &path)?;
+        self.write_poster(&path, hash);
         Ok(std::fs::metadata(&path)?.len())
     }
 
-    /// Scale 4K videos already in the library down to 1080p, and move a
-    /// late index to the front of any other MP4 or MOV. Returns `(hash,
+    /// Where a video's still frame for the console is kept.
+    fn poster_path(&self, hash: &str) -> PathBuf {
+        self.dir.join("thumbs").join(format!("{hash}.jpg"))
+    }
+
+    /// Save a still frame of a stored video as its thumbnail, so the console
+    /// doesn't have to decode the video in the webview to show it (which
+    /// draws black for some files). Without ffmpeg there is no still, and
+    /// the console grabs a frame itself.
+    fn write_poster(&self, video: &Path, hash: &str) {
+        let out = self.poster_path(hash);
+        let scale = format!("scale={THUMB_W}:{THUMB_H}:force_original_aspect_ratio=decrease");
+        // Half a second in skips a fade from black; a shorter clip uses
+        // its first frame.
+        for seek in ["0.5", "0"] {
+            let status = std::process::Command::new("ffmpeg")
+                .args([
+                    "-y",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-ss",
+                    seek,
+                    "-i",
+                ])
+                .arg(video)
+                .args(["-frames:v", "1", "-vf", &scale, "-q:v", "4", "-f", "image2"])
+                .arg(&out)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            if matches!(&status, Ok(s) if s.success())
+                && std::fs::metadata(&out).is_ok_and(|m| m.len() > 0)
+            {
+                return;
+            }
+        }
+        let _ = std::fs::remove_file(&out);
+    }
+
+    /// Scale 4K videos already in the library down to 1080p, move a late
+    /// index to the front of any other MP4 or MOV, and give every video a
+    /// still frame. Returns `(hash,
     /// new size)` for files whose bytes changed, so the URL can change
     /// with them and the player doesn't keep a cached 4K copy.
     pub fn repack_videos(&self) -> Vec<(String, u64)> {
@@ -228,21 +274,26 @@ impl MediaStore {
         for entry in entries.flatten() {
             let path = entry.path();
             let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-            if !path.is_file() || (ext != "mp4" && ext != "mov") {
+            let Some(hash) = path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            if !path.is_file() || !is_video_ext(ext) || hash.len() != 64 {
                 continue;
             }
             let before = std::fs::metadata(&path).ok().map(|m| m.len());
-            prepare_playback(&path);
+            if ext == "mp4" || ext == "mov" {
+                prepare_playback(&path);
+            }
             let Ok(meta) = std::fs::metadata(&path) else {
                 continue;
             };
-            if before == Some(meta.len()) {
-                continue;
+            let changed = before != Some(meta.len());
+            // Videos from before stills existed get one now.
+            if changed || !self.poster_path(hash).exists() {
+                self.write_poster(&path, hash);
             }
-            if let Some(hash) = path.file_stem().and_then(|s| s.to_str()) {
-                if hash.len() == 64 {
-                    scaled.push((hash.to_string(), meta.len()));
-                }
+            if changed {
+                scaled.push((hash.to_string(), meta.len()));
             }
         }
         scaled
@@ -509,6 +560,42 @@ pub mod tests {
         bytes.extend(boxed(b"mdat", &[0u8; 32]));
         std::fs::write(&early, &bytes).unwrap();
         assert!(moov_is_before_mdat(&early));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_stored_video_gets_a_still() {
+        let dir = std::env::temp_dir().join(format!("cp-poster-{}", uuid::Uuid::new_v4().simple()));
+        let store = MediaStore::new(dir.clone()).unwrap();
+        let tmp = store.upload_path();
+        // A 0.3 s clip: shorter than the usual half-second seek.
+        let made = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+            ])
+            .args([
+                "testsrc=size=640x360:rate=10:duration=0.3",
+                "-pix_fmt",
+                "yuv420p",
+                "-f",
+                "mp4",
+            ])
+            .arg(&tmp)
+            .status();
+        if !matches!(made, Ok(s) if s.success()) {
+            eprintln!("skipping: ffmpeg can't make a test video here");
+            return;
+        }
+        let hash = "a".repeat(64);
+        store.store_video(&tmp, &hash, "mp4").unwrap();
+        let still = image::open(store.path(&format!("{hash}.jpg"), true).unwrap()).unwrap();
+        assert!(still.width() <= THUMB_W && still.height() <= THUMB_H);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
