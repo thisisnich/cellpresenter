@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { faded, loaded, picked, playersFor, savedStillUrl, type Swap } from "./SlideBackground";
+import { faded, loaded, picked, playersFor, savedStillUrl, stableOrder, type Swap } from "./SlideBackground";
 
 const hash = "4497cafa252cd03821fbddef16ea3d25109612dc25a86cfcef2c62460bf51857";
 
@@ -40,5 +40,12 @@ describe("background swaps", () => {
 
   it("keeps players for what's coming up, a few at most", () => {
     expect(playersFor(start, ["b.mp4", "a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4", "f.mp4"])).toEqual(["a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4"]);
+  });
+});
+
+describe("stableOrder", () => {
+  it("never moves a player that stays, and adds new ones last", () => {
+    expect(stableOrder(["a", "b", "c"], ["c", "a", "d"])).toEqual(["a", "c", "d"]);
+    expect(stableOrder([], ["b", "a"])).toEqual(["b", "a"]);
   });
 });

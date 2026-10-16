@@ -205,6 +205,14 @@ export function faded(s: Swap, url: string): Swap {
  *  holds up the screen until it's done. */
 export const WARM_LIMIT = 4;
 
+/** `wanted` in a stable order: the players already there keep their
+ *  places and new ones go last. Moving a <video> in the page makes
+ *  WebKitGTK set it up again, which froze the screen for most of a second;
+ *  which one shows on top is up to its z-index, not its place. */
+export function stableOrder(previous: string[], wanted: string[]): string[] {
+  return [...previous.filter((u) => wanted.includes(u)), ...wanted.filter((u) => !previous.includes(u))];
+}
+
 /** Every background to keep a player for: on screen, loading, fading out,
  *  and the next few coming up. */
 export function playersFor(s: Swap, upcoming: string[]): string[] {
@@ -219,6 +227,10 @@ export function playersFor(s: Swap, upcoming: string[]): string[] {
 // on screen, which stays until the new one can play, then fades in on top.
 function Layers({ url, paused, fadeMs, upcoming }: { url: string; paused: boolean; fadeMs: number; upcoming: string[] }) {
   const [swap, setSwap] = useState<Swap>(() => ({ shown: url, pending: null, leaving: null }));
+  const order = useRef<string[]>([]);
+  // `url` too: the swap only learns about it after this render, and a
+  // player missing for even one render is thrown away and loaded again.
+  order.current = stableOrder(order.current, [...new Set([url, ...playersFor(swap, upcoming)])]);
 
   useEffect(() => setSwap((s) => picked(s, url)), [url]);
 
@@ -232,7 +244,7 @@ function Layers({ url, paused, fadeMs, upcoming }: { url: string; paused: boolea
 
   return (
     <>
-      {playersFor(swap, upcoming).map((u) => {
+      {order.current.map((u) => {
         const role = u === swap.shown ? "shown" : u === swap.pending ? "pending" : u === swap.leaving ? "leaving" : "warm";
         return (
           <BackgroundLayer
@@ -273,8 +285,30 @@ function BackgroundLayer({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    if (playing) void video.play().catch(() => undefined);
-    else video.pause();
+    if (playing) {
+      void video.play().catch(() => undefined);
+      return;
+    }
+    // In WebKitGTK, pausing a video that's still downloading freezes the
+    // page for up to a second and a half (measured). Until it has loaded,
+    // it keeps playing out of sight; then it pauses for free.
+    if (video.paused) return;
+    if (video.networkState !== HTMLMediaElement.NETWORK_LOADING) {
+      video.pause();
+      return;
+    }
+    const settle = () => {
+      if (video.networkState === HTMLMediaElement.NETWORK_LOADING) return;
+      video.pause();
+      stop();
+    };
+    const timer = window.setInterval(settle, 500);
+    video.addEventListener("suspend", settle);
+    const stop = () => {
+      window.clearInterval(timer);
+      video.removeEventListener("suspend", settle);
+    };
+    return stop;
   }, [playing]);
 
   // Picked: ready now if it was loaded early, otherwise when it plays (or
