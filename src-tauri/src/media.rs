@@ -235,7 +235,7 @@ impl MediaStore {
         // Half a second in skips a fade from black; a shorter clip uses
         // its first frame.
         for seek in ["0.5", "0"] {
-            let status = std::process::Command::new("ffmpeg")
+            let status = crate::host::command("ffmpeg")
                 .args([
                     "-y",
                     "-hide_banner",
@@ -324,7 +324,7 @@ fn fits_playback(width: u32, height: u32) -> bool {
 
 /// Width and height of the first video stream, if ffprobe can read them.
 fn probe_size(path: &Path) -> Option<(u32, u32)> {
-    let output = std::process::Command::new("ffprobe")
+    let output = crate::host::command("ffprobe")
         .args([
             "-v",
             "error",
@@ -360,7 +360,7 @@ fn h264_encoder() -> Option<&'static str> {
     use std::sync::OnceLock;
     static CHOICE: OnceLock<Option<&'static str>> = OnceLock::new();
     *CHOICE.get_or_init(|| {
-        let output = std::process::Command::new("ffmpeg")
+        let output = crate::host::command("ffmpeg")
             .args(["-hide_banner", "-encoders"])
             .stdin(std::process::Stdio::null())
             .output()
@@ -385,7 +385,7 @@ fn downscale(path: &Path, width: u32, height: u32) -> bool {
     };
     eprintln!("cellpresenter: scaling a {width}x{height} video down to 1080p so it plays smoothly");
     let out = path.with_extension("playback");
-    let mut cmd = std::process::Command::new("ffmpeg");
+    let mut cmd = crate::host::command("ffmpeg");
     cmd.args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
         .arg(path)
         .args([
@@ -491,7 +491,7 @@ fn faststart(path: &Path) {
         return;
     }
     let out = path.with_extension("faststart");
-    let status = std::process::Command::new("ffmpeg")
+    let status = crate::host::command("ffmpeg")
         .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
         .arg(path)
         .args(["-c", "copy", "-movflags", "+faststart"])
@@ -569,7 +569,7 @@ pub mod tests {
         let store = MediaStore::new(dir.clone()).unwrap();
         let tmp = store.upload_path();
         // A 0.3 s clip: shorter than the usual half-second seek.
-        let made = std::process::Command::new("ffmpeg")
+        let made = crate::host::command("ffmpeg")
             .args([
                 "-y",
                 "-hide_banner",

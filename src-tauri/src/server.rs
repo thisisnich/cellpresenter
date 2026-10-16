@@ -1437,7 +1437,7 @@ async fn open_backup_folder(
         return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
     }
     let backups = s.backups.as_ref().ok_or(NO_BACKUPS)?;
-    open::that_detached(backups.folder()).map_err(|e| {
+    crate::host::open(backups.folder()).map_err(|e| {
         eprintln!("cellpresenter: can't open the backups folder: {e}");
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
     })?;
@@ -1502,7 +1502,7 @@ async fn open_ug_search(
         return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
     }
     let url = online::ug_search_url(search_words(&query.q)?);
-    open::that_detached(&url).map_err(|e| {
+    crate::host::open(&url).map_err(|e| {
         eprintln!("cellpresenter: can't open the browser: {e}");
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
     })?;
@@ -1524,7 +1524,7 @@ async fn open_link(
         return Err(ApiError(StatusCode::FORBIDDEN, "local_only"));
     }
     let url = links::url(query.link, env!("CARGO_PKG_VERSION"), links::this_os());
-    open::that_detached(&url).map_err(|e| {
+    crate::host::open(&url).map_err(|e| {
         eprintln!("cellpresenter: can't open the browser: {e}");
         ApiError(StatusCode::INTERNAL_SERVER_ERROR, "open_failed")
     })?;

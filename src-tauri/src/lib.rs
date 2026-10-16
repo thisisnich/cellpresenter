@@ -5,6 +5,7 @@ mod bible_online;
 mod db;
 #[cfg(target_os = "linux")]
 mod desktop_icon;
+mod host;
 mod links;
 mod live;
 mod media;

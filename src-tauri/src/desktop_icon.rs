@@ -6,7 +6,7 @@
 //! launchers do this).
 
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 use std::time::SystemTime;
 
 use image::{imageops::FilterType, RgbaImage};
@@ -78,7 +78,7 @@ pub fn update(icon: &RgbaImage) {
     if let Ok(dir) = std::fs::File::open(&hicolor) {
         let _ = dir.set_modified(SystemTime::now());
     }
-    let _ = Command::new("kbuildsycoca6")
+    let _ = crate::host::command("kbuildsycoca6")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn();
