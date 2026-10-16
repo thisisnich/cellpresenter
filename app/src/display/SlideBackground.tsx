@@ -156,7 +156,8 @@ export function SlideBackground({
   paused?: boolean;
   /** Fade a new background in over this long; 0 cuts straight to it. */
   fadeMs?: number;
-  /** Backgrounds coming up, loaded now so changing to them is instant. */
+  /** Backgrounds near this one (coming up first, then ones just shown),
+   *  kept loaded so changing to them is instant. */
   upcoming?: string[];
 }) {
   if (!url) return null;
@@ -197,8 +198,11 @@ export function faded(s: Swap, url: string): Swap {
   return url === s.leaving ? { ...s, leaving: null } : s;
 }
 
-/** How many coming backgrounds are kept loaded (each video holds a decoder). */
-export const WARM_LIMIT = 3;
+/** How many nearby backgrounds are kept loaded (each video holds a
+ *  decoder). Enough for most songs' cues, so stepping back and forth in a
+ *  song never starts or stops a player: in the Linux app, stopping one
+ *  holds up the screen until it's done. */
+export const WARM_LIMIT = 4;
 
 /** Every background to keep a player for: on screen, loading, fading out,
  *  and the next few coming up. */
@@ -278,7 +282,9 @@ function BackgroundLayer({
     if (role !== "pending") return;
     const video = videoRef.current;
     const img = imgRef.current;
-    if ((video && video.readyState >= 3) || (img && img.complete && img.naturalWidth > 0)) {
+    // A loaded player has its first frame: show that at once and let it
+    // start playing on screen, rather than wait for playback to begin.
+    if ((video && video.readyState >= 2) || (img && img.complete && img.naturalWidth > 0)) {
       done.current();
       return;
     }
@@ -309,8 +315,8 @@ function BackgroundLayer({
       disablePictureInPicture
       className={frameClass}
       style={style}
+      onLoadedData={ready}
       onPlaying={ready}
-      onCanPlay={(e) => paused && e.currentTarget.readyState >= 3 && ready()}
       onError={ready}
     />
   );

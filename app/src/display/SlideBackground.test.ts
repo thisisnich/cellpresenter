@@ -39,6 +39,6 @@ describe("background swaps", () => {
   });
 
   it("keeps players for what's coming up, a few at most", () => {
-    expect(playersFor(start, ["b.mp4", "a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4"])).toEqual(["a.mp4", "b.mp4", "c.mp4", "d.mp4"]);
+    expect(playersFor(start, ["b.mp4", "a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4", "f.mp4"])).toEqual(["a.mp4", "b.mp4", "c.mp4", "d.mp4", "e.mp4"]);
   });
 });

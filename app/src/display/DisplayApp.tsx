@@ -30,7 +30,7 @@ export default function DisplayApp() {
   const textScale = state?.text_scale ?? 1;
   // The background layer, which slide cues switch on the server.
   const background = state?.background ?? null;
-  const upcoming = state ? upcomingBackgrounds(state) : [];
+  const nearby = state ? nearbyBackgrounds(state) : [];
   const card = state?.title_card ? titleCard(state.credits, state.look) : null;
   const footer = state && !card ? footerLines(state.credits, state.look, state.slide_index) : null;
 
@@ -63,7 +63,7 @@ export default function DisplayApp() {
   return (
     <LookContext.Provider value={state?.look ?? DEFAULT_LOOK}>
       <main className="relative h-dvh w-full overflow-hidden bg-black" onDoubleClick={() => toggleFullscreen(appWindow)}>
-        <Stage backdrop={state && background ? <SlideBackground url={background} paused={!shown} fadeMs={state.look.fade_ms} upcoming={upcoming} /> : null}>
+        <Stage backdrop={state && background ? <SlideBackground url={background} paused={!shown} fadeMs={state.look.fade_ms} upcoming={nearby} /> : null}>
           {/* Sizes here are stage pixels (1920 wide), so messages stay readable
               when the stage is scaled down to a phone. Blacked out = nothing. */}
           {!state && (
@@ -135,10 +135,13 @@ function useFullscreenKey(appWindow: boolean): void {
   }, [appWindow]);
 }
 
-/** The backgrounds coming up, soonest first: this song's later slide cues,
- *  then the setlist's next item. The display loads them ahead of time. */
-function upcomingBackgrounds(state: LiveState): string[] {
-  const from = state.title_card ? 0 : state.slide_index + 1;
-  const cues = state.slides.slice(from).map((s) => s.background);
-  return [...cues, state.next_item_background].filter((u): u is string => Boolean(u));
+/** Backgrounds near the slide on screen, the ones Next would reach first:
+ *  this song's later slide cues, the setlist's next item, then the cues
+ *  just shown (for Prev). The display keeps them loaded. */
+function nearbyBackgrounds(state: LiveState): string[] {
+  const at = state.title_card ? 0 : state.slide_index;
+  const cue = (i: number) => state.slides[i]?.background;
+  const ahead = state.slides.slice(state.title_card ? 0 : at + 1).map((s) => s.background);
+  const behind = state.slides.slice(0, at).map((_, i) => cue(at - 1 - i));
+  return [...ahead, state.next_item_background, ...behind].filter((u): u is string => Boolean(u));
 }
