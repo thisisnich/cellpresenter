@@ -28,9 +28,9 @@ pub const MAX_VIDEO_BYTES: usize = 1024 * 1024 * 1024;
 /// 4K is what makes the screen lag.
 const PLAYBACK_W: u32 = 1920;
 const PLAYBACK_H: u32 = 1080;
-/// A moving background needs no more frames than this, and each one is
-/// work for the decoder.
-const PLAYBACK_FPS: f32 = 30.0;
+/// Smooth motion on a big screen; even a software decoder keeps up with
+/// Baseline 1080p at this rate (measured: ~340 frames a second).
+const PLAYBACK_FPS: f32 = 60.0;
 
 /// A stored background image, as clients see it.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, TS)]
@@ -332,9 +332,9 @@ struct VideoInfo {
 }
 
 /// Whether a video is ready to play as it is: H.264 in a simple profile, at
-/// most 1080p and 30 frames a second. Those start and play quickly with
-/// any decoder; anything else (4K, 60 fps, High profile, other codecs) is
-/// converted once when it's stored.
+/// most 1080p and 60 frames a second. Those start and play quickly with
+/// any decoder; anything else (4K, High profile, other codecs, a faster
+/// frame rate) is converted once when it's stored.
 fn fits_playback(v: &VideoInfo) -> bool {
     v.codec == "h264"
         && matches!(
@@ -427,9 +427,10 @@ fn h264_encoder() -> Option<&'static str> {
     })
 }
 
-/// Convert `path` in place to H.264 Baseline, at most 1080p and 30 frames
-/// a second, which every decoder starts and plays quickly. A failure leaves
-/// the original bytes alone.
+/// Convert `path` in place to H.264 Baseline, at most 1080p and 60 frames
+/// a second, which every decoder starts and plays quickly. High quality
+/// with x264: on a big screen, blocky gradients show long before the
+/// resolution does. A failure leaves the original bytes alone.
 fn convert(path: &Path, v: &VideoInfo) -> bool {
     let VideoInfo {
         width, height, fps, ..
@@ -453,7 +454,7 @@ fn convert(path: &Path, v: &VideoInfo) -> bool {
             "-pix_fmt",
             "yuv420p",
             "-fpsmax",
-            "30",
+            "60",
             "-c:v",
             encoder,
         ]);
@@ -464,9 +465,11 @@ fn convert(path: &Path, v: &VideoInfo) -> bool {
             "-preset",
             "veryfast",
             "-crf",
-            "20",
+            "17",
         ]);
     } else {
+        // OpenH264 tops out near 8 Mbit/s at 1080p whatever it's asked
+        // for; that's already close to the source (SSIM 0.989, measured).
         cmd.args(["-b:v", "8M"]);
     }
     let result = cmd
@@ -624,8 +627,12 @@ pub mod tests {
             "portrait"
         );
         assert!(
-            !fits_playback(&video("h264", "Baseline", 1920, 1080, 60.0)),
-            "60 fps"
+            fits_playback(&video("h264", "Baseline", 1920, 1080, 59.94)),
+            "60 fps plays"
+        );
+        assert!(
+            !fits_playback(&video("h264", "Baseline", 1920, 1080, 120.0)),
+            "120 fps"
         );
         assert!(
             !fits_playback(&video("h264", "High", 1920, 1080, 24.0)),
