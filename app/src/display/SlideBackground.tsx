@@ -286,6 +286,8 @@ function BackgroundLayer({
     const video = videoRef.current;
     if (!video) return;
     if (playing) {
+      // A warmed cue can go pending->shown while `playing` stays true; retry
+      // here so a hidden play() miss still starts once the layer is visible.
       void video.play().catch(() => undefined);
       return;
     }
@@ -309,7 +311,7 @@ function BackgroundLayer({
       video.removeEventListener("suspend", settle);
     };
     return stop;
-  }, [playing]);
+  }, [playing, role]);
 
   // Picked: ready now if it was loaded early, otherwise when it plays (or
   // after a while, so a file that never loads can't hold the old one up).
